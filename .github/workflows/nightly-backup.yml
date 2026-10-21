@@ -1,0 +1,59 @@
+name: ECO nightly backup
+
+on:
+  schedule:
+    - cron: '17 18 * * *' # 02:17 Hong Kong. GitHub schedules can be delayed.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-nightly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: >-
+      (vars.ECO_NIGHTLY_BACKUP_ENABLED == 'true' || github.event_name == 'workflow_dispatch') &&
+      github.repository == 'hocheunglai-oss/ecosystem-public' &&
+      github.repository_id == '1427776183' && github.repository_owner_id == '265701760' &&
+      github.ref == 'refs/heads/main' && github.ref_protected &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    environment: eco-backup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Install verified backup tools without production credentials
+        run: >-
+          env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          -u BASH_ENV -u ENV bash scripts/recovery/install-tools.sh
+      - name: Check backup startup guards without source credentials
+        run: >-
+          env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          node --test tests/backup-github.test.mjs
+      - name: Capture, encrypt, verify Drive copy and retain five nights
+        env:
+          ECO_NIGHTLY_BACKUP_ENABLED: ${{ vars.ECO_NIGHTLY_BACKUP_ENABLED }}
+          ECO_BACKUP_CONFIGURATION: ${{ secrets.ECO_BACKUP_CONFIGURATION }}
+          ECO_BACKUP_DB_PASSWORD: ${{ secrets.ECO_BACKUP_DB_PASSWORD }}
+          ECO_DRIVE_CLIENT_ID: ${{ secrets.ECO_DRIVE_CLIENT_ID }}
+          ECO_DRIVE_CLIENT_SECRET: ${{ secrets.ECO_DRIVE_CLIENT_SECRET }}
+          ECO_DRIVE_REFRESH_TOKEN: ${{ secrets.ECO_DRIVE_REFRESH_TOKEN }}
+        run: node scripts/recovery/run-github.mjs
+      - name: Remove this runner's temporary backup files
+        if: always()
+        timeout-minutes: 2
+        run: >-
+          env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          node scripts/recovery/run-github.mjs --cleanup
+      # No artifact upload, cache save, debug trace or decrypted data in this workflow.

@@ -87,6 +87,29 @@ jobs:
             postgres:17-bookworm node --test tests/access-sql.test.mjs tests/admin-sql.test.mjs tests/suppliers-sql.test.mjs tests/supplier-ports-sql.test.mjs tests/parser-sql.test.mjs tests/inbox-sql.test.mjs tests/commercial-enquiries-sql.test.mjs tests/intelligence-sql.test.mjs
 
 
+  recovery:
+    name: Recovery archive and read-only access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Synthetic fixtures only: no environment, source credentials or OIDC grant.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Install verified native recovery tools without source credentials
+        run: bash scripts/recovery/install-tools.sh
+      - name: Verify synthetic recovery, restricted reader and runner boundaries
+        env:
+          ECO_NATIVE_PG_BIN: /usr/lib/postgresql/17/bin
+          ECO_AGE_BIN: ${{ runner.temp }}/eco-backup-tools/age/age
+          ECO_AGE_KEYGEN_BIN: ${{ runner.temp }}/eco-backup-tools/age/age-keygen
+        run: node --test scripts/recovery/*.test.mjs tests/backup-github.test.mjs tests/backup-role-sql.test.mjs
+
   browser:
     name: Browser verification · ${{ matrix.label }}
     runs-on: ubuntu-24.04
@@ -150,6 +173,7 @@ jobs:
               tests/private-profile-tabs.e2e.mjs
               tests/eco-supplier-ports.e2e.mjs
               tests/intelligence.e2e.mjs
+              tests/backup-privacy-page.e2e.mjs
             artifacts: |
               output/location-flattening-ui
               output/country-port-profiles-ui
@@ -158,6 +182,7 @@ jobs:
               output/private-profile-tabs-ui
               output/supplier-ports-ui
               output/intelligence-ui
+              output/backup-privacy-ui
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -207,6 +232,8 @@ jobs:
           ECO_WHATSAPP_UI_ORIGIN: http://127.0.0.1:4286
           ECO_COMMERCIAL_UI_ORIGIN: http://127.0.0.1:4286
           ECO_PRIVACY_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_BACKUP_PRIVACY_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_BACKUP_PRIVACY_UI_OUTPUT: output/backup-privacy-ui
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4286 > /tmp/eco-preview.log 2>&1 &
           preview_pid=$!

@@ -12,7 +12,8 @@ const privateSnapshots = new Set(['src/data/intelligence-snapshot.json', 'src/da
 const privateDocuments = /(?:^docs\/)(?:.*-release-\d|production-access|production-security|nis2-control|backup-recovery-status|intelligence-data|suppliers-release|email-receiver-operations|whatsapp-intake-operations)/;
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.json', '.yaml', '.yml', '.md', '.txt', '.sql', '.html', '.svg', '.toml']);
 // The already-public privacy contact is intentional. No roster/routing email belongs elsewhere.
-const publicContactFiles = new Set(['public/privacy.html', 'tests/privacy-page.test.ts', 'tests/privacy-page.e2e.mjs']);
+const publicContactFiles = new Set(['public/privacy.html', 'tests/privacy-page.test.ts', 'tests/privacy-page.e2e.mjs',
+  'public/backup-privacy.html', 'tests/backup-privacy-page.e2e.mjs']);
 const publicPrivacyContact = ['otto', 'cosulich.com.hk'].join('@');
 for (const path of new Set(paths)) {
   const file = resolve(root, path);

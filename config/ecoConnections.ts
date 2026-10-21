@@ -8,6 +8,15 @@ export const ecoConnections = Object.freeze({
   supabaseOrganizationId: 'yxyxcenpgqutvoctrdkj',
   supabaseRegion: 'ap-southeast-1',
   supplierReportsBucket: 'eco-supplier-reports',
+  backup: Object.freeze({
+    storagePath: '/api/backup/storage-downloads',
+    githubRepositoryId: '1427776183',
+    githubOwnerId: '265701760',
+    githubEnvironment: 'eco-backup',
+    githubRef: 'refs/heads/main',
+    githubWorkflowPath: '.github/workflows/nightly-backup.yml',
+    githubCaptureStepName: 'Capture, encrypt, verify Drive copy and retain five nights',
+  }),
   // Verified ECO-only Microsoft metadata. Unverified app/source pins keep intake closed.
   emailReceiver: Object.freeze({
     tenantId: '70011d0d-19b4-4a61-8195-ab1fd987c20f',

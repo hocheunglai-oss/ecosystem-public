@@ -215,6 +215,9 @@ jobs:
           while IFS= read -r script; do
             if [[ -n "$script" ]]; then node "$script"; fi
           done <<< "$ECO_BROWSER_SCRIPTS"
+      - name: Verify action labels and case-sensitive link values
+        if: matrix.group == 'knowledge'
+        run: node --import tsx tests/uppercase-presentation.e2e.mjs
       - name: Validate and log browser verification evidence
         id: evidence
         if: always()

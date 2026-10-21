@@ -6,7 +6,9 @@ import { assertLiveDataWritable } from './lib/testWorkspaceGuard';
 
 export async function accessRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   if (body !== undefined) {
-    if (!['preview', 'preview/end', 'logout'].includes(path)) assertPreviewWritable();
+    // Credentials establish authority independently of a failed session check.
+    // Authenticated account/data mutations still wait for verified authority.
+    if (!['login', 'activate', 'preview', 'preview/end', 'logout'].includes(path)) assertPreviewWritable();
     if (!['login', 'activate', 'password', 'password-prompt', 'logout', 'preview', 'preview/end'].includes(path)) {
       // Account management and contact approval always affect real members.
       // Mark a local rejection as definite so Users & Access does not create an uncertain-operation retry.
@@ -167,7 +169,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     signIn: (email, password) => authenticate('login', { email, password }),
     changePassword: (currentPassword, newPassword) => { assertPreviewWritable(); return authenticate('password', { currentPassword, newPassword }); },
     dismissPasswordPrompt: () => { assertPreviewWritable(); return authenticate('password-prompt', {}); },
-    activate: (tokenHash, password, type) => { assertPreviewWritable(); return authenticate('activate', { tokenHash, password, type }); },
+    activate: (tokenHash, password, type) => authenticate('activate', { tokenHash, password, type }),
     startPreview: input => changePreview(input), endPreview: () => changePreview(null), signOut }}>{children}</Context.Provider>;
 }
 export function useAccess(): Access {

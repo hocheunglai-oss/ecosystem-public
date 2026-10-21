@@ -4,7 +4,7 @@
   text-transform: uppercase !important;
 }
 
-/* Links, addresses and credentials keep their original case. */
+/* URL/email values and credentials keep their original case; action labels use CAPS. */
 #root :is(
   input[type="email" i],
   input[type="url" i],
@@ -17,9 +17,7 @@
   [autocomplete~="one-time-code" i],
   [data-preserve-case],
   [data-email-value],
-  [data-case-sensitive-value],
-  a,
-  a *
+  [data-case-sensitive-value]
 ),
 #root [data-preserve-case] * {
   text-transform: none !important;

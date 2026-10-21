@@ -14,7 +14,9 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     if (process.env.ECO_TEST_WIDTH && +process.env.ECO_TEST_WIDTH !== width || process.env.ECO_TEST_THEME && process.env.ECO_TEST_THEME !== theme) continue;
     const context = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width < 760, hasTouch: width < 760, reducedMotion: 'reduce', colorScheme: theme });
     await installStagingCookies(context, base);
-    await context.addInitScript(value => localStorage.setItem('ecosystem.theme.v1', value), theme);
+    await context.addInitScript(value => {
+      if (location.protocol === 'http:' || location.protocol === 'https:') localStorage.setItem('ecosystem.theme.v1', value);
+    }, theme);
     const errors = [], unexpected = [], mutations = [];
     let mode = 'unavailable', requests = 0, held = null, sessionRevision = 0;
     const session = () => ({ user: { ...member, revision: ++sessionRevision, displayName: `${member.displayName} SESSION ${sessionRevision}` }, preview: null });
@@ -33,7 +35,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       }
       if (path === '/api/access/password') { mutations.push(path); return route.fulfill({ json: session() }); }
       if (path === '/api/access/logout') { mutations.push(path); mode = 'revoked'; return route.fulfill({ json: { user: null } }); }
-      if (path === '/api/access/login') { mutations.push(path); mode = 'valid'; return route.fulfill({ json: session() }); }
+      if (path === '/api/access/login' || path === '/api/access/activate') { mutations.push(path); mode = 'valid'; return route.fulfill({ json: session() }); }
       if (path === '/api/profile-tabs/list') { const query = new URL(request.url()).searchParams; return route.fulfill({ json: { target: { kind: query.get('kind'), id: query.get('id') }, shared: { revision: 0, tabs: [] }, private: { revision: 0, tabs: [] } } }); }
       if (path === '/api/intelligence/snapshot') return route.fulfill({ json: { available: false, snapshot: null } });
       if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
@@ -76,6 +78,30 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible();
     };
     try {
+      // Credentials must work while the initial session probe is unavailable.
+      // Keep probes failing until the credential endpoint receives the request;
+      // a focus event or automatic retry cannot accidentally recover this case.
+      for (const credential of ['login', 'invite', 'recovery']) {
+        mode = 'unavailable';
+        // A hash-only navigation would reuse the signed-out provider instead
+        // of exercising a fresh initial session probe.
+        await page.goto('about:blank');
+        await page.goto(base + (credential === 'login' ? '' : `/#token_hash=synthetic-token-${credential}&type=${credential}`));
+        await expect(page.getByRole('alert')).toContainText('Reconnecting');
+        const start = mutations.length;
+        if (credential === 'login') await signIn();
+        else {
+          await page.getByLabel('New password', { exact: true }).fill('Synthetic Password 8');
+          await page.getByLabel('Confirm password', { exact: true }).fill('Synthetic Password 8');
+          await page.getByRole('button', { name: 'Set password', exact: true }).click();
+          await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible();
+        }
+        assert.deepEqual(mutations.slice(start), [credential === 'login' ? '/api/access/login' : '/api/access/activate']);
+        await expect(page.getByRole('alert')).toHaveCount(0);
+        await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+        await expect(page.getByRole('button', { name: /^(Sign in|Set password)$/ })).toBeVisible();
+      }
+      mutations.length = 0; mode = 'unavailable';
       // No browser-stored identity can authenticate while the service is offline.
       await page.goto(base); await expect(page.getByRole('alert')).toContainText('Reconnecting');
       await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toHaveCount(0);
@@ -157,4 +183,4 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     finally { await context.close(); }
   } } finally { await browser.close(); }
 }
-await writeFile(resolve(out, 'results.json'), JSON.stringify({ base, results, checked: 'Initial 503 automatic recovery, background 503/network preserves unsaved form and blocks writes until verified recovery, online recovery, single-flight refresh, definitive 401, logout race, cross-tab invalidation.', limits: 'Isolated browsers and synthetic API responses; cookie expiry/rotation/revocation also covered by real Supabase SDK adapter unit tests.' }, null, 2));
+await writeFile(resolve(out, 'results.json'), JSON.stringify({ base, results, checked: 'Initial 503 permits credential login/invite/recovery and automatic recovery, background 503/network preserves unsaved form and blocks writes until verified recovery, online recovery, single-flight refresh, definitive 401, logout race, cross-tab invalidation.', limits: 'Isolated browsers and synthetic API responses; cookie expiry/rotation/revocation also covered by real Supabase SDK adapter unit tests.' }, null, 2));

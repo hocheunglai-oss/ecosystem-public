@@ -1,6 +1,5 @@
-import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useSharedFeedback, type SharedFeedbackStatus } from './lib/useSharedFeedback';
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { contributionActivity, contributionPreviewCounts, contributionStatus, contributionStatusRules, type ContributionActivityEntry, type ContributionPeriod, type ContributionStatusKey } from "./lib/contributionActivity";
 import type { Contribution } from "./lib/model";
 import type { KnowledgeChange } from "./lib/knowledge";
@@ -108,18 +107,12 @@ export function ActivityWeeks({ activity, period }: { activity: Activity; period
   </section>;
 }
 
-export type ContributionDestination = "ports" | "suppliers" | "counterparties" | "feedback";
-
-export function ActivityStatus({ activity, onContribute, initialGuideOpen = activity.total === 0, sharedStatus = "ready" }: {
+export function ActivityStatus({ activity, sharedStatus = "ready" }: {
   activity: Activity;
-  initialGuideOpen?: boolean;
   sharedStatus?: SharedFeedbackStatus;
-  onContribute?: (destination: ContributionDestination) => void;
 }) {
   const status = contributionStatus(activity.total);
   const incomplete = sharedStatus !== "ready";
-  const [guideOpen, setGuideOpen] = useState(initialGuideOpen);
-  const guideId = useId();
   return <section className="activity-status" data-activity-status={incomplete ? sharedStatus : status.key} aria-label="Contribution status">
     <header className="activity-status-heading">
       <span className="activity-metric-label">CONTRIBUTION STATUS</span>
@@ -130,17 +123,6 @@ export function ActivityStatus({ activity, onContribute, initialGuideOpen = acti
       </div>
       <span className="activity-period-label">{activity.periodLabel}</span>
     </header>
-    {onContribute && <>
-      <button className="activity-guide-toggle" aria-expanded={guideOpen} aria-controls={guideId} onClick={() => setGuideOpen(value => !value)}>HOW TO CONTRIBUTE</button>
-      {guideOpen && <div id={guideId} className="activity-contribution-guide" aria-label="How to contribute">
-        <h3>MAKE A CONTRIBUTION</h3>
-        <p>CHOOSE A PROFILE, THEN USE EDIT AND SAVE TO PUBLISH USEFUL INFORMATION.</p>
-        <button onClick={() => onContribute("ports")}><strong>COUNTRIES &amp; PORTS</strong><span>KEY INFO, DELIVERY NOTES AND LOCAL KNOWLEDGE ↗</span></button>
-        <button onClick={() => onContribute("suppliers")}><strong>SUPPLIER PROFILES</strong><span>SUPPLIER INFORMATION AND DELIVERY DETAILS ↗</span></button>
-        <button onClick={() => onContribute("counterparties")}><strong>BUYER PROFILES</strong><span>BUYER INFORMATION AND ACCOUNT KNOWLEDGE ↗</span></button>
-        <button onClick={() => onContribute("feedback")}><strong>FEEDBACK FOR ECOSYSTEM</strong><span>REPORT AN ISSUE OR SUGGEST AN IMPROVEMENT ↗</span></button>
-      </div>}
-    </>}
     <dl className="activity-status-rules" aria-label="How contribution status is measured">
       {contributionStatusRules.map(rule => <div key={rule.key} className={!incomplete && rule.key === status.key ? "is-current" : undefined}>
         <dt>{rule.label}{!incomplete && rule.key === status.key && <span className="sr-only"> · CURRENT STATUS</span>}</dt>
@@ -155,10 +137,7 @@ export function ActivityStatus({ activity, onContribute, initialGuideOpen = acti
   </section>;
 }
 
-export function ResourceWallet({ compact = false, onContribute, initialGuideOpen, statusPreview = null, onStatusPreviewChange }: {
-  compact?: boolean;
-  initialGuideOpen?: boolean;
-  onContribute?: (destination: ContributionDestination) => void;
+export function ResourceWallet({ statusPreview = null, onStatusPreviewChange }: {
   statusPreview?: ContributionStatusKey | null;
   onStatusPreviewChange?: (status: ContributionStatusKey | null) => void;
 }) {
@@ -166,18 +145,15 @@ export function ResourceWallet({ compact = false, onContribute, initialGuideOpen
   const { realUser } = useAccess();
   const canPreview = canPreviewAppearance(realUser);
   const visiblePreview = canPreview ? statusPreview : null;
-  const [period, setPeriod] = useState<ContributionPeriod>("7d");
   const now = useActivityNow();
-  const localActivity = contributionActivity(state, actor.id, compact ? "7d" : period, now);
-  const { summary: sharedFeedback, error: feedbackError, status: sharedStatus } = useSharedFeedback(compact ? '7d' : period);
-  const activity = { ...localActivity, total: localActivity.total + (sharedFeedback?.count ?? 0), previousTotal: localActivity.previousTotal + (sharedFeedback?.previousCount ?? 0),
-    delta: period === 'all' && !compact ? 0 : localActivity.delta + (sharedFeedback?.count ?? 0) - (sharedFeedback?.previousCount ?? 0) };
-  const displayedTotal = compact && visiblePreview ? contributionPreviewCounts[visiblePreview] : activity.total;
+  const localActivity = contributionActivity(state, actor.id, "7d", now);
+  const { summary: sharedFeedback, status: sharedStatus } = useSharedFeedback('7d');
+  const displayedTotal = visiblePreview ? contributionPreviewCounts[visiblePreview] : localActivity.total + (sharedFeedback?.count ?? 0);
   const status = contributionStatus(displayedTotal);
   const incomplete = !visiblePreview && sharedStatus !== 'ready';
   const statusLabel = incomplete ? sharedStatus === 'loading' ? 'CHECKING' : 'UNAVAILABLE' : status.label;
   const availabilityMessage = sharedStatus === 'loading' ? 'CHECKING SHARED FEEDBACK. LOCAL CONTRIBUTIONS SHOWN.' : 'SHARED FEEDBACK COUNT UNAVAILABLE. LOCAL CONTRIBUTIONS SHOWN.';
-  if (compact) return <section className="resource-wallet contribution-activity contribution-activity--compact" aria-label="Contribution activity">
+  return <section className="resource-wallet contribution-activity contribution-activity--compact" aria-label="Contribution activity">
     <div className="activity-tier-summary" data-activity-status={incomplete ? sharedStatus : status.key} data-appearance-preview={Boolean(visiblePreview)}>
       <div className="activity-tier-hero">
         <svg className="activity-tier-emblem" width="76" height="84" viewBox="0 0 76 84" fill="none" aria-hidden="true" focusable="false">
@@ -214,20 +190,8 @@ export function ResourceWallet({ compact = false, onContribute, initialGuideOpen
         : status.key === "active"
           ? "YOU’RE KEEPING THE TEAM INFORMED. EVERY USEFUL UPDATE ADDS VALUE."
           : "YOUR KNOWLEDGE MAKES A DIFFERENCE. THANK YOU FOR SHARING IT."}</p>
-      {onContribute && <div className="activity-tier-actions">
-        <KnowledgeUpdateButton onClick={() => onContribute("ports")}>EDIT <span aria-hidden="true">↗</span></KnowledgeUpdateButton>
-        <KnowledgeUpdateButton onClick={() => onContribute("feedback")}>FEEDBACK</KnowledgeUpdateButton>
-      </div>}
     </div>
-    <details className="activity-tier-details"><summary>HOW IT COUNTS</summary>
-      <dl className="activity-tier-rules" aria-label="Contribution tier calculation">
-        {contributionStatusRules.map(rule => <div key={rule.key} className={!incomplete && rule.key === status.key ? "is-current" : undefined}>
-          <dt>{rule.label}{!incomplete && rule.key === status.key && <span className="sr-only"> · CURRENT STATUS</span>}</dt><dd>{rule.criteria}</dd>
-        </div>)}
-      </dl>
-      <p className="activity-tier-calculation">PUBLISHED DATABASE UPDATES AND FEEDBACK FROM TODAY AND THE PREVIOUS SIX DAYS, IN HONG KONG TIME.</p>
-      <p className="activity-tier-calculation">REPEAT EDITS TO THE SAME ENTRY ON ONE DAY COUNT ONCE. UNCHANGED OR FORMATTING-ONLY SAVES DO NOT COUNT. ONE AI IMPORT COUNTS ONCE. HATS DO NOT CHANGE YOUR TIER.</p>
-    </details>
+    <section className="activity-tier-details"><h3>HOW TO CONTRIBUTE</h3><p>UPDATE INFORMATION OR SEND FEEDBACK.</p></section>
     {canPreview && onStatusPreviewChange && <label className="activity-appearance-preview">APPEARANCE PREVIEW
       <select aria-label="Contribution appearance preview" value={visiblePreview ?? "actual"}
         onChange={event => onStatusPreviewChange(event.target.value === "actual" ? null : event.target.value as ContributionStatusKey)}>
@@ -237,19 +201,6 @@ export function ResourceWallet({ compact = false, onContribute, initialGuideOpen
       {visiblePreview && <span>PREVIEW ONLY · YOUR CONTRIBUTIONS ARE UNCHANGED.</span>}
     </label>}
   </section>;
-  return (
-    <section className={`resource-wallet contribution-activity${compact ? " contribution-activity--compact" : ""}`}
-      aria-label="Contribution activity">
-      <div className="activity-toolbar"><ActivityPeriodFilter period={period} onChange={setPeriod} /></div>
-      <ActivityStatus activity={activity} onContribute={onContribute} initialGuideOpen={initialGuideOpen} sharedStatus={sharedStatus} />
-      <ActivitySummary activity={activity} period={period} incomplete={incomplete} />
-      <ActivityWeeks activity={localActivity} period={period} />
-      {sharedFeedback && <p>{sharedFeedback.count} SHARED CONTRIBUTIONS INCLUDED. THE CHART AND HISTORY BELOW SHOW LOCAL DATABASE UPDATES.</p>}
-      {incomplete && <p role="status">{feedbackError || availabilityMessage}</p>}
-      <header className="activity-section-heading"><h3>CONTRIBUTION HISTORY</h3></header>
-      <ActivityHistory key={period} entries={activity.entries} publications={state.contributions} pageSize={compact ? 10 : 30} />
-    </section>
-  );
 }
 
 export function ActivityHistory({ entries, publications, pageSize = 30 }: {

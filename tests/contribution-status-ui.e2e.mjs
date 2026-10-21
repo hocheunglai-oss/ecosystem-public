@@ -90,19 +90,15 @@ for (const engine of ['chromium', 'webkit']) {
           await expect(progress.locator('span[data-complete="true"]')).toHaveCount(Math.min(total,11));
           await expect(panel.locator('[data-activity-next-tier]')).toContainText(total===0?'1MORE TO ACTIVE':total<11?`${11-total}MORE TO OUTSTANDING`:'OUTSTANDING REACHED');
           if (total===0 || total===1 || total===11) await shot(label.toLowerCase());
-          const disclosure=panel.locator('.activity-tier-details');
-          await expect(disclosure).not.toHaveAttribute('open');
-          await disclosure.locator('summary').click();
-          await expect(disclosure).toHaveAttribute('open');
-          await expect(panel.locator('.activity-tier-calculation').first()).toBeVisible();
-          await expect(panel).toContainText('PREVIOUS SIX DAYS');
-          await expect(panel).toContainText('HONG KONG TIME');
-          await expect(panel.locator('.activity-tier-rules > div')).toHaveCount(3);
+          await expect(panel).toContainText('HOW TO CONTRIBUTE');
+          await expect(panel).toContainText('UPDATE INFORMATION OR SEND FEEDBACK.');
+          await expect(panel.getByRole('button',{name:/^(EDIT|FEEDBACK)$/i})).toHaveCount(0);
+          await expect(panel).not.toContainText('HOW IT COUNTS');
+          await expect(panel).not.toContainText('HONG KONG TIME');
+          await expect(panel).not.toContainText('PREVIOUS SIX DAYS');
           await expect(panel).not.toContainText('EXCEPTIONAL');
           await checkFit();
-          if(total===0) await shot('calculation');
-          await disclosure.locator('summary').click();
-          await expect(disclosure).not.toHaveAttribute('open');
+          if(total===0) await shot('how-to-contribute');
           await page.getByRole('button',{name:'Close contribution activity',exact:true}).click();
         }
         // Every preview updates both appearances but never changes saved activity.

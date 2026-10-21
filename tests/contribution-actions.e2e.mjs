@@ -22,6 +22,7 @@ async function fixture(context) {
   const state={user:structuredClone(user),preview:null,feedback:[],unexpected:[]};
   await context.route('**/api/**',route=>{state.unexpected.push(new URL(route.request().url()).pathname);return route.fulfill({status:404,json:{message:'Unconfigured isolated fixture endpoint.'}});});
   await installEmptyLiveInbox(context);
+  await context.route('**/api/enquiries/records*',route=>route.fulfill({json:{items:[],nextCursor:null,unreadCount:0}}));
   await installIntelligence(context, syntheticIntelligence());
   await installProfileTabMocks(context,{ownerId:()=>state.user?.id,preview:()=>Boolean(state.preview)});
   await context.route('**/api/enquiries/test-policy',route=>route.fulfill({json:{enabled:true,generation:'10000000-0000-4000-8000-000000000010'}}));
@@ -45,6 +46,7 @@ async function fixture(context) {
     return route.fulfill({json:{items:state.feedback,total:state.feedback.length,count:state.feedback.length,page:1,pageSize:50,periodStart:'2026-10-15T00:00:00Z',periodEnd:'2026-10-21T00:00:00Z',timeZone:'Asia/Hong_Kong',source:'shared-feedback'}});
   });
   await context.route('**/api/suppliers/**',route=>route.fulfill({json:{items:[],total:0,page:1,pageSize:50}}));
+  await context.route('**/api/suppliers/pic-options',route=>route.fulfill({json:{options:['FIXTURE ADMIN']}}));
   return state;
 }
 async function profile(page) {
@@ -61,13 +63,46 @@ async function credited(action) {
   await expect(action).toHaveAttribute('aria-description','CONTRIBUTION +1');
   await expect(action).toHaveClass(/knowledge-update-button/);
   const style=await action.evaluate(node=>{const probe=document.createElement('i');probe.style.background='var(--ui-primary)';document.body.append(probe);const result={actual:getComputedStyle(node).backgroundColor,expected:getComputedStyle(probe).backgroundColor};probe.style.background='var(--ui-primary-hover)';result.hover=getComputedStyle(probe).backgroundColor;probe.remove();return result;});
-  assert.ok([style.expected,style.hover].includes(style.actual),'Credited action uses the shared green fill or its shared hover state');
+  assert.ok([style.expected,style.hover].includes(style.actual),`Credited action uses the shared green fill or its shared hover state: ${JSON.stringify(style)} ${await action.getAttribute('class')}`);
 }
 async function neutral(action) {
   assert.equal(await action.getAttribute('aria-description'),null);
   await expect(action).not.toHaveClass(/knowledge-update-button/);
   await expect(action.locator('.contribution-action-hint')).toHaveCount(0);
+  const style=await action.evaluate(node=>{const probe=document.createElement('i');node.append(probe);const values=['--ui-control-surface','--ui-control-hover'].map(token=>{probe.style.background=`var(${token})`;return getComputedStyle(probe).backgroundColor;});probe.remove();return {actual:getComputedStyle(node).backgroundColor,values};});
+  assert.ok(style.values.includes(style.actual),`Ordinary action stays neutral: ${await action.textContent()} ${style.actual}`);
 }
+
+async function swappedInside(action,page) {
+  await action.evaluate(node=>node.blur());await page.mouse.move(0,0);
+  const hint=action.locator('.contribution-action-hint'),label=action.locator('.contribution-action-label');
+  await expect(hint).toBeHidden();const before=await action.boundingBox();
+  await page.keyboard.press('Tab');await action.focus();await expect(action).toBeFocused();await expect(hint).toBeVisible();
+  assert.equal(await label.evaluate(node=>getComputedStyle(node).opacity),'0');
+  const after=await action.boundingBox(),content=await hint.boundingBox();
+  assert.ok(Math.abs(before.width-after.width)<.5 && Math.abs(before.height-after.height)<.5,'Contribution replacement keeps button dimensions stable');
+  assert.ok(content.x>=after.x && content.y>=after.y && content.x+content.width<=after.x+after.width && content.y+content.height<=after.y+after.height,'Contribution label is inside the button');
+  assert.equal(await hint.evaluate(node=>getComputedStyle(node).position),'static','No external tooltip bubble');
+  if((page.viewportSize()?.width??0)>=760){await action.evaluate(node=>node.blur());await action.hover();await expect(hint).toBeVisible();assert.equal(await label.evaluate(node=>getComputedStyle(node).opacity),'0');}
+}
+async function openWorkspace(page,group,name) {
+  const nav=page.getByRole('navigation',{name:'Workspace navigation'});
+  if(group&&await button(nav,group).getAttribute('aria-expanded')!=='true')await button(nav,group).click();
+  await button(group?nav:page,name).click();return page.getByRole('dialog',{name,exact:true});
+}
+async function ordinaryScreens(page,shot) {
+  let workspace=await openWorkspace(page,'Ports & Suppliers','Supplier Profiles');
+  await neutral(button(workspace,'SPC VIEW'));await neutral(button(workspace,'Add supplier'));
+  await button(workspace,'SPC VIEW').click();await neutral(button(workspace,'SPC VIEW'));await shot('ordinary-suppliers');
+  await button(workspace,'Add supplier').click();const add=page.getByRole('dialog',{name:'Add supplier',exact:true});await neutral(button(add,'Add supplier'));await button(add,'Cancel').click();await button(workspace,'Close workspace').click();
+  workspace=await openWorkspace(page,'Trading','Enquiries');
+  await neutral(button(workspace,'My enquiries'));await neutral(button(workspace,'Confirm'));await shot('ordinary-parser');
+  await button(workspace,'Singapore queue').click();await neutral(button(workspace,'Singapore queue'));await neutral(button(workspace,'My enquiries'));await button(workspace,'My enquiries').scrollIntoViewIfNeeded();await shot('ordinary-enquiry-lists');await button(workspace,'Close workspace').click();
+  workspace=await openWorkspace(page,null,'Settings');
+  await neutral(button(workspace,'Add user'));await workspace.locator('.users-access-list button').filter({hasText:'FIXTURE ADMIN'}).click();await neutral(button(workspace,'Save changes'));const permission=workspace.getByRole('checkbox',{name:'SPC Trader',exact:true});assert.ok(await permission.evaluate(node=>{const probe=document.createElement('i');probe.style.color='var(--ui-focus)';node.parentElement.append(probe);const matches=getComputedStyle(node).accentColor===getComputedStyle(probe).color;probe.remove();return matches;}),'Permission checkbox uses the neutral selection accent');await button(workspace,'Save changes').scrollIntoViewIfNeeded();await shot('ordinary-admin');
+  await button(workspace.locator('.users-access-editor'),'Close').click();await button(workspace,'Personal details').click();await neutral(button(workspace,'Change password'));await button(workspace,'Change password').scrollIntoViewIfNeeded();await shot('ordinary-password');await button(workspace,'Close workspace').click();
+}
+
 const finance = state => ({companies:state.companies,requests:state.requests,enquiries:state.enquiries,outcomes:state.outcomes});
 for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
@@ -84,7 +119,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
     try {
       await page.goto(base);await expect(page.getByRole('navigation',{name:'Workspace navigation'})).toBeVisible();
       const feedback=page.locator('.home-display-controls').getByRole('button',{name:'Feedback for ecosystem',exact:true});
-      await credited(feedback);await page.keyboard.press('Tab');await feedback.focus();await expect(feedback).toBeFocused();
+      await credited(feedback);await swappedInside(feedback,page);
       await expect(feedback.locator('.contribution-action-hint')).toBeVisible();await shot('feedback-hint');
       await feedback.click();const modal=page.getByRole('dialog',{name:'Feedback for ecosystem',exact:true});
       const submit=button(modal.getByRole('form',{name:'Submit feedback',exact:true}),'Submit feedback');await credited(submit);
@@ -92,10 +127,11 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       await modal.getByLabel('Details',{exact:true}).fill('SYNTHETIC FEEDBACK VERIFICATION WITH NO BUSINESS DATA OR EXTERNAL WRITES.');
       await submit.click();await expect(modal).toContainText('Feedback submitted.');assert.equal(state.feedback.length,1);
       await button(modal,'Close dialog').click();
+      await ordinaryScreens(page,shot);
       await createLiveFixtureBuyer(page,'ACTION FIXTURE BUYER');
       let view=await profile(page), overview=view.locator('.buyer-overview-grid');
       const initial=await saved(page), initialFinance=finance(initial);
-      const edit=button(overview,'EDIT');await expect(edit).toHaveCount(1);await credited(edit);await shot('overview');
+      const edit=button(overview,'EDIT');await expect(edit).toHaveCount(1);await credited(edit);await swappedInside(edit,page);await shot('overview');
       await edit.click();await expect(button(overview,'EDIT')).toHaveCount(0);
       const competition=overview.getByRole('region',{name:'Competition',exact:true}), team=overview.getByRole('region',{name:'Team Remarks',exact:true}), own=overview.getByRole('region',{name:'Private Remarks',exact:true});
       await competition.getByLabel('Competition 1',{exact:true}).fill('COMPETITOR FIXTURE SHARED NOTE');
@@ -126,7 +162,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No page horizontal overflow');
       state.user=null;await invalidateFixtureAuthority(page,{user:null,preview:null});await expect(page.getByRole('button',{name:'Feedback for ecosystem',exact:true})).toHaveCount(0);
       assert.deepEqual(state.unexpected,[]);assert.deepEqual(errors,[]);
-      results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: one Overview EDIT, independent drafts/saves, credit/private distinction, feedback, private tabs, VIEW AS/signout`);
+      results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: neutral supplier/parser/admin/password actions, stable in-button contribution text, one Overview EDIT, independent drafts/saves, private tabs, VIEW AS/signout`);
     } catch(error) {await shot('failure');throw error;} finally {await context.close();}
   }}finally{await browser.close();await writeFile(resolve(out,'results.json'),JSON.stringify({base,results},null,2));}
 }

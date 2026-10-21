@@ -1,0 +1,225 @@
+.buyer-profile,.buyer-profile-directory {
+  --buyer-line:var(--line,#d4e0e8);
+  --buyer-surface:var(--ws-field,var(--surface,#fff));
+  --buyer-accent:var(--ws-cyan,#249fad);
+  --buyer-heading:color-mix(in srgb,#1a9aaa 17%,var(--surface));
+  --buyer-section-heading:color-mix(in srgb,#1a9aaa 10%,var(--surface));
+  color:var(--ink);min-width:0;font-size:12px;font-variant-numeric:tabular-nums;
+}
+.buyer-profile {container:buyer-profile / inline-size;}
+.buyer-profile>[role="tabpanel"][hidden],.buyer-credit-history__records[hidden] {display:none!important;}
+.buyer-profile :is(h2,h3,h4,p,dl),.buyer-directory-head h2 {margin:0;}
+.buyer-profile h2,.buyer-directory-head h2 {font-size:17px;line-height:1.3;}
+.buyer-profile h3 {font-size:12px;line-height:1.4;}
+.buyer-profile h4 {font-size:11px;display:flex;align-items:center;gap:5px;}
+.buyer-profile__header {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;border:1px solid var(--buyer-line);border-radius:6px;background:var(--buyer-heading);}
+.buyer-profile__title {display:flex;flex:1;min-width:180px;align-items:center;gap:10px;flex-wrap:wrap;}
+.buyer-profile__header .buyer-profile__identity {flex:0 1 auto;padding:0;grid-template-columns:repeat(2,minmax(0,auto));gap:6px 20px;}
+.buyer-facts {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 18px;padding:10px;}
+.buyer-facts>div {min-width:0;}
+.buyer-profile dt {font-size:10px;color:var(--muted);line-height:1.35;}
+.buyer-profile dd {margin:3px 0 0;font-weight:650;font-size:13px;line-height:1.4;overflow-wrap:anywhere;}
+.buyer-profile__identity dd {font-size:11px;}
+.buyer-inline-link,.buyer-table-link {padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer;text-align:left;display:inline-flex;align-items:center;gap:5px;}
+.buyer-inline-link:hover,.buyer-table-link:hover {color:#188c79;text-decoration:underline;}
+.buyer-status {display:inline-flex;align-items:center;max-width:100%;padding:3px 6px;border-radius:3px;font-size:10px;font-weight:600;line-height:1.25;background:color-mix(in srgb,var(--muted) 10%,transparent);color:var(--muted);}
+.buyer-status[data-status="Active"] {background:color-mix(in srgb,#389477 13%,transparent);color:#287b59;}
+.buyer-status[data-status="Suspended"],.buyer-status[data-status="Closed"] {background:color-mix(in srgb,#c03b51 12%,transparent);color:#b33a4b;}
+.buyer-status[data-status="On hold"],.buyer-status[data-status="Pending approval"] {background:color-mix(in srgb,#c18a2d 12%,transparent);color:#94641b;}
+.buyer-status-text[data-status="Suspended"],.buyer-status-text[data-status="Closed"],.buyer-status-text[data-status="Overdue"] {color:#b33a4b;font-weight:700;}
+.buyer-status-text[data-status="Paid late"],.buyer-status-text[data-status="On hold"] {color:#94641b;}
+.buyer-profile__section {min-width:0;margin-top:8px;border:1px solid var(--buyer-line);border-radius:5px;overflow:hidden;background:transparent;}
+.buyer-profile__section-header {display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:29px;padding:3px 10px;border-bottom:1px solid var(--buyer-line);background:var(--buyer-section-heading);}
+.buyer-profile__section-header>small {font-size:9px;color:var(--muted);}
+.buyer-profile__section-header select {width:auto;max-width:145px;min-height:22px;padding:2px 5px;font:inherit;font-size:10px;color:var(--ink);background:var(--buyer-surface);border:1px solid var(--buyer-line);border-radius:3px;}
+.buyer-credit-summary {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px;}
+.buyer-profile .buyer-credit-metric {min-width:0;padding:12px;border:1px solid var(--buyer-line);border-radius:5px;background:var(--buyer-surface);}
+.buyer-credit-metric>dd {font-size:24px;line-height:1.25;letter-spacing:-.4px;margin-top:6px;}
+.buyer-profile__available>dd {color:#397855;}
+.buyer-profile__available[data-negative="true"]>dd,.buyer-credit-metric[data-overdue="true"]>dd {color:#b33a4b;}
+.buyer-profile__credit-track {height:4px;margin-top:9px;border-radius:3px;background:var(--buyer-line);overflow:hidden;}
+.buyer-profile__credit-track span {display:block;height:100%;background:var(--buyer-accent);}
+.buyer-profile .buyer-credit-approval {padding:0 12px 12px;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 18px;}
+.buyer-profile .buyer-credit-facts {padding:12px;border-top:1px solid var(--buyer-line);background:color-mix(in srgb,var(--buyer-accent) 3%,transparent);grid-template-columns:repeat(6,minmax(0,1fr));gap:10px 18px;}
+.buyer-credit-condition {border-top:1px solid var(--buyer-line);padding:5px 10px;font-size:10px;}
+.buyer-credit-alert {border-top:1px solid var(--buyer-line);border-left:3px solid #c1832b;padding:6px 10px;font-size:10px;font-weight:600;color:#966218;}
+.buyer-profile__tabs {display:flex;flex-wrap:wrap;gap:6px;padding:9px 0 1px;}
+.buyer-profile__tabs>button {flex:0 1 auto;min-width:0;max-width:100%;min-height:33px;padding:6px 11px;border:1px solid var(--buyer-line);border-radius:5px;background:var(--buyer-surface);color:var(--muted);font:inherit;font-size:11px;cursor:pointer;white-space:normal;overflow-wrap:anywhere;}
+.buyer-profile__tabs>button[aria-selected="true"] {border-color:var(--buyer-accent);background:var(--buyer-section-heading);color:var(--ink);font-weight:650;box-shadow:inset 0 -2px var(--buyer-accent);}
+.buyer-profile__tabs>button:hover {background:var(--buyer-section-heading);}
+.buyer-profile .buyer-profile__metrics {grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:12px 12px 7px;}
+.buyer-profile__metrics>div {padding:12px;border:1px solid var(--buyer-line);border-radius:5px;background:var(--buyer-surface);}
+.buyer-profile__metrics dd {font-size:22px;line-height:1.25;margin-top:7px;}
+.buyer-profile__metrics dd small {display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:5px;}
+.buyer-profile .buyer-profile__coverage {color:var(--muted);font-size:9px;margin:0;padding:3px 10px 7px;}
+.buyer-profile__section-header .buyer-profile__coverage {padding:0;}
+.buyer-profile__trend-grid {display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px;padding:12px;}
+.buyer-profile__trend-month {display:grid;min-width:0;text-align:center;gap:5px;font-size:12px;}
+.buyer-profile__trend-month b {color:#397855;font-weight:600;}
+.buyer-profile__trend-month small {font-size:10px;color:var(--muted);}
+.buyer-profile__trend-bar {height:44px;display:flex;align-items:end;justify-content:center;border-bottom:1px solid var(--buyer-line);}
+.buyer-profile__trend-bar i {width:75%;background:var(--buyer-accent);border-radius:2px 2px 0 0;opacity:.75;}
+.buyer-profile__table-wrap,.buyer-directory-table {overflow:auto;max-height:440px;scrollbar-gutter:stable;}
+.buyer-profile table,.buyer-directory-table table {width:100%;min-width:680px;border-collapse:collapse;font-size:11px;}
+.buyer-profile :is(th,td),.buyer-directory-table :is(th,td) {padding:6px 9px;border:0;border-bottom:1px solid var(--buyer-line);text-align:left;white-space:normal;background:transparent;}
+.buyer-profile th,.buyer-directory-table th {position:sticky;top:0;z-index:1;background:var(--buyer-surface);color:var(--muted);font-size:9px;font-weight:600;letter-spacing:0;}
+.buyer-profile .numeric,.buyer-directory-table .numeric {text-align:right;white-space:nowrap;}
+.buyer-profile tr:last-child>td,.buyer-directory-table tr:last-child>td {border-bottom:0;}
+.buyer-profile tbody>tr:hover,.buyer-directory-table tbody>tr:hover {background:color-mix(in srgb,var(--buyer-accent) 5%,transparent);}
+.buyer-profile td>span,.buyer-profile td>strong {display:block;}
+.buyer-profile td>span {margin-top:2px;font-size:10px;}
+.buyer-expanded-row td {background:color-mix(in srgb,var(--buyer-accent) 4%,transparent);}
+.buyer-expanded-row .buyer-facts {padding:3px 0;}
+.buyer-profile .buyer-profile__empty,.buyer-profile-directory .buyer-profile__empty {padding:14px 10px;color:var(--muted);font-size:11px;}
+.buyer-table-toolbar {display:flex;align-items:center;gap:8px;padding:8px 10px;flex-wrap:wrap;border-bottom:1px solid var(--buyer-line);}
+.buyer-table-toolbar>span {margin-left:auto;font-size:10px;color:var(--muted);}
+.buyer-search {display:flex;align-items:center;gap:7px;flex:1;max-width:430px;min-width:180px;padding:0 8px;border:1px solid var(--buyer-line);border-radius:4px;background:var(--buyer-surface);color:var(--muted);}
+.buyer-search>input {min-width:0;width:100%;padding:7px 0;border:0;background:transparent;color:var(--ink);font:inherit;font-size:11px;}
+.buyer-table-toolbar>select {width:auto;max-width:150px;min-height:30px;padding:5px 7px;border:1px solid var(--buyer-line);background:var(--buyer-surface);color:var(--ink);border-radius:4px;font-size:10px;}
+.buyer-profile .button,.buyer-profile-directory .button {min-height:30px;padding:6px 9px;font-size:10px;}
+.buyer-small-action {display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#188c79;font:inherit;font-size:10px;padding:3px 0;cursor:pointer;}
+.buyer-table-footer {display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--buyer-line);font-size:10px;color:var(--muted);}
+.buyer-profile__pages {display:flex;align-items:center;gap:8px;}
+.buyer-profile__pages button {min-width:26px;min-height:25px;border:1px solid var(--buyer-line);border-radius:3px;background:var(--buyer-surface);color:var(--ink);cursor:pointer;}
+.buyer-profile__pages button:disabled {opacity:.4;cursor:default;}
+.buyer-profile__remarks {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;}
+.buyer-profile__remarks>section {min-width:0;padding:9px 10px;}
+.buyer-profile__remarks>section+section {border-left:1px solid var(--buyer-line);}
+.buyer-profile__remarks header {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;}
+.buyer-profile__remarks .text-button {font-size:10px;color:#188c79;}
+.buyer-profile__remarks textarea,.buyer-credit-history textarea {width:100%;min-height:80px;padding:8px;border:1px solid var(--buyer-line);border-radius:4px;background:var(--buyer-surface);color:var(--ink);font:inherit;font-size:11px;resize:vertical;}
+.buyer-profile__form-actions {display:flex;justify-content:end;gap:6px;margin-top:6px;}
+.buyer-profile__remark-text,.buyer-profile__remark p {font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;}
+.buyer-profile__remark-text {max-height:88px;overflow:auto;}
+.buyer-credit-history__current {padding:12px;}
+.buyer-credit-history__current .buyer-profile__remark-text {max-height:none;}
+.buyer-credit-history__records {padding:0 12px 12px;border-top:1px solid var(--buyer-line);}
+.buyer-credit-history__records .credit-record-heading h3 {display:none;}
+.buyer-profile__remark {padding:0 0 6px;margin-bottom:6px;border-bottom:1px solid var(--buyer-line);}
+.buyer-profile__remark small {display:block;margin-top:4px;color:var(--muted);font-size:9px;}
+.buyer-profile__remarks .button {margin-top:6px;}
+.buyer-company-information>.knowledge {margin-top:8px;}
+.buyer-file-list {list-style:none;margin:0;padding:8px 10px;display:flex;flex-wrap:wrap;gap:12px;}
+.buyer-file-list li,.buyer-file-list a {display:flex;gap:6px;align-items:center;color:inherit;font-size:11px;}
+.buyer-directory-card {border:1px solid var(--buyer-line);border-radius:6px;overflow:hidden;}
+.buyer-directory-head {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--buyer-heading);border-bottom:1px solid var(--buyer-line);}
+.buyer-directory-table {max-height:calc(100dvh - 270px);}
+.buyer-directory-table table {min-width:930px;}
+.buyer-directory-table th>button {border:0;background:transparent;padding:0;color:inherit;font:inherit;cursor:pointer;text-align:left;}
+.buyer-directory-table th[aria-sort="ascending"]>button:after {content:' ↑';}
+.buyer-table-toolbar .button[aria-pressed="true"] {background:var(--buyer-section-heading);border-color:var(--buyer-accent);}
+.buyer-profile-directory__selector {display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.buyer-profile-directory__selector>.search-select {flex:1;min-width:0;max-width:640px;}
+.buyer-profile-directory__selector>.search-select>input {width:100%;min-height:32px;padding:7px 30px 7px 9px;border:1px solid var(--buyer-line);border-radius:4px;background:var(--buyer-surface);color:var(--ink);font:inherit;font-size:11px;}
+.center-tabs button {white-space:normal;}
+.window-theme-toggle {display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:inherit;font:inherit;font-size:11px;padding:3px 5px;cursor:pointer;border-radius:4px;}
+.window-theme-toggle:hover {background:var(--line);}
+:root[data-theme="dark"] .buyer-status[data-status="Active"],:root[data-theme="dark"] .buyer-profile__available>dd,:root[data-theme="dark"] .buyer-profile__trend-month b {color:#91d2a0;}
+:root[data-theme="dark"] .buyer-status:is([data-status="Suspended"],[data-status="Closed"]),:root[data-theme="dark"] .buyer-status-text:is([data-status="Suspended"],[data-status="Closed"],[data-status="Overdue"]),:root[data-theme="dark"] .buyer-profile__available[data-negative="true"]>dd,:root[data-theme="dark"] .buyer-credit-metric[data-overdue="true"]>dd {color:#f2a8ac;}
+:root[data-theme="dark"] .buyer-status:is([data-status="On hold"],[data-status="Pending approval"]),:root[data-theme="dark"] .buyer-credit-alert,:root[data-theme="dark"] .buyer-status-text:is([data-status="Paid late"],[data-status="On hold"]) {color:#efc276;}
+:root[data-theme="dark"] .workspace-window .buyer-profile :is(.buyer-small-action,.text-button) {color:#80dbc1;}
+@container buyer-profile (max-width:850px) {
+  .buyer-profile .buyer-credit-facts {grid-template-columns:repeat(3,minmax(0,1fr));}
+  .buyer-credit-metric>dd {font-size:22px;}
+  .buyer-profile__metrics dd {font-size:19px;}
+}
+@container buyer-profile (max-width:560px) {
+  .buyer-profile h2 {font-size:15px;}
+  .buyer-profile__header {padding:10px;gap:8px 12px;}
+  .buyer-profile__title {flex-basis:100%;}
+  .buyer-profile .buyer-profile__identity {flex:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .buyer-credit-summary {grid-template-columns:repeat(2,minmax(0,1fr));padding:9px;gap:8px;}
+  .buyer-profile .buyer-credit-metric {padding:10px;}
+  .buyer-credit-metric>dd {font-size:21px;}
+  .buyer-profile .buyer-credit-approval {padding:2px 10px 10px;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .buyer-profile .buyer-credit-facts {padding:10px;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .buyer-profile .buyer-profile__metrics {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:9px 9px 5px;}
+  .buyer-profile__metrics>div {padding:10px;}
+  .buyer-profile__metrics>div:last-child {grid-column:1/-1;}
+  .buyer-profile__metrics dd {font-size:20px;}
+  .buyer-profile__remarks {grid-template-columns:1fr;}
+  .buyer-profile__remarks>section+section {border-left:0;border-top:1px solid var(--buyer-line);}
+  .buyer-facts {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .buyer-profile__section-header {min-height:34px;flex-wrap:wrap;}
+  .buyer-profile .button,.buyer-profile__tabs>button,.buyer-profile__pages button {min-height:36px;}
+  .buyer-profile__tabs>button {padding:6px 9px;font-size:10px;}
+  .buyer-profile__trend-grid {gap:5px;padding:10px 8px;}
+  .buyer-profile__trend-month {font-size:10px;}
+  .buyer-profile__trend-month small {font-size:9px;}
+  .buyer-credit-history__current {padding:10px;}
+  .buyer-credit-history__records {padding:0 8px 8px;}
+}
+@container buyer-profile (max-width:360px) {
+  .buyer-profile__header .buyer-profile__identity {flex:0 0 100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .buyer-profile__header>.button {margin-left:auto;}
+  .buyer-credit-metric>dd {font-size:clamp(16px,5.5cqw,18px);white-space:nowrap;overflow-wrap:normal;letter-spacing:-.3px;}
+}
+@media(max-width:700px) {
+  .buyer-profile-directory__selector {flex-wrap:wrap;}
+  .buyer-profile-directory__selector>.search-select {flex-basis:100%;}
+  .buyer-directory-table {max-height:60dvh;}
+  .buyer-table-toolbar .buyer-search {min-width:100%;}
+  .buyer-profile-directory .button,.buyer-table-toolbar>select {min-height:36px;}
+  .center-tabs button {min-width:0;flex:1;padding:10px 7px;font-size:11px;}
+}
+@media(pointer:coarse) {
+  .buyer-profile__section-header select {max-width:190px;}
+}
+.buyer-remark-actions { display:flex; align-items:center; gap:12px; }
+.buyer-active-remark-source { display:block; margin-top:5px; padding:0; border:0; background:transparent; color:var(--muted); font:inherit; font-size:9px; text-align:left; }
+.buyer-active-remark-source:hover { color:#188c79; text-decoration:underline; }
+.buyer-status[data-status="Lead"] { background:color-mix(in srgb,#387cac 12%,transparent);color:#376c96; }
+:root[data-theme="dark"] .buyer-status[data-status="Lead"] {color:#9bcdec;}
+
+/* Narrow overview columns, with one fact per row. */
+.buyer-overview-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 12px; align-items: start; }
+.buyer-overview-column { min-width: 0; }
+.buyer-overview-grid .buyer-credit-summary,
+.buyer-profile .buyer-overview-grid :is(.buyer-credit-approval,.buyer-credit-facts,.buyer-profile__metrics) { display: flex; flex-direction: column; gap: 0; padding: 0 12px; }
+.buyer-overview-grid .buyer-credit-metric,
+.buyer-overview-grid :is(.buyer-credit-approval,.buyer-credit-facts,.buyer-profile__metrics) > div { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: baseline; gap: 8px 12px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--buyer-line); border-radius: 0; background: transparent; }
+.buyer-overview-grid :is(.buyer-credit-summary,.buyer-credit-approval,.buyer-credit-facts,.buyer-profile__metrics) > :last-child { border-bottom: 0; }
+.buyer-overview-grid :is(.buyer-credit-metric,.buyer-profile__metrics) dd { margin: 0; font-size: 18px; text-align: right; white-space: nowrap; }
+.buyer-overview-grid :is(.buyer-credit-approval,.buyer-credit-facts) dd { margin: 0; text-align: right; }
+.buyer-overview-grid .buyer-profile__credit-track { grid-column: 1 / -1; margin: 0; }
+.buyer-overview-grid .buyer-credit-facts { border-top: 1px solid var(--buyer-line); }
+.buyer-overview-grid .buyer-profile__metrics dd small { white-space: normal; font-size: 9px; }
+.buyer-overview-grid .buyer-profile__remarks { grid-template-columns: minmax(0,1fr); }
+.buyer-overview-grid .buyer-profile__remarks > section + section { border-left: 0; border-top: 1px solid var(--buyer-line); }
+.buyer-overview-grid .buyer-profile__trend-grid { gap: 7px; padding: 12px 8px; }
+.buyer-overview-grid .buyer-profile__trend-month { font-size: 10px; }
+.buyer-overview-grid .buyer-profile__trend-month small { font-size: 9px; }
+.buyer-overview-grid .buyer-profile__section-header { flex-wrap: wrap; }
+@container buyer-profile (max-width:1050px) {
+  .buyer-overview-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .buyer-overview-notes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 12px; align-items: start; }
+}
+@container buyer-profile (max-width:650px) {
+  .buyer-overview-grid { grid-template-columns: minmax(0,1fr); gap: 0; }
+  .buyer-overview-notes { grid-column: auto; display: block; }
+}
+.buyer-profile__header .buyer-profile__identity {grid-template-columns:repeat(3,minmax(0,auto));}
+.buyer-credit-visual {padding:14px 12px;border-bottom:1px solid var(--buyer-line);}
+.buyer-credit-visual .credit-usage__limit strong {font-size:19px;}
+.buyer-credit-visual .credit-usage__numbers strong {font-size:25px;}
+.buyer-credit-approval [data-overdue="true"] {color:#b33a4b;}
+.buyer-credit-facts>div:has(.buyer-risk) {grid-template-columns:1fr!important;gap:8px!important;}
+.buyer-credit-facts>div:has(.buyer-risk)>dd {width:100%;text-align:left;}
+.buyer-risk {position:relative;padding-top:2px;}
+.buyer-risk>strong {position:absolute;right:0;top:-27px;font-size:14px;}
+.buyer-risk__scale {display:grid;grid-template-columns:repeat(5,1fr);gap:5px;padding:3px;}
+.buyer-risk__scale>span {display:flex;align-items:center;justify-content:center;height:24px;border-radius:3px;background:#cbe4d1;color:#245f45;font-size:11px;opacity:.5;}
+.buyer-risk__scale>span:nth-child(2) {background:#dce7be;color:#4a621b;}
+.buyer-risk__scale>span:nth-child(3) {background:#f1dfb3;color:#7d5b17;}
+.buyer-risk__scale>span:nth-child(4) {background:#edc8b2;color:#873b1d;}
+.buyer-risk__scale>span:nth-child(5) {background:#e7b9bd;color:#822e39;}
+.buyer-risk__scale>span[data-selected="true"] {opacity:1;outline:2px solid currentColor;outline-offset:1px;font-weight:750;}
+.buyer-risk__ends {display:flex;justify-content:space-between;margin-top:5px;color:var(--muted);font-size:9px;font-weight:400;}
+.buyer-trend-unit {font-size:8px;color:var(--muted);font-weight:400;}
+.buyer-overview-grid .buyer-profile__trend-grid {gap:4px;}
+.buyer-overview-grid .buyer-profile__trend-month strong {white-space:nowrap;font-size:10px;}
+:root[data-theme="dark"] .buyer-credit-approval [data-overdue="true"] {color:#f2a8ac;}
+@container buyer-profile (max-width:560px) {
+  .buyer-profile__header .buyer-profile__identity {grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:100%;}
+  .buyer-credit-visual .credit-usage__numbers strong {font-size:23px;}
+}

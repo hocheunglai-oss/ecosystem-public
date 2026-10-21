@@ -1,0 +1,9 @@
+.marine-lighthouses { pointer-events: none; }
+.marine-lighthouse__beam {
+  transform-origin: 0 0;
+  animation: lighthouse-sweep var(--beam-period) linear infinite;
+  animation-delay: var(--beam-phase);
+}
+.marine-world[data-ambient-motion="paused"] .marine-lighthouse__beam { animation-play-state: paused; }
+@keyframes lighthouse-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .marine-lighthouse__beam { animation-play-state: paused; } }

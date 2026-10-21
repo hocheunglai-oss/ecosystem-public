@@ -1,0 +1,34 @@
+/* The enquiry and directory share the same profile and scrolling content. */
+:root .workspace-window[data-workspace="enquiry"]:has(.enquiry-center-intelligence) .window-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px 14px;
+}
+.workspace-window[data-workspace="enquiry"]:has(.enquiry-center-intelligence) .workspace-module:not([hidden]),
+.enquiry-center.enquiry-center-intelligence,
+.enquiry-center-intelligence .center-main,
+.enquiry-center-intelligence .center-intelligence-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.enquiry-center-intelligence .center-tabs {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+}
+.enquiry-center-intelligence .center-sidebar { display: none; }
+@media (max-width: 650px) {
+  :root .workspace-window[data-workspace="enquiry"]:has(.enquiry-center-intelligence) .window-content { padding: 8px; }
+}
+
+/* Keep existing key-info revision comparisons readable on narrow screens. */
+.intelligence-amendment table { min-width: 0; width: 100%; table-layout: fixed; }
+.intelligence-amendment :is(th, td) { white-space: normal; overflow-wrap: anywhere; padding: 10px 8px; vertical-align: top; }
+.intelligence-amendment th:first-child { width: 40%; }
+@media (max-width: 600px) {
+  .intelligence-amendment :is(th, td) { padding: 9px 5px; font-size: 11px; letter-spacing: 0; }
+}

@@ -1,0 +1,8 @@
+:is(.workspace-window,.modal,.knowledge) button.knowledge-update-button {
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:var(--ui-control-height,30px);padding:var(--ui-control-padding,5px 10px);border:1px solid var(--ui-primary-border,#b7df75);border-radius:var(--ui-radius-control,5px);
+  color:var(--ui-primary-ink,#19301d);background:var(--ui-primary,#c5f574);
+  box-shadow:none;font-weight:600;white-space:nowrap;
+}
+:is(.workspace-window,.modal,.knowledge) button.knowledge-update-button:hover:not(:disabled) {background:var(--ui-primary-hover,#b9ed67);}
+button.knowledge-update-button:disabled {opacity:.45;cursor:not-allowed;}

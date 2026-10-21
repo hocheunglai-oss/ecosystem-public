@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ECO WhatsApp Privacy Notice</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    @font-face{font-family:"DM Sans";font-style:normal;font-weight:400 700;font-display:swap;src:url("/fonts/dm-sans.woff2") format("woff2")}
+    @font-face{font-family:"Manrope";font-style:normal;font-weight:400 800;font-display:swap;src:url("/fonts/manrope.woff2") format("woff2")}
+    :root{color-scheme:light dark;--surface:#f5f9fc;--ink:#17364a;--muted:#4c6279;--line:#91aabd;--focus:#158da4;--canvas:#edf3f8;font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;font-weight:450;line-height:1.5;background:var(--canvas);color:var(--ink)}
+    *{box-sizing:border-box}
+    body{margin:0;padding:32px 20px;text-transform:uppercase}
+    main{max-width:76ch;margin:0 auto;padding:28px;background:var(--surface);border:1px solid var(--line);border-radius:5px;overflow-wrap:anywhere}
+    header{padding-bottom:20px;border-bottom:1px solid var(--line)}
+    h1,h2{font-family:"Manrope","DM Sans",sans-serif;font-weight:700;line-height:1.35}
+    h1{font-size:1.5384615385rem;margin:0 0 10px}
+    h2{font-size:1.0769230769rem;margin:0 0 12px}
+    section{margin-top:24px}
+    p{margin:0 0 14px}
+    p:last-child{margin-bottom:0}
+    .updated{font-size:.8461538462rem;color:var(--muted);margin-bottom:18px}
+    a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+    a[href^="mailto:"]{text-transform:none}
+    a:focus-visible{outline:2px solid var(--focus);outline-offset:4px}
+    strong{font-weight:600}
+    @media(prefers-color-scheme:dark){:root{--surface:#192b3c;--ink:#edf5fb;--muted:#afc3d3;--line:#658399;--focus:#78d9dd;--canvas:#101d2b}}
+    @media(max-width:760px){body{padding:16px 12px}main{padding:20px 16px}a[href^="mailto:"]{display:inline-flex;align-items:center;min-height:44px;max-width:100%}}
+    @media print{body{padding:0}main{max-width:none;border:0;background:white;color:black}a{color:inherit}}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ECO WhatsApp Privacy Notice</h1>
+      <p class="updated">Last updated: <time datetime="2026-10-20">20 October 2026</time></p>
+      <p>ECO handles bunker enquiries for the Fratelli Cosulich team. This notice explains ECO’s processing of enquiries sent or forwarded to WhatsApp <strong>+85298472818</strong>, and their subsequent review in ECO.</p>
+    </header>
+    <section aria-labelledby="information">
+      <h2 id="information">Information received</h2>
+      <p>ECO receives message text, the sender’s WhatsApp number, message identifiers and delivery timestamps. Text may include names, contact details and business information contained in a forwarded enquiry.</p>
+      <p>For an accepted message, ECO stores that information together with its assigned ECO account, receipt time and read or dismissal status. ECO uses identifiers and content fingerprints to prevent duplicate processing.</p>
+      <p>Only supported text matching one eligible ECO account’s approved contact details is accepted into its inbox. For unknown or unsupported submissions, ECO keeps a receipt containing delivery metadata and the rejection reason, without the message body or a fingerprint of its content. ECO does not download attachment files through this receiver.</p>
+    </section>
+    <section aria-labelledby="use">
+      <h2 id="use">How information is used and accessed</h2>
+      <p>ECO uses accepted messages to notify the assigned user, extract enquiry fields and let that user review the result. The ECO inbox is accessible to its assigned account. If a user submits a parser report, ECO administrators can review the source text, parser results, corrections and review history. Authorised technical operators can access the systems supporting ECO.</p>
+      <p>ECO uses sign-in cookies. Enquiries saved through the current review workflow can also remain in that user’s browser storage.</p>
+    </section>
+    <section aria-labelledby="services">
+      <h2 id="services">Services and optional AI</h2>
+      <p>Messages arrive through WhatsApp/Meta. Vercel hosts ECO’s website and receiving API; Supabase provides ECO’s authentication and database. The ECO database is configured in Singapore. This does not establish that all provider processing, logs or backups remain in Singapore.</p>
+      <p>Receiving a message does not automatically send it to AI. When an authorised user chooses <strong>AI Fix</strong>, ECO sends the enquiry text to OpenAI to suggest extracted fields. When an administrator requests AI review of a parser report, ECO sends the source text, original results, corrections and review notes to OpenAI. ECO stores request and result records for review. Users review AI suggestions before applying them.</p>
+    </section>
+    <section aria-labelledby="requests">
+      <h2 id="requests">Records and requests</h2>
+      <p>Reading or dismissing an ECO notification does not delete its stored record. ECO does not currently implement automatic expiry for intake receipts or parser-review records.</p>
+      <p>To ask about your information or request access, correction or deletion, email:</p>
+      <p><a href="mailto:otto@cosulich.com.hk">otto@cosulich.com.hk</a></p>
+      <p>Identify the relevant WhatsApp number and approximate message date so the records can be located. Do not send passwords or verification codes. Contacting ECO does not itself delete messages from your WhatsApp account.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "legacyHead": "20261020075427",
+  "purpose": "Fresh-database bootstrap only; applied production migration history is preserved privately.",
+  "sections": 25
+}

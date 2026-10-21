@@ -1,0 +1,61 @@
+/* Shared working-surface contrast, including Ports & Suppliers and buyer profiles. */
+:root { --line: #a9bdc9; --panel-boundary: #90aaba; }
+:is(.workspace-window, .modal), .workspace:not(.is-home) .main-content {
+  --line: #afc1cf;
+  --panel-boundary: #91aabd;
+  --muted: #4c6279;
+}
+:root[data-theme="dark"] { --theme-line: #4d687d; --panel-boundary: #658399; }
+:root[data-theme="dark"] :is(.workspace-window, .modal),
+:root[data-theme="dark"] .workspace:not(.is-home) .main-content {
+  --line: var(--theme-line);
+  --panel-boundary: #658399;
+  --muted: var(--theme-muted);
+}
+:is(.workspace-window, .modal, .main-content) :is(
+  .card, .buyer-profile__section, .buyer-directory-card, .knowledge,
+  .knowledge-block, .knowledge-facts, .knowledge-top-suppliers, .knowledge-search-section,
+  .credit-record-panel, .center-credit-indicator, .center-incoming-row,
+  .directory-layout, .directory-list, .review-item, .stat-card, .knowledge-sheet-frame
+) {
+  border-color: var(--panel-boundary);
+}
+:is(.workspace-window, .modal, .main-content) :is(.buyer-profile__section, .knowledge-block, .knowledge-facts, .knowledge-top-suppliers, .credit-record-panel) {
+  background: var(--surface);
+  box-shadow: 0 1px 3px #17354c0c;
+}
+.buyer-profile, .buyer-profile-directory {font-size:13px;}
+.buyer-profile :is(h3,h4) {font-size:13px;font-weight:700;}
+.buyer-profile dt {font-size:11px;font-weight:650;color:var(--ink);}
+.buyer-profile dd {font-size:14px;}
+.buyer-profile__identity dt {font-size:10px;color:var(--muted);}
+.buyer-profile__identity dd {font-size:12px;}
+.buyer-profile__tabs>button {font-size:12px;font-weight:600;}
+.buyer-profile__section-header {min-height:34px;}
+.buyer-profile__section-header>small, .buyer-profile .buyer-profile__coverage {font-size:10px;}
+.buyer-profile .buyer-profile__remark-text {font-size:13px;line-height:1.5;}
+.buyer-profile .button, .buyer-profile-directory .button {font-size:11px;}
+.buyer-profile :is(th,td), .buyer-directory-table :is(th,td) {font-size:12px;}
+.buyer-profile :is(th,td small), .buyer-directory-table th {font-size:11px;}
+.buyer-profile__remarks .buyer-shared-list-heading {margin:0;padding:8px 10px;min-height:46px;background:var(--buyer-section-heading);border-bottom:1px solid var(--buyer-line);}
+.buyer-profile__remarks .buyer-shared-list-heading .button {margin:0;}
+.buyer-competition>.buyer-profile__section-header,
+.buyer-competition>.buyer-shared-list-heading {min-height:42px;}
+.buyer-competition-entry {padding:9px 10px;}
+.buyer-competition-entry p {font-size:13px;font-weight:500;}
+.buyer-competition-entry footer {font-size:11px;margin-top:4px;line-height:1.4;}
+/* Name and attribution share a row; long entries wrap without losing their metadata. */
+.buyer-competition .buyer-competition-entry {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:4px 12px;padding:7px 10px;}
+.buyer-competition .buyer-competition-entry footer {margin:0;font-size:10px;}
+.buyer-credit-history__current {padding:0;}
+.buyer-credit-history__current>form {padding:10px;}
+.buyer-credit-history__recent>article {padding:10px;}
+.buyer-credit-history__recent>article+article {border-top:1px solid var(--buyer-line);}
+.buyer-credit-history__recent footer {margin-top:5px;color:var(--muted);font-size:11px;line-height:1.4;}
+.buyer-history-link {display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+.buyer-remark-actions {gap:8px;}
+.buyer-credit-history__recent>p {padding:10px;}
+@container buyer-profile (max-width:360px) {
+  .buyer-competition .buyer-competition-entry {grid-template-columns:minmax(0,1fr);}
+  .buyer-profile__section-header {gap:5px;}
+}

@@ -1,0 +1,20 @@
+.credit-usage {--credit-used:#24788e;--credit-available:#b4d9bc;--credit-negative:#b33a4b;min-width:0;}
+.credit-usage .credit-usage__limit {display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 12px;}
+.credit-usage .credit-usage__limit span,.credit-usage .credit-usage__numbers span {font-size:10px;color:var(--muted);}
+.credit-usage .credit-usage__limit strong {font-size:16px;color:var(--ink);}
+.credit-usage .credit-usage__numbers {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.credit-usage .credit-usage__numbers>div {display:flex;flex-direction:column;gap:4px;padding:0;}
+.credit-usage .credit-usage__numbers strong {font-size:22px;line-height:1.3;letter-spacing:-.4px;overflow-wrap:anywhere;}
+.credit-usage .credit-usage__numbers>div:last-child strong {color:#397855;}
+.credit-usage .credit-usage__numbers .is-negative strong {color:var(--credit-negative)!important;}
+.credit-usage .credit-usage__track {height:12px;border-radius:3px;overflow:hidden;margin-top:10px;background:var(--credit-available)!important;}
+.credit-usage .credit-usage__track>span {display:block;height:100%;background:var(--credit-used)!important;box-shadow:none!important;}
+.credit-usage .credit-usage__legend {display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:10px;color:var(--muted);}
+.credit-usage .credit-usage__legend>span {display:inline-flex;align-items:center;gap:4px;}
+.credit-usage .credit-usage__legend i {width:7px;height:7px;background:var(--credit-used)!important;border-radius:2px;}
+.credit-usage .credit-usage__legend>span:last-child i {background:var(--credit-available)!important;}
+.credit-usage[data-no-limit="true"] .credit-usage__track {background:var(--line)!important;}
+.credit-usage[data-over-limit="true"] {--credit-used:var(--credit-negative);}
+:root[data-theme="dark"] .credit-usage {--credit-negative:#f2a8ac;}
+:root[data-theme="dark"] .credit-usage .credit-usage__numbers>div:last-child strong {color:#91d2a0;}
+@media(max-width:400px) {.credit-usage .credit-usage__numbers strong {font-size:19px;}}

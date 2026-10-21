@@ -1,0 +1,138 @@
+/* Dashboard controls extend the account panel. Settings keeps its window. */
+:root[data-interface="desktop"] .home-hud-stack { flex-basis: 24rem; width: 24rem; }
+.trader-hud { --hud-expanded-surface: #23495bf2; }
+:root[data-theme="dark"] .trader-hud { --hud-expanded-surface: #193e50f2; }
+.trader-hud .hud-profile-toggle { border-radius: var(--ui-radius-control); }
+
+.trader-hud .account-inline-slot {
+  --ink: #eef6f9;
+  --muted: #bfd2dc;
+  --surface: #173a4b;
+  --line: #bfd9e33d;
+  min-width: 0;
+  color: var(--ink);
+}
+.trader-hud .account-inline-panel,
+.trader-hud .hud-inline-section {
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--hud-expanded-surface);
+  color: var(--ink);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  min-width: 0;
+}
+.trader-hud .hud-inline-section { position: relative; }
+.trader-hud .account-inline-panel {
+  max-height: min(440px, max(240px, calc(100svh - 330px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+}
+.trader-hud .profile-dropdown > header { margin-bottom: 12px; padding-bottom: 8px; }
+.trader-hud .profile-dropdown > header h2 { font-size: 14px; }
+.trader-hud .profile-dropdown form { gap: 12px; }
+.trader-hud .account-inline-panel > header > button,
+.hud-inline-heading > button,
+.hud-inline-close,
+.trader-hud .inbox-inline-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #ffffff08;
+  color: var(--ink);
+  cursor: pointer;
+}
+.hud-inline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.hud-inline-heading h2 { margin: 0; font-size: 13px; }
+.hud-inline-close { position: absolute; right: 10px; top: 6px; }
+.hud-hat-panel .hat-ranking h2 { padding-right: 48px; }
+.hud-inline-scroll {
+  padding: 0 12px 12px;
+  max-height: min(380px, max(150px, calc(100svh - 400px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #87b1b76b transparent;
+}
+/* Recognition panels use the available height while keeping the footer reachable. */
+:root[data-interface="desktop"] :is(#hud-hats-off, #hud-contribution-activity) .hud-inline-scroll {
+  max-height: max(120px, calc(100svh - 290px));
+  scrollbar-gutter: stable;
+}
+.world-interface:has(.account-inline-slot:not(:empty)) > .home-hat-ranking { visibility: hidden; }
+.hud-office-performance[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+.trader-hud .inbox-heading-actions { display: flex; align-items: center; gap: 8px; }
+.trader-hud .inbox-scenarios { max-height: none; overflow: visible; }
+.trader-hud .account-inline-panel .inbox-list { max-height: none; overflow: visible; }
+.trader-hud .inbox-arrivals { flex-wrap: wrap; }
+.hud-inline-scroll :is(.resource-wallet, .team-resources, .office-performance) { color: var(--ink); }
+.hud-inline-scroll .resource-history { max-height: none; overflow: visible; }
+.hud-inline-scroll .resource-history li { padding: 10px 0; gap: 8px; border-color: var(--line); }
+.hud-inline-scroll .resource-history li strong { font-size: 12px; }
+.hud-inline-scroll .resource-history time { color: var(--muted); }
+.hud-inline-scroll .resource-history li > b { color: #cbef9b; font-size: 13px; }
+.hud-inline-scroll .resource-empty { color: var(--muted); margin: 12px 0; }
+.hud-inline-scroll :is(.button, .office-view-tabs [role="tab"], .search-box) {
+  color: var(--ink);
+  background: #ffffff0a;
+  border-color: var(--line);
+  box-shadow: none;
+}
+.hud-inline-scroll .office-view-tabs { gap: 4px; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 10px; border-color: var(--line); }
+.hud-inline-scroll .office-view-tabs [role="tab"] { padding: 7px; font-size: 11px; border-radius: 5px; }
+.hud-inline-scroll .office-view-tabs [aria-selected="true"] { background: #ffffff15; color: #d0ff88; }
+.hud-inline-scroll .economy-section-header { margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+.hud-inline-scroll .economy-section-header :is(h2,h3) { color: var(--ink); font-size: 13px; }
+.hud-inline-scroll .office-selected-summary { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 8px; padding: 10px; margin-bottom: 12px; background: #ffffff06; border-color: var(--line); border-radius: 5px; }
+.hud-inline-scroll .office-selected-summary strong { color: var(--ink); font-size: 17px; letter-spacing: 0; }
+.hud-inline-scroll :is(.office-selected-summary > div > span, .economy-team-table tbody th span) { color: var(--muted); }
+.hud-inline-scroll .economy-team-table-scroll { margin-top: 12px; border-color: var(--line); border-radius: 5px; }
+.hud-inline-scroll .economy-team-table { min-width: 0; table-layout: fixed; width: 100%; font-size: 11px; }
+.hud-inline-scroll .economy-team-table :is(th,td) { padding: 8px 5px; border-color: var(--line); white-space: normal; overflow-wrap: anywhere; color: var(--ink); }
+.hud-inline-scroll .economy-team-table thead th { color: var(--muted); background: #ffffff08; font-size: 10px; }
+.hud-inline-scroll .economy-team-table th:first-child { width: 44%; }
+.hud-inline-scroll .office-compare-search { margin-bottom: 8px; }
+.hud-inline-scroll .search-box input { color: var(--ink); }
+.office-comparison-list { display: grid; gap: 0; margin-bottom: 12px; }
+.office-comparison-list > button { display: grid; grid-template-columns: minmax(0,1fr) auto auto 14px; align-items: center; gap: 6px; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; font-size: 11px; cursor: pointer; }
+.office-comparison-list > button[aria-pressed="true"] { color: #d0ff88; }
+.office-comparison-list > button > span { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.trader-hud .account-inline-slot :is(button,select):focus-visible { outline: 2px solid #c8fa65; outline-offset: 2px; }
+@media (pointer:coarse) {
+  .trader-hud .account-inline-slot :is(button,select,input) { min-height: 44px; }
+  .trader-hud .account-inline-slot :is(.hud-inline-close,.hud-inline-heading>button,.inbox-inline-close) { min-width: 44px; width: 44px; }
+}
+:root[data-interface="mobile"] .trader-hud .account-inline-panel { padding: 12px; background: var(--hud-expanded-surface); }
+:root[data-interface="mobile"] .trader-hud .account-inline-slot :is(.hud-inline-close,.hud-inline-heading>button,.inbox-inline-close) {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+:root[data-interface="mobile"] .trader-hud .hud-inline-scroll,
+:root[data-interface="mobile"] .trader-hud .account-inline-panel { max-height: none; overflow: visible; }
+/* The wider mobile totals row must never compete with the account name for a column. */
+:root[data-interface="mobile"] .trader-hud[data-trader-hud] { grid-template-columns: minmax(0, 1fr); }
+:root[data-interface="mobile"] .trader-hud[data-trader-hud] .hud-header { justify-content: space-between; }
+:root[data-interface="mobile"] .trader-hud[data-trader-hud] .hud-points-row { padding: 4px 8px 8px; display: flex; gap: 4px; }
+:root[data-interface="mobile"] .trader-hud[data-trader-hud] .hud-resource-activity { flex: 1; }

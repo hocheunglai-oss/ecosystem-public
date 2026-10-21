@@ -1,0 +1,1096 @@
+:root {
+  --navy: #062d52;
+  --green: #c4f53d;
+  --ink: #0c3144;
+  --muted: #526974;
+  --line: #cedbdc;
+  background: #f5f6f0;
+}
+.experience {
+  background: #f5f6f0;
+}
+.world-masthead {
+  min-height: 86px;
+  background: #052c50;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 3.4%;
+  gap: 20px;
+}
+.world-masthead .brand {
+  margin: 0;
+  flex-shrink: 0;
+}
+.world-masthead .brand > span:last-child {
+  font-size: 0.52rem;
+  letter-spacing: 1.55px;
+  margin-top: 0;
+  color: #b6c7d5;
+}
+.masthead-tools {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.motion-switch,
+.reset-world {
+  color: #dce7ed;
+  background: none;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+  padding: 8px;
+}
+.world-wallet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green);
+  color: #101718;
+  border: 0;
+  border-radius: 30px;
+  padding: 10px 15px;
+}
+.world-wallet b {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.world-wallet > span {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.world-role {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.world-role small {
+  font-size: 0.58rem;
+  letter-spacing: 1.4px;
+  color: #afc4d5;
+  display: block;
+}
+.world-role select {
+  background: transparent;
+  color: white;
+  border: 0;
+  padding: 2px 0;
+  width: 220px;
+  max-width: 100%;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.world-role option {
+  color: #123447;
+  background: white;
+}
+.crew-avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: #dceae3;
+  color: #153e42;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+.world-role .crew-avatar {
+  background: #1a4968;
+  color: #e4f29f;
+}
+.world-nav {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
+  background: #fff;
+  position: relative;
+  z-index: 12;
+  padding: 0 2%;
+  border-bottom: 1px solid #d5e0e1;
+}
+.world-nav a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 18px 14px;
+  white-space: nowrap;
+  font-size: 0.77rem;
+  font-weight: 650;
+  border-bottom: 3px solid transparent;
+}
+.world-nav a.active {
+  border-color: #73b82a;
+  color: #244822;
+  background: #f5faec;
+}
+.world-nav a:hover {
+  background: #eef5ee;
+}
+.world-nav .nav-count {
+  background: #123b53;
+  color: #fff;
+  font-size: 0.62rem;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  padding: 0 4px;
+}
+.experience .main-content {
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  min-width: 0;
+}
+.experience.is-work .main-content {
+  max-width: 1430px;
+  margin: auto;
+  padding: 42px 4% 0;
+}
+.experience .page-footer {
+  padding: 30px 3.4%;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.7rem;
+  background: #eef1e9;
+}
+.experience.is-work .page-footer {
+  margin-top: 48px;
+  padding-left: 0;
+  padding-right: 0;
+}
+.ocean-world {
+  position: relative;
+  isolation: isolate;
+  height: 760px;
+  overflow: hidden;
+  background: #04294b;
+  color: #fff;
+}
+.ocean-world > .marine-world {
+  z-index: -3;
+}
+.ocean-world .marine-world__poster,
+.ocean-world .marine-world__film {
+  object-position: 59% 70%;
+}
+.ocean-shade {
+  position: absolute;
+  inset: 0;
+}
+.ocean-shade {
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      #032541e8 0%,
+      #032541bf 19%,
+      #03254124 45%,
+      transparent 68%
+    ),
+    linear-gradient(0deg, #042442a8 0%, transparent 28%, #092d4617 100%);
+}
+.world-copy {
+  position: absolute;
+  left: 5%;
+  top: 62px;
+  width: min(40%, 34rem);
+  z-index: 4;
+  pointer-events: none;
+}
+.world-copy > * {
+  pointer-events: auto;
+}
+.world-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.66rem;
+  letter-spacing: 2.5px;
+  font-weight: 750;
+  color: #d4eaef;
+}
+.live-spark {
+  width: 6px;
+  height: 6px;
+  background: #d0f447;
+  border-radius: 50%;
+  box-shadow: 0 0 14px #d0f447aa;
+}
+.world-copy h1 {
+  font-family: "Manrope", sans-serif;
+  font-weight: 850;
+  font-size: clamp(3rem, 5.2vw, 5.6rem);
+  line-height: 0.99;
+  letter-spacing: -4.5px;
+  margin: 22px 0 20px;
+}
+.world-copy h1 em {
+  font-style: normal;
+  color: #c8f348;
+  text-transform: uppercase;
+}
+.world-copy > p {
+  color: #e1e9e9;
+  white-space: pre-line;
+  font-size: 0.94rem;
+  line-height: 1.65;
+}
+.world-primary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 42px;
+  color: #092c36;
+  background: #c8f348;
+  border: 0;
+  padding: 17px 21px;
+  font-weight: 800;
+  font-size: 0.92rem;
+  margin-top: 27px;
+  min-width: 218px;
+  border-radius: 3px;
+  box-shadow: 0 6px 25px #021b3740;
+}
+.world-primary:hover {
+  background: #e0ff75;
+  transform: translateY(-3px);
+}
+.world-secondary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 18px;
+  font-size: 0.72rem;
+  color: #d3e5eb;
+  width: fit-content;
+}
+.world-caption {
+  position: absolute;
+  right: 5%;
+  bottom: 143px;
+  font-size: 0.5rem;
+  letter-spacing: 1px;
+  color: #bfd0db;
+}
+.voyage-hud {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 25px 5%;
+  min-height: 125px;
+  display: flex;
+  align-items: center;
+  gap: 45px;
+  background: linear-gradient(0deg, #032744f0, #032744a3);
+  border-top: 1px solid #d4f0ff24;
+  z-index: 6;
+}
+.voyage-label {
+  min-width: 177px;
+}
+.voyage-label > span {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  color: #c7d9e2;
+}
+.voyage-label > strong {
+  font-size: 1.13rem;
+  letter-spacing: -0.5px;
+  display: block;
+  margin: 7px 0;
+}
+.voyage-label button {
+  background: none;
+  border: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  color: #d4e5df;
+  align-items: center;
+  font-size: 0.62rem;
+}
+.journey-numbers.voyage-numbers {
+  display: flex;
+  flex: 1;
+  gap: 45px;
+  margin: 0;
+}
+.voyage-numbers > div {
+  flex: 1;
+  min-width: 0;
+}
+.voyage-numbers > div > span {
+  font-size: 0.6rem;
+  color: #d4e0e6;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.voyage-numbers strong {
+  display: block;
+  font-size: 2.3rem;
+  line-height: 1.2;
+  letter-spacing: -1.5px;
+  color: white;
+  margin: 2px 0 7px;
+}
+.voyage-numbers strong small {
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  color: #c5dce1;
+}
+.voyage-numbers .progress {
+  height: 3px;
+  background: #aac5d32b;
+  border-radius: 0;
+  margin: 0 0 4px;
+}
+.voyage-numbers .progress > span {
+  background: #c8f348;
+  border-radius: 0;
+}
+.voyage-numbers > div > small {
+  font-size: 0.6rem;
+  color: #c6d5de;
+}
+.voyage-next {
+  border: 0;
+  border-left: 1px solid #b8cfd333;
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  background: none;
+  color: #e2f2d7;
+  padding: 15px 0 15px 25px;
+  font-size: 0.72rem;
+  max-width: 195px;
+  text-align: left;
+}
+.shared-mission {
+  background: #d0f26b;
+  color: #103c36;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 0.8fr;
+  gap: 50px;
+  padding: 45px 5%;
+  align-items: center;
+  scroll-margin: 25px;
+}
+.shared-mission .section-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #34553a;
+  letter-spacing: 1.4px;
+  font-size: 0.58rem;
+}
+.mission-intro h2 {
+  font-size: 1.9rem;
+  line-height: 1.12;
+  font-weight: 850;
+  letter-spacing: -1.1px;
+  margin: 15px 0;
+}
+.mission-intro p {
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+.mission-count {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.mission-count strong {
+  font-size: 4.6rem;
+  line-height: 1;
+  letter-spacing: -5px;
+  font-weight: 800;
+}
+.mission-count strong span {
+  font-size: 1.6rem;
+  letter-spacing: -1px;
+  margin-left: 5px;
+  color: #476242;
+}
+.mission-count > span {
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+.mission-stops {
+  display: flex;
+  position: relative;
+  justify-content: space-between;
+  gap: 5px;
+  margin: 22px 0 17px;
+}
+.mission-stops::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: #719943;
+}
+.mission-stops button {
+  width: 28px;
+  height: 28px;
+  min-width: 0;
+  flex-shrink: 0;
+  border: 1px solid #729c46;
+  border-radius: 50%;
+  background: #d0f26b;
+  position: relative;
+  font-size: 0.56rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.mission-stops button.complete {
+  background: #153f36;
+  color: #d0f26b;
+}
+.mission-stops button:hover {
+  background: #edffb2;
+}
+.mission-reward {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+.mission-reward .oil-drop {
+  color: #141b1b;
+}
+.mission-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+  padding-left: 25px;
+  border-left: 1px solid #90b24f66;
+}
+.mission-join {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  background: #123f39;
+  color: white;
+  border: 0;
+  padding: 14px 17px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 2px;
+}
+.mission-joined,
+.mission-share {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.mission-share {
+  background: none;
+  border: 0;
+  padding: 5px 0;
+  border-bottom: 1px solid #506c4566;
+}
+.mission-actions > small {
+  font-size: 0.62rem;
+  color: #3c583c;
+  line-height: 1.6;
+}
+.world-lower {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 55px 70px;
+  padding: 55px 5% 65px;
+  max-width: 1600px;
+  margin: auto;
+}
+.editorial-heading {
+  margin-bottom: 22px;
+}
+.editorial-heading .section-label {
+  font-size: 0.57rem;
+  letter-spacing: 1.7px;
+  color: #566e65;
+}
+.editorial-heading h2 {
+  font-size: 1.85rem;
+  letter-spacing: -1.1px;
+  font-weight: 800;
+  margin-top: 7px;
+}
+.next-move {
+  display: flex;
+  text-align: left;
+  width: 100%;
+  align-items: center;
+  gap: 20px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #c9d8d1;
+  padding: 22px 0;
+}
+.next-move:last-child {
+  border-bottom: 1px solid #c9d8d1;
+}
+.move-number {
+  font-size: 1.7rem;
+  font-weight: 500;
+  color: #577065;
+  letter-spacing: -1px;
+}
+.next-move > span:nth-child(2) {
+  flex: 1;
+}
+.next-move strong {
+  font-size: 0.93rem;
+  display: block;
+  font-weight: 750;
+}
+.next-move small {
+  font-size: 0.69rem;
+  color: #5e716d;
+  display: block;
+  margin-top: 5px;
+  line-height: 1.55;
+}
+.next-move:hover {
+  padding-left: 6px;
+  background: #e9efe1;
+}
+.crew-story {
+  display: flex;
+  align-items: flex-start;
+  text-align: left;
+  gap: 12px;
+  padding: 17px 0;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #c9d8d1;
+  background: transparent;
+}
+.crew-story > span:nth-child(2) {
+  flex: 1;
+}
+.crew-story strong {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  display: block;
+}
+.crew-story small {
+  display: block;
+  font-size: 0.66rem;
+  color: #5e716d;
+  margin: 4px 0;
+}
+.crew-story-state {
+  font-size: 0.58rem;
+  color: #816619;
+  display: block;
+}
+.crew-story-state.approved {
+  color: #267137;
+}
+.crew-feed > .text-button {
+  margin-top: 20px;
+  font-size: 0.75rem;
+}
+.voyage-log {
+  grid-column: 1/-1;
+}
+.voyage-log .editorial-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+}
+.voyage-log-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 0.6fr 1fr 20px;
+  gap: 20px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 18px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #c9d8d1;
+  font-size: 0.76rem;
+}
+.voyage-log-row strong {
+  font-size: 0.92rem;
+  display: block;
+}
+.voyage-log-row small {
+  display: block;
+  margin-top: 4px;
+  color: #5e716d;
+  font-size: 0.68rem;
+}
+.voyage-log-row .badge {
+  justify-self: start;
+}
+.voyage-log-row:hover {
+  background: #e9efe1;
+}
+.experience .toast {
+  z-index: 90;
+}
+@media (min-width: 1700px) {
+  .ocean-world {
+    height: 850px;
+  }
+  .world-copy {
+    top: 80px;
+  }
+}
+@media (max-width: 1150px) {
+  .world-nav {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 0 15px;
+  }
+  .world-nav a {
+    padding: 16px 12px;
+  }
+  .world-masthead {
+    padding: 12px 24px;
+  }
+  .masthead-tools {
+    gap: 14px;
+  }
+  .motion-switch span {
+    display: none;
+  }
+  .world-role select {
+    width: 180px;
+  }
+  .ocean-world {
+    height: 740px;
+  }
+  .world-copy {
+    left: 4%;
+    width: 47%;
+  }
+  .world-copy h1 {
+    font-size: 4.2rem;
+  }
+  .world-copy > p {
+    font-size: 0.83rem;
+  }
+  .voyage-hud {
+    gap: 24px;
+    padding-left: 4%;
+    padding-right: 4%;
+  }
+  .journey-numbers.voyage-numbers {
+    gap: 25px;
+  }
+  .voyage-next {
+    max-width: 145px;
+  }
+  .shared-mission {
+    gap: 28px;
+    padding: 36px 4%;
+    grid-template-columns: 1.1fr 1fr;
+  }
+  .mission-actions {
+    grid-column: 1/-1;
+    border-left: 0;
+    border-top: 1px solid #73934366;
+    padding: 20px 0 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+  }
+  .mission-actions > small {
+    margin-left: auto;
+  }
+  .world-lower {
+    gap: 45px;
+    padding: 40px 4%;
+  }
+}
+@media (max-width: 1100px) {
+  .world-masthead {
+    padding: 14px 18px;
+    gap: 15px;
+    flex-wrap: wrap;
+    min-height: 126px;
+  }
+  .world-masthead .brand-image {
+    width: 173px;
+    height: 30px;
+  }
+  .world-masthead .brand-image img {
+    width: 220px;
+    left: -24px;
+    top: -21px;
+  }
+  .world-masthead .brand > span:last-child {
+    font-size: 0.43rem;
+    letter-spacing: 1px;
+  }
+  .masthead-tools {
+    display: contents;
+  }
+  .world-wallet {
+    padding: 9px 11px;
+    gap: 5px;
+    margin-left: auto;
+    order: 0;
+  }
+  .world-wallet b {
+    font-size: 1.16rem;
+  }
+  .world-wallet > span {
+    font-size: 0.5rem;
+  }
+  .world-role {
+    order: 2;
+    flex: 1;
+  }
+  .world-role .crew-avatar {
+    width: 25px;
+    height: 25px;
+    font-size: 0.55rem;
+  }
+  .world-role select {
+    width: 210px;
+    font-size: 0.7rem;
+  }
+  .world-role small {
+    display: none;
+  }
+  .motion-switch {
+    order: 3;
+    font-size: 0.6rem;
+    padding: 4px;
+  }
+  .motion-switch span {
+    display: inline;
+  }
+  .reset-world {
+    display: none;
+  }
+  .world-nav a {
+    font-size: 0.71rem;
+    padding: 14px 11px;
+  }
+  .world-nav a svg {
+    width: 14px;
+  }
+  .ocean-world {
+    height: 960px;
+  }
+  .ocean-shade {
+    background: linear-gradient(
+      180deg,
+      #032743ee 0%,
+      #032743b5 29%,
+      #03274310 50%,
+      #0327438a 77%,
+      #032743 91%
+    );
+  }
+  .world-copy {
+    left: 7%;
+    top: 35px;
+    width: 86%;
+  }
+  .world-eyebrow {
+    font-size: 0.54rem;
+    letter-spacing: 1.8px;
+  }
+  .world-copy h1 {
+    font-size: 3.8rem;
+    line-height: 1.01;
+    letter-spacing: -3.5px;
+    margin: 18px 0 13px;
+  }
+  .world-copy > p {
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .world-primary {
+    margin-top: 19px;
+    padding: 14px 17px;
+    min-width: 210px;
+    font-size: 0.83rem;
+  }
+  .world-secondary {
+    font-size: 0.64rem;
+    margin-top: 13px;
+  }
+  .world-caption {
+    right: 6%;
+    bottom: 188px;
+    font-size: 0.45rem;
+  }
+  .voyage-hud {
+    display: block;
+    min-height: 166px;
+    padding: 18px 7%;
+  }
+  .voyage-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 13px;
+  }
+  .voyage-label > span {
+    font-size: 0.5rem;
+  }
+  .voyage-label > strong {
+    display: none;
+  }
+  .voyage-label button {
+    font-size: 0.55rem;
+  }
+  .journey-numbers.voyage-numbers {
+    gap: 23px;
+  }
+  .voyage-numbers > div > span {
+    font-size: 0.49rem;
+    letter-spacing: 0.6px;
+  }
+  .voyage-numbers strong {
+    font-size: 1.9rem;
+    letter-spacing: -1px;
+  }
+  .voyage-numbers strong small {
+    font-size: 0.65rem;
+  }
+  .voyage-numbers > div > small {
+    font-size: 0.53rem;
+  }
+  .voyage-next {
+    display: none;
+  }
+  .shared-mission {
+    display: block;
+    padding: 31px 7%;
+  }
+  .mission-intro h2 {
+    font-size: 1.8rem;
+  }
+  .mission-intro p {
+    font-size: 0.72rem;
+  }
+  .mission-progress {
+    margin-top: 26px;
+  }
+  .mission-count strong {
+    font-size: 3.7rem;
+    letter-spacing: -3px;
+  }
+  .mission-count > span {
+    font-size: 0.68rem;
+  }
+  .mission-stops {
+    max-width: 380px;
+    margin: 16px 0;
+  }
+  .mission-actions {
+    margin-top: 22px;
+    gap: 12px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mission-actions > small {
+    margin: 0;
+  }
+  .mission-join {
+    padding: 13px 15px;
+  }
+  .world-lower {
+    display: block;
+    padding: 36px 7%;
+  }
+  .editorial-heading h2 {
+    font-size: 1.7rem;
+  }
+  .crew-feed,
+  .voyage-log {
+    margin-top: 40px;
+  }
+  .next-move {
+    gap: 13px;
+    padding: 18px 0;
+  }
+  .move-number {
+    font-size: 1.4rem;
+  }
+  .next-move strong {
+    font-size: 0.83rem;
+  }
+  .next-move small {
+    font-size: 0.65rem;
+  }
+  .voyage-log-row {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    padding: 17px 0;
+  }
+  .voyage-log-row > span:nth-child(2) {
+    grid-row: 2;
+    font-size: 0.65rem;
+  }
+  .voyage-log-row > span:nth-child(3) {
+    grid-row: 2;
+    grid-column: 2;
+    font-size: 0.65rem;
+  }
+  .voyage-log-row > .badge {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: 0.59rem;
+  }
+  .voyage-log-row > svg {
+    display: none;
+  }
+  .voyage-log-row strong {
+    font-size: 0.83rem;
+  }
+  .voyage-log-row small {
+    font-size: 0.61rem;
+    max-width: 190px;
+  }
+  .voyage-log .editorial-heading {
+    display: block;
+  }
+  .voyage-log .editorial-heading > .text-button {
+    margin-top: 14px;
+    font-size: 0.7rem;
+  }
+  .experience .page-footer {
+    padding: 22px 7%;
+    gap: 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    font-size: 0.6rem;
+  }
+  .experience.is-work .main-content {
+    padding: 27px 6% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .experience * {
+    scroll-behavior: auto !important;
+  }
+}
+/* Keep the full harbour in view on small screens and let larger text flow naturally. */
+@media (max-width: 1100px) {
+  .ocean-world {
+    height: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .ocean-world > .marine-world {
+    position: relative;
+    inset: auto;
+    z-index: 0;
+    order: 2;
+    width: 100%;
+    height: clamp(260px, 56.25vw, 520px);
+    flex: none;
+  }
+  .ocean-world .marine-world__poster,
+  .ocean-world .marine-world__film {
+    object-position: 63% 58%;
+  }
+  .ocean-shade {
+    display: none;
+  }
+  .world-copy {
+    position: relative;
+    inset: auto;
+    order: 1;
+    width: auto;
+    margin: 35px 7% 30px;
+  }
+  .world-copy h1 {
+    font-size: clamp(2rem, 7.6vw, 4.2rem);
+    letter-spacing: -0.06em;
+  }
+  .world-copy > p {
+    white-space: normal;
+    max-width: 32ch;
+  }
+  .world-caption {
+    position: relative;
+    inset: auto;
+    z-index: 1;
+    order: 3;
+    align-self: flex-end;
+    margin: -30px 6% 16px;
+    text-shadow: 0 1px 6px #032541;
+  }
+  .voyage-hud {
+    position: relative;
+    inset: auto;
+    order: 4;
+    margin-top: 0;
+  }
+  .voyage-numbers strong {
+    font-size: clamp(1rem, 7.3vw, 1.9rem);
+    overflow-wrap: anywhere;
+  }
+  .world-role select {
+    width: min(210px, 55vw);
+  }
+  .world-masthead .brand > span:last-child {
+    max-width: 80vw;
+  }
+  .voyage-label {
+    flex-wrap: wrap;
+  }
+}
+.world-nav {
+  overflow-x: auto;
+  justify-content: safe center;
+  max-width: 100%;
+}
+@media (min-width: 1101px) {
+  .ocean-world {
+    height: max(760px, 42rem);
+  }
+  .world-copy {
+    top: 4.1rem;
+  }
+  .voyage-hud {
+    min-height: 10rem;
+  }
+  .world-caption {
+    bottom: calc(10rem + 10px);
+  }
+}
+@media (min-width: 1700px) {
+  .ocean-world {
+    height: max(850px, 42rem);
+  }
+}
+
+.mission-count strong { white-space: nowrap; }

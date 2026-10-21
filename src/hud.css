@@ -1,0 +1,593 @@
+/* Compact trader dashboard and shared settings access. */
+.trader-hud[data-role="credit"] .hud-points-row,
+.trader-hud[data-role="admin"] .hud-points-row {
+  justify-content: flex-end;
+}
+:is(.hud-office-performance, .hud-achievements-toggle) {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 16px;
+  color: #cbff60;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #ffffff1c;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+:is(.hud-office-performance, .hud-achievements-toggle) > svg:last-child { margin-left: auto; }
+:is(.hud-office-performance, .hud-achievements-toggle):hover { background: #ffffff0b; }
+.trader-hud .hud-header {
+  display: block;
+  padding: 13px 16px 11px;
+}
+.hud-identity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.hud-identity strong {
+  color: #fff;
+  font-family: Manrope, sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.hud-identity > span {
+  color: #c8dbe4;
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+.trader-hud .hud-points-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px 7px 16px;
+}
+.trader-hud .hud-drops {
+  gap: 8px;
+  min-height: 34px;
+  margin-right: auto;
+}
+.trader-hud .hud-drops strong {
+  font-size: 1.15rem;
+  letter-spacing: -0.015em;
+}
+.trader-hud .enquiry-inbox {
+  margin-left: 0;
+}
+.trader-hud .hud-settings {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+}
+.trader-hud .hud-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 14px 16px 16px;
+}
+.trader-hud .hud-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: center;
+}
+.trader-hud .hud-metric > span {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.trader-hud .hud-metric-value {
+  min-width: 0;
+  text-align: right;
+}
+.trader-hud .hud-metric-value > strong {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.trader-hud .hud-metric-value > small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.62rem;
+  color: #c4d9e1;
+  line-height: 1.4;
+}
+.trader-hud .hud-meter {
+  grid-column: 1 / -1;
+  margin: 0;
+  height: 3px;
+}
+.settings-session {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+@media (max-width: 420px) {
+  .trader-hud .hud-metric {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    column-gap: 8px;
+  }
+}
+
+/* Personal controls stay beside the name; the profile panel is independent of Settings. */
+.trader-hud .hud-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.trader-hud .hud-identity {
+  flex: 1;
+}
+.hud-personal-menu {
+  position: relative;
+  flex: none;
+}
+.hud-profile-toggle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: #dceaf0;
+  cursor: pointer;
+}
+.hud-profile-toggle:hover,
+.hud-profile-toggle[aria-expanded="true"] {
+  background: #ffffff14;
+  border-color: #ffffff38;
+  color: #cbff60;
+}
+.profile-dropdown {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  color: #eef6f9;
+  background: linear-gradient(145deg, #203d50, #122b3d);
+  border: 1px solid #bce5e64d;
+  border-radius: 16px;
+  box-shadow: 0 18px 52px #03142366;
+  backdrop-filter: blur(20px);
+}
+.profile-dropdown::backdrop {
+  background: #071c2c66;
+}
+.profile-error {
+  color: #ffe3bb;
+  font-size: 0.76rem;
+  margin: 0 0 13px;
+}
+.profile-dropdown > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #bfd4e126;
+}
+.profile-dropdown > header h2 {
+  margin: 0;
+  color: #eef6f9;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.profile-dropdown > header button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: #d9e7ef;
+  border: 1px solid #bfd4e12e;
+  border-radius: 8px;
+  background: #ffffff08;
+  cursor: pointer;
+}
+.profile-dropdown > header button:hover {
+  background: #ffffff14;
+}
+.profile-dropdown form,
+.profile-dropdown label {
+  display: grid;
+  gap: 7px;
+}
+.profile-dropdown form {
+  gap: 16px;
+}
+.profile-dropdown label > span {
+  color: #c1d4df;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.profile-dropdown input {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  background: #0a2032;
+  border: 1px solid #bdd5e344;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.875rem;
+}
+.profile-dropdown input:focus,
+.profile-dropdown button:focus-visible {
+  outline: 2px solid #c8fa5c;
+  outline-offset: 2px;
+}
+.profile-save,
+.profile-signout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  font-weight: 800;
+  cursor: pointer;
+}
+.profile-save {
+  margin-top: 4px;
+  background: #cbf764;
+  color: #15242b;
+}
+.profile-save:hover {
+  background: #d7ff7e;
+}
+.profile-signout {
+  margin-top: 12px;
+  color: #e1edf4;
+  border-color: #bfd4e14a;
+  background: #365267;
+}
+.profile-signout:hover {
+  background: #425f74;
+}
+.team-performance {
+  color: var(--ink, #173048);
+}
+.team-performance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.team-performance-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.team-performance-header input {
+  width: 150px;
+  min-width: 0;
+}
+.team-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.6fr;
+  gap: 28px;
+  padding: 8px 0 26px;
+  border-bottom: 1px solid #8496b03b;
+}
+.team-summary > div > span {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.72rem;
+  color: #52657c;
+}
+.team-target-metric {
+  min-width: 96px;
+}
+.team-target-metric > strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.team-target-metric > span {
+  display: block;
+  color: #63748a;
+  font-size: 0.68rem;
+  margin-top: 4px;
+}
+.team-target-track {
+  height: 4px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #c2c9d34a;
+}
+.team-target-track > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #77b844, #b4ea61);
+  border-radius: inherit;
+}
+.team-summary .team-target-metric > strong,
+.team-drops-total > strong {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+.team-drops-total > strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.team-table-scroll {
+  overflow-x: auto;
+}
+.team-performance-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+.team-performance-table thead th {
+  padding: 18px 14px 12px;
+  text-align: left;
+  color: #64758b;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-bottom: 1px solid #8496b026;
+}
+.team-performance-table th:first-child {
+  padding-left: 0;
+}
+.team-performance-table tbody th,
+.team-performance-table td {
+  padding: 20px 14px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #8496b026;
+}
+.team-performance-table tbody th {
+  width: 35%;
+}
+.team-performance-table tbody th strong {
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.team-performance-table tbody th > span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.66rem;
+  font-weight: 400;
+  color: #63748a;
+}
+.team-member-drops {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+@media (max-width: 650px) {
+  .team-summary {
+    gap: 16px;
+    grid-template-columns: 1fr 1fr;
+  }
+  .team-drops-total {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .team-summary > .team-drops-total > span {
+    margin: 0;
+  }
+  .team-summary .team-target-metric > strong,
+  .team-drops-total > strong {
+    font-size: 1.25rem;
+  }
+  .team-performance-header {
+    flex-wrap: wrap;
+  }
+}
+
+/* Contribution activity and peer recognition share the account row. */
+.trader-hud .hud-points-row {
+  gap: 6px;
+}
+.hud-resource {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 3px;
+  background: transparent;
+  border: 0;
+  color: #f7fbff;
+  cursor: pointer;
+}
+.hud-resource strong {
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.hud-resource [class*="resource-icon"] {
+  flex: none;
+}
+.trader-hud .enquiry-inbox {
+  margin-left: auto;
+}
+/* Recognition stays available without the mobile island game. */
+.hud-resource-hats {
+  color: #c3eee5;
+}
+.hud-resource:hover,
+.hud-resource[aria-expanded="true"] {
+  color: #d0ff88;
+}
+.hud-resource:focus-visible {
+  outline: 2px solid #c8fa65;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.hud-hat-panel {
+  grid-column: 1 / -1;
+  border-top: 1px solid #bce5e633;
+  min-width: 0;
+}
+.hat-ranking {
+  color: #f0f8fa;
+  min-width: 0;
+}
+.hat-ranking h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px 10px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.025em;
+}
+.hat-ranking h2 .resource-icon {
+  color: #b9e9df;
+}
+.hat-ranking-list {
+  list-style: none;
+  padding: 0 10px 9px;
+  margin: 0;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #87b1b76b transparent;
+}
+.hat-ranking-list li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 5px;
+  border-top: 1px solid #c1dde51c;
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+.hat-ranking-list:focus-visible {
+  outline: 2px solid #c8fa65;
+  outline-offset: -2px;
+}
+.hat-ranking-list li[data-current-user="true"] {
+  background: #bce9df0e;
+}
+.hat-ranking-position {
+  color: #bed1db;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.hat-ranking-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hat-ranking-list strong {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #c6ede5;
+  font-variant-numeric: tabular-nums;
+}
+.hat-ranking-empty {
+  margin: 0;
+  padding: 0 15px 14px;
+  color: #bcd1da;
+  font-size: 0.8rem;
+}
+.home-hat-ranking {
+  position: absolute;
+  z-index: 1;
+  right: 38px;
+  bottom: 88px;
+  width: 270px;
+  max-height: max(114px, min(246px, calc(100svh - 390px)));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #a6d6e052;
+  border-radius: 7px;
+  background: #0b2f43e8;
+  box-shadow: 0 8px 28px #071d2d1c;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.hud-hat-panel .hat-ranking-list {
+  max-height: 224px;
+}
+.world-interface:has(.hud-hat-panel) > .home-hat-ranking {
+  visibility: hidden;
+}
+:root[data-interface="mobile"] .trader-hud .hud-resource-hats {
+  min-height: 44px;
+  padding-inline: 5px;
+  gap: 4px;
+}
+:root[data-interface="mobile"] .hud-resource-hats strong {
+  font-size: 0.82rem;
+}
+:root[data-interface="mobile"] .hud-hat-panel .hat-ranking-list {
+  max-height: none;
+}
+@media (max-width: 380px) {
+  :root[data-interface="mobile"] .trader-hud[data-trader-hud] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-interface="mobile"] .trader-hud[data-trader-hud] .hud-header {
+    padding: 10px 10px 0 14px;
+  }
+  :root[data-interface="mobile"] .trader-hud .hud-identity strong {
+    font-size: 14px;
+  }
+  :root[data-interface="mobile"] .trader-hud[data-trader-hud] .hud-points-row {
+    padding: 0 10px 8px;
+  }
+  :root[data-interface="mobile"] .trader-hud .hud-resource-hats {
+    margin-right: auto;
+  }
+}
+
+/* Keep desktop account controls by the profile, leaving room for all three balances. */
+.hud-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+:root[data-interface="desktop"] .hud-header-actions :is(.inbox-toggle, .hud-settings) {
+  width: 28px;
+  height: 28px;
+}
+:root[data-interface="desktop"] .trader-hud .hud-points-row {
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 16px;
+}
+:root[data-interface="desktop"] .trader-hud .hud-resource {
+  flex: none;
+  gap: 7px;
+  padding: 7px 0;
+  white-space: nowrap;
+}

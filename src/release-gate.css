@@ -1,0 +1,20 @@
+.release-notice {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-control-surface);
+  color: var(--ink);
+  font-family: var(--ui-font);
+  font-size: var(--ui-text-body);
+  font-weight: var(--ui-weight-label);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.release-notice--compact { padding: 12px; }
+.launcher-heading, .launcher-heading:hover, .launcher-heading:active { cursor: default; filter: none; transform: none; }
+.launcher-release-remark { margin: 0; padding: 6px 12px; background: color-mix(in srgb, var(--night) 92%, transparent); color: inherit; font-family: var(--ui-font); font-size: var(--ui-text-meta); line-height: 1.5; font-weight: var(--ui-weight-body); overflow-wrap: anywhere; border-radius: 0 0 var(--ui-radius-control) var(--ui-radius-control); }
+.launcher-group--deferred .launcher-heading { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+@media (max-width: 480px) { .release-notice { padding: 14px; } }
+
+.center-credit-indicator[hidden] { display: none; }

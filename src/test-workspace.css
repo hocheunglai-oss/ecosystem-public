@@ -1,0 +1,4 @@
+#root .test-workspace-control[aria-pressed="true"] { background:var(--ui-primary); color:var(--ui-primary-ink); border-color:var(--ui-focus); }
+#root .home-display-controls .test-workspace-control { background:var(--theme-panel,var(--surface)); color:var(--theme-ink,var(--ink)); }
+#root .home-display-controls .test-workspace-control[aria-pressed="true"] { background:var(--ui-primary); color:var(--ui-primary-ink); }
+:root[data-interface="mobile"] .test-workspace-control { min-width:0; width:100%; }

@@ -1,0 +1,289 @@
+/* Recent contribution activity and independent peer recognition. */
+.contribution-activity,
+.office-performance {
+  --activity-accent: #278d9a;
+  --activity-soft: #dcedf1;
+  --activity-panel: #ffffff52;
+  min-width: 0;
+}
+.activity-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.activity-period-filter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+.activity-period-filter select {
+  min-height: 34px;
+  padding: 7px 28px 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 11px;
+}
+.activity-summary {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--activity-panel);
+}
+.activity-summary > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 5px;
+}
+.activity-summary-recognition {
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+}
+.activity-metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.activity-metric-label .resource-icon-activity { color: var(--activity-accent); }
+.activity-summary strong {
+  color: var(--ink);
+  font-size: 36px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.04em;
+}
+.activity-summary .activity-summary-recognition strong { font-size: 28px; }
+.activity-period-label,
+.activity-comparison {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.activity-comparison { margin-top: 3px; }
+.activity-comparison b { margin-right: 3px; font-weight: 750; color: var(--ink); }
+.activity-comparison[data-trend="up"] b { color: var(--activity-accent); }
+.activity-chart {
+  margin: 13px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.activity-chart h3,
+.activity-section-heading {
+  margin: 0;
+  padding: 9px 11px;
+  background: var(--activity-soft);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.activity-section-heading { border: 1px solid var(--line); border-radius: 5px; }
+.activity-section-heading h3 { margin: 0; font-size: inherit; font-weight: inherit; }
+.activity-weeks {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 14px 14px 10px;
+}
+.activity-weeks li { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; align-items: stretch; text-align: center; }
+.activity-weeks li > strong { font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.activity-weeks li > span { color: var(--muted); font-size: 9px; line-height: 1.3; }
+.activity-week-track { display: flex; align-items: flex-end; justify-content: center; height: 60px; border-bottom: 1px solid var(--line); }
+.activity-week-track > span { display: block; width: 70%; max-width: 62px; border-radius: 3px 3px 0 0; background: var(--activity-accent); }
+.activity-history { list-style: none; padding: 0; margin: 0; }
+.activity-history > li { display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 10px; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+.activity-history > li > .resource-icon { color: var(--activity-accent); }
+.activity-history li > div { min-width: 0; }
+.activity-history strong { font-size: 11px; font-weight: 650; color: var(--ink); line-height: 1.5; overflow-wrap: anywhere; }
+.activity-history li > div > span { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.activity-record-count { padding: 2px 5px; background: var(--activity-soft); border-radius: 3px; }
+.activity-entry-details { margin-top: 7px; font-size: 10px; }
+.activity-entry-details > summary { color: var(--activity-accent); cursor: pointer; width: fit-content; padding-block: 3px; }
+.activity-entry-details > summary:focus-visible { outline: 2px solid var(--activity-accent); outline-offset: 2px; }
+.activity-publication { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--activity-panel); overflow-wrap: anywhere; }
+.activity-publication > time { color: var(--muted); font-size: 9px; }
+.activity-publication :is(p,dd) { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.5; color: var(--ink); }
+.activity-publication dl { margin: 9px 0 0; }
+.activity-publication dl > div + div { margin-top: 8px; }
+.activity-publication dt { color: var(--muted); font-weight: 600; }
+.activity-publication dd { margin-top: 2px; }
+.activity-updated-fields h4 { font-size: 10px; margin: 9px 0 3px; color: var(--ink); }
+.activity-table-scroll { overflow-x: auto; margin-top: 5px; }
+.activity-table-scroll table { font-size: 10px; border-collapse: collapse; }
+.activity-table-scroll :is(th,td) { padding: 5px 7px; border: 1px solid var(--line); text-align: left; }
+.activity-table-scroll th { background: var(--activity-soft); }
+.activity-publication .activity-publication-source { color: var(--muted); }
+.activity-empty { color: var(--muted); font-size: 11px; text-align: center; padding: 10px 0; }
+.trader-hud .hud-resource-activity { color: #bceee9; }
+.hud-activity-period { color: #c2d6dc; padding: 2px 4px; margin-left: 1px; border: 1px solid #b8d2dc38; border-radius: 3px; font-size: 9px; font-weight: 650; }
+.trader-hud :is(.contribution-activity,.office-performance) {
+  --activity-accent: #7ac8ca;
+  --activity-soft: #99d6e00d;
+  --activity-panel: #ffffff04;
+  color: var(--ink);
+}
+.trader-hud .activity-toolbar { margin: 0 0 10px; }
+.trader-hud .activity-period-filter { width: 100%; justify-content: space-between; }
+.trader-hud .activity-summary { gap: 10px; padding: 12px 10px; grid-template-columns: 1.2fr 1fr; }
+.trader-hud .activity-summary-recognition { padding-left: 10px; }
+.trader-hud .activity-metric-label { gap: 4px; font-size: 9px; }
+.trader-hud .activity-summary strong { font-size: 30px; }
+.trader-hud .activity-summary .activity-summary-recognition strong { font-size: 24px; }
+.trader-hud .activity-period-label,
+.trader-hud .activity-comparison { font-size: 9px; }
+.trader-hud .activity-weeks { gap: 7px; padding: 10px 9px 9px; }
+.trader-hud .activity-week-track { height: 44px; }
+.trader-hud .activity-chart h3,
+.trader-hud .activity-section-heading { padding: 8px 9px; font-size: 10px; }
+.trader-hud .activity-history > li { gap: 7px; padding-block: 10px; }
+:root[data-theme="dark"] :is(.contribution-activity,.office-performance) {
+  --activity-accent: #7ac8ca;
+  --activity-soft: #304d5d;
+  --activity-panel: #ffffff03;
+}
+:root[data-theme="dark"] .trader-hud :is(.contribution-activity,.office-performance) { --activity-soft: #99d6e00d; }
+@media (max-width: 480px) {
+  .activity-summary { gap: 12px; padding: 12px; }
+  .activity-summary-recognition { padding-left: 12px; }
+  .activity-metric-label { font-size: 10px; }
+  .activity-weeks { gap: 7px; padding-inline: 10px; }
+}
+/* Status criteria stay visible alongside the counts for the selected period. */
+.activity-status {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--activity-accent);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--activity-panel);
+}
+.activity-status-heading { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
+.activity-status-heading > strong { font-size: 20px; line-height: 1.3; color: var(--ink); letter-spacing: .015em; }
+.activity-status-start { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 11px; border: 0; border-radius: 4px; background: #bcec4d; color: #132d32; font: inherit; font-weight: 750; font-size: 15px; text-align: left; cursor: pointer; }
+.activity-status-start > span { font-size: 22px; }
+.activity-status[data-activity-status="outstanding"] { border-top-color: #78b948; }
+.activity-status[data-activity-status="outstanding"] .activity-status-heading > strong { color: var(--activity-accent); }
+.activity-status-rules { margin: 0; padding: 0 12px 9px; display: grid; gap: 0; }
+.activity-status-rules > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 10px; padding: 7px 6px; border-bottom: 1px solid var(--line); font-size: 9px; line-height: 1.45; color: var(--muted); }
+.activity-status-rules > div:last-child { border-bottom: 0; }
+.activity-status-rules > .is-current { color: var(--ink); background: var(--activity-soft); border-radius: 3px; }
+.activity-status-rules dt { font-weight: 700; }
+.activity-status-rules dd { margin: 0; text-align: right; }
+.activity-counting-rules { padding: 0 12px 10px; font-size: 10px; color: var(--muted); }
+.activity-counting-rules > summary { color: var(--activity-accent); cursor: pointer; font-weight: 650; width: fit-content; padding-block: 3px; }
+.activity-counting-rules p { line-height: 1.6; margin: 7px 0 0; }
+.activity-guide-toggle { margin: 0 12px 10px; padding: 4px 0; border: 0; background: none; color: var(--activity-accent); cursor: pointer; font: inherit; font-size: 10px; font-weight: 650; }
+.activity-contribution-guide { padding: 12px; border-top: 1px solid var(--line); background: var(--activity-soft); }
+.activity-contribution-guide h3 { margin: 0; font-size: 11px; }
+.activity-contribution-guide p { color: var(--muted); font-size: 10px; line-height: 1.5; margin: 7px 0; }
+.activity-contribution-guide button { display: flex; flex-direction: column; width: 100%; gap: 4px; padding: 10px 0; background: none; color: var(--ink); border: 0; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer; }
+.activity-contribution-guide button:last-child { border-bottom: 0; padding-bottom: 0; }
+.activity-contribution-guide strong { font-size: 11px; }
+.activity-contribution-guide span { color: var(--muted); font-size: 9px; line-height: 1.5; }
+.activity-status :is(button,summary):focus-visible { outline: 2px solid var(--activity-accent); outline-offset: 3px; }
+.trader-hud .hud-resource-activity { min-width: 0; }
+.trader-hud .hud-resource-activity > strong { font-size: 10px; line-height: 1.3; white-space: normal; max-width: 112px; text-align: left; }
+.activity-status-counts { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.activity-status-counts b { color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums; margin-right: 3px; }
+
+/* One seven-day tier in the account menu; recognition remains independent. */
+.contribution-tier {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-control);
+  color: var(--muted);
+  background: var(--activity-soft);
+  font-size: var(--ui-text-meta);
+  font-weight: var(--ui-weight-heading);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.trader-hud .contribution-tier { color: #d2e0e7; background: #d2e0e710; border-color: #c1d4df70; }
+.trader-hud .contribution-tier[data-tier="active"] { color: #aeebea; background: #7ac8ca16; border-color: #7ac8caa0; }
+.trader-hud .contribution-tier[data-tier="outstanding"] { color: var(--ui-primary); background: #c5f57412; border-color: var(--ui-primary-border); }
+.trader-hud .hud-resource-activity { gap: 8px; }
+.trader-hud .hud-resource-activity > .contribution-tier { max-width: none; font-size: var(--ui-text-meta); line-height: 1.5; white-space: nowrap; }
+.contribution-activity--compact { font-family: var(--ui-font); }
+.activity-tier-summary {
+  --tier-accent: var(--muted);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-control);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tier-accent) 9%, transparent), transparent 70%), var(--activity-panel);
+}
+.activity-tier-summary[data-activity-status="active"] { --tier-accent: var(--activity-accent); }
+.activity-tier-summary[data-activity-status="outstanding"] { --tier-accent: var(--ui-primary); }
+.activity-tier-hero { display: grid; grid-template-columns: 68px minmax(0, 1fr); align-items: center; gap: 14px; }
+.activity-tier-emblem { display: block; width: 68px; height: 76px; color: var(--tier-accent); overflow: visible; }
+.activity-emblem-face { fill: color-mix(in srgb, var(--tier-accent) 10%, transparent); stroke: currentColor; stroke-width: 1.5; }
+.activity-emblem-outline { stroke: currentColor; stroke-opacity: .3; }
+.activity-emblem-mark { stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.activity-emblem-base, .activity-emblem-spark { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.activity-emblem-base { opacity: .5; }
+.activity-emblem-star { fill: currentColor; stroke: currentColor; stroke-linejoin: round; }
+[data-activity-status="outstanding"] .activity-emblem-mark { stroke: var(--ui-primary-ink); stroke-width: 2.5; }
+.activity-tier-identity { min-width: 0; }
+.activity-tier-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.activity-tier-heading .contribution-tier[data-tier] { padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--tier-accent); font-family: var(--ui-font-heading); font-size: var(--ui-text-section); line-height: 1.35; }
+.activity-preview-label { color: var(--muted); font-size: var(--ui-text-meta); font-weight: var(--ui-weight-label); }
+.activity-tier-count { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 0; color: var(--muted); font-size: var(--ui-text-meta); line-height: 1.5; }
+.activity-tier-count b { color: var(--ink); font-family: var(--ui-font-heading); font-size: 38px; font-weight: var(--ui-weight-heading); font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -.04em; overflow-wrap: anywhere; }
+.activity-tier-count > span { display: grid; gap: 1px; }
+.activity-tier-count small { font-size: inherit; }
+.activity-tier-journey { margin-top: 18px; }
+.activity-tier-progress { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
+.activity-tier-progress > span { height: 9px; border: 1px solid var(--line); border-radius: 2px; background: var(--activity-soft); }
+.activity-tier-progress > [data-complete="true"] { background: var(--tier-accent); border-color: var(--tier-accent); }
+.activity-tier-milestones { display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; color: var(--muted); font-size: var(--ui-text-meta); line-height: 1.5; }
+.activity-tier-milestones > span { display: grid; }
+.activity-tier-milestones > span:last-child { text-align: right; }
+.activity-tier-milestones b { color: var(--ink); font-weight: var(--ui-weight-label); }
+.activity-tier-next { display: flex; align-items: center; gap: 8px; margin: 17px 0 6px; color: var(--tier-accent); font-size: var(--ui-text-label); line-height: 1.5; }
+.activity-tier-next > b { font-family: var(--ui-font-heading); font-size: var(--ui-text-title); line-height: 1.2; }
+.activity-tier-next > span { color: var(--muted); }
+.activity-tier-next strong { color: var(--ink); font-weight: var(--ui-weight-heading); }
+.activity-tier-next > svg { flex: none; }
+.activity-tier-encouragement { margin: 0; color: var(--muted); font-size: var(--ui-text-body); line-height: 1.5; }
+.activity-tier-actions { --ui-control-surface: var(--surface); --ui-control-ink: var(--ink); --ui-control-border: var(--line); --ui-control-hover: color-mix(in srgb, var(--ink) 8%, var(--surface)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.activity-tier-details { margin-top: 12px; color: var(--muted); }
+.activity-tier-details > summary { width: fit-content; min-height: var(--ui-control-height); padding: var(--ui-control-padding); color: var(--ink); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); line-height: 20px; cursor: pointer; border-radius: var(--ui-radius-control); }
+.activity-tier-details > summary::marker { color: var(--activity-accent); }
+.activity-tier-details > summary:hover { background: var(--activity-soft); }
+.contribution-activity--compact :is(summary, select):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+.activity-tier-rules { margin: 6px 0 0; border-block: 1px solid var(--line); }
+.activity-tier-rules > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; color: var(--muted); font-size: var(--ui-text-meta); line-height: 1.5; }
+.activity-tier-rules > div + div { border-top: 1px solid var(--line); }
+.activity-tier-rules > .is-current { color: var(--ink); }
+.activity-tier-rules dt { font-weight: var(--ui-weight-heading); }
+.activity-tier-rules dd { margin: 0; text-align: right; }
+.activity-tier-calculation { margin: 10px 0 0; color: var(--muted); font-size: var(--ui-text-meta); line-height: 1.6; }
+.activity-appearance-preview { display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--ui-text-meta); font-weight: var(--ui-weight-label); line-height: 1.5; }
+.activity-appearance-preview select { width: 100%; min-width: 0; height: var(--ui-field-height); min-height: var(--ui-field-height); padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--ui-radius-control); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--ui-text-label); }
+.activity-appearance-preview > span { font-weight: var(--ui-weight-body); }
+:root[data-interface="mobile"] .trader-hud[data-trader-hud] .hud-resource-activity { flex-direction: column; align-items: flex-start; gap: 3px; }
+:root[data-interface="mobile"] .activity-appearance-preview select { height: 44px; min-height: 44px; font-size: 16px; }
+:root[data-interface="mobile"] .activity-tier-details > summary { min-height: 44px; padding-block: 12px; }
+@media (max-width: 360px) {
+  .activity-tier-summary { padding: 12px; }
+  .activity-tier-hero { grid-template-columns: 56px minmax(0, 1fr); gap: 10px; }
+  .activity-tier-emblem { width: 56px; height: 62px; }
+  .activity-tier-progress { gap: 3px; }
+}

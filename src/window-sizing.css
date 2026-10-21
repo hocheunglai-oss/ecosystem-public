@@ -1,0 +1,125 @@
+/* All app windows share explicit size states; compact menus keep their own layout. */
+:root .workspace-window[data-window-size],
+:root .modal.window-dialog[data-window-size] {
+  box-sizing: border-box;
+  inset: 0;
+  margin: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+}
+:root .workspace-window[data-window-size="expanded"],
+:root .modal.window-dialog[data-window-size="expanded"] {
+  width: calc(100vw - 24px);
+  height: calc(100dvh - 24px);
+}
+:root .workspace-window[data-window-size="compact"] {
+  width: min(1220px, calc(100vw - 96px));
+  height: min(830px, calc(100dvh - 96px));
+}
+:root .modal.window-dialog[data-window-size="compact"] {
+  width: min(720px, calc(100vw - 96px));
+  height: fit-content;
+  max-height: calc(100dvh - 96px);
+}
+:root .modal.window-dialog.wide[data-window-size="compact"] {
+  width: min(1180px, calc(100vw - 96px));
+}
+:root .modal.window-dialog[data-window-size] {
+  --window-padding: 20px;
+  padding: var(--window-padding);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+:root .modal.window-dialog[data-window-size] > .modal-head {
+  position: sticky;
+  top: calc(-1 * var(--window-padding));
+  z-index: 10;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: calc(-1 * var(--window-padding));
+  margin-inline: calc(-1 * var(--window-padding));
+  padding: var(--window-padding);
+  background: var(--surface, #f4f8ff);
+  border-bottom: 1px solid var(--line, #d6e2ed);
+}
+:root .modal.window-dialog .modal-head > div:first-child { min-width: 0; }
+:root .modal.window-dialog .modal-head h2 { overflow-wrap: anywhere; }
+.modal-window-tools { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+:root .modal.window-dialog .modal-window-tools > .icon-button { width: 36px; height: 36px; min-height: 36px; padding: 7px; margin: 0; flex: 0 0 auto; }
+/* The information editor keeps its own scrolling canvas and pinned actions in both sizes. */
+:root .modal.window-dialog.wide[data-window-size]:has(.knowledge-editor.knowledge-editor-focused) {
+  --window-padding: 16px;
+  overflow: hidden;
+}
+:root .modal.window-dialog.wide[data-window-size="compact"]:has(.knowledge-editor.knowledge-editor-focused) {
+  height: min(780px, calc(100dvh - 96px));
+}
+:root .modal.window-dialog.wide[data-window-size]:has(.knowledge-editor.knowledge-editor-focused) > .modal-head {
+  position: static;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+@media (max-width: 760px) {
+  :root .workspace-window[data-window-size],
+  :root .modal.window-dialog[data-window-size] {
+    max-width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px);
+    border-radius: 8px;
+  }
+  :root .workspace-window[data-window-size="expanded"],
+  :root .modal.window-dialog[data-window-size="expanded"] {
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 12px);
+  }
+  :root .workspace-window[data-window-size="compact"],
+  :root .modal.window-dialog[data-window-size="compact"],
+  :root .modal.window-dialog.wide[data-window-size="compact"] {
+    width: calc(100vw - 28px);
+    max-height: calc(100dvh - 72px);
+  }
+  :root .workspace-window[data-window-size="compact"],
+  :root .modal.window-dialog.wide[data-window-size="compact"]:has(.knowledge-editor.knowledge-editor-focused) {
+    height: calc(100dvh - 72px);
+  }
+  :root .modal.window-dialog[data-window-size],
+  :root .modal.window-dialog.wide[data-window-size]:has(.knowledge-editor.knowledge-editor-focused) {
+    --window-padding: 12px;
+  }
+  :root .modal.window-dialog .modal-head { gap: 7px; }
+  :root .modal.window-dialog .modal-head h2 { font-size: 18px; line-height: 1.35; }
+}
+/* The dedicated phone interface formerly hid resizing and forced workspace dimensions. */
+:root[data-interface="mobile"] .workspace-window[data-window-size] {
+  inset: 0;
+  margin: auto;
+  max-width: calc(100vw - 12px);
+  max-height: calc(100dvh - 12px);
+  border: 1px solid var(--line, #d6e2ed);
+  border-radius: 8px;
+}
+:root[data-interface="mobile"] .workspace-window[data-window-size="expanded"] {
+  width: calc(100vw - 12px);
+  height: calc(100dvh - 12px);
+}
+:root[data-interface="mobile"] .workspace-window[data-window-size="compact"] {
+  width: calc(100vw - 28px);
+  height: calc(100dvh - 72px);
+}
+:root[data-interface="mobile"] .workspace-window[data-window-size] .window-tool:not(.window-close) {
+  display: grid;
+  width: 40px;
+  height: 40px;
+}
+/* Personal Details is a desktop dialog; its account fields stay comfortably sized. */
+:root .profile-window.window-dialog { background: var(--surface); color: var(--ink); }
+:root .profile-window.window-dialog > .modal-head h2 { min-width: 0; color: var(--ink); font-size: 20px; }
+:root .profile-window.window-dialog > :is(form, .profile-signout, .profile-error) { width: 100%; max-width: 540px; margin-inline: auto; }
+:root .profile-window.window-dialog label > span { color: var(--muted); }
+:root .profile-window.window-dialog input { color: var(--ink); background: var(--surface); border-color: var(--line); }
+:root .profile-window.window-dialog .modal-window-tools button { color: var(--ink); background: var(--surface); border-color: var(--line); }
+:root .profile-window.window-dialog .profile-signout { color: var(--ink); border-color: var(--line); background: var(--ws-field, var(--surface)); }
+:root .profile-window.window-dialog .profile-signout:hover { background: color-mix(in srgb, var(--line) 30%, var(--surface)); }
+:root .profile-window.window-dialog .profile-error { color: #be4259; }

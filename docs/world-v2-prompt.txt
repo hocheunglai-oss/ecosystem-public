@@ -1,0 +1,13 @@
+ECOSYSTEM maritime world backdrop
+Generation mode: built-in image_gen__imagegen (one call)
+Original output: [original retained in the private asset archive]
+Project asset: public/world-v2.png
+
+Use case: stylized-concept.
+Asset type: original wide 16:9 full-bleed immersive maritime-world backdrop for a premium trading platform called ECOSYSTEM. Render as one image, landscape 16:9, ideally 2048 by 1152.
+Primary request: A beautifully rendered, mature and optimistic 3D maritime archipelago that feels inviting to explore. Cinematic polished game-world environment, inspired by the broad idea of immersive virtual sporting worlds but fully original. This is environment artwork ONLY, to sit behind real interface controls.
+Scene: Vivid deep cobalt ocean and turquoise shallows around sunlit island port hubs. White modern coastal architecture, terraced lush green trees, sculpted mountains, clean container cranes, selective lime-green cargo accents, graceful open shipping channels. Violet distant mountains under a clear late-afternoon sky. A few small cargo ships with subtle white wakes at believable scale.
+Composition: High oblique aerial/isometric view looking gently toward a distant horizon. Main island port hub occupies the CENTER/RIGHT, approximately horizontal 45% to 95%. One small island at lower left, approximately horizontal 5% to 28%, leaving generous dark-blue open water across most of the LEFT 0% to 45% and lower middle as calm negative space for real UI overlays. Smaller harbor in upper right, another distant island upper middle. Keep major landmarks within the central vertical band so a 1440x650 wide crop still reads well.
+Lighting and finish: Bright warm late-afternoon sunlight, rich cobalt water, turquoise coastlines, deep navy shadows, distinct vibrant color zones. Sophisticated stylized geometry with detailed intentional materials, high-quality global illumination, realistic attractive water. Playful but professional, immersive and spacious.
+Constraints: True full-bleed continuous environment all the way to image edges. Do not make a floating diorama on a blank background. Do not introduce any huge foreground boat. NOT toy-like, NOT low-poly.
+ABSOLUTELY NO text, letters, logos, watermarks, UI, interface overlays, dashboard panels, cards, frames, counters, map pins, labels or geographic labels. No people or avatars are needed. No copied Zwift assets.

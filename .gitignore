@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.vercel/
+.env*
+!.env.example
+output/access/
+output/security/
+supabase/.temp/
+*.tsbuildinfo
+artifacts/
+.vercel
+
+# Generated verification evidence can contain temporary authenticated cookies.
+output/
+*.private.*
+server/generated/system-information.ts

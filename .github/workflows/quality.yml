@@ -1,0 +1,240 @@
+name: ECO quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Tests never receive production credentials or permission to deploy.
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    name: Application, dependencies and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm security:source
+      - run: pnpm build
+      - run: pnpm security:build
+      - run: pnpm security:inventory
+      - run: pnpm audit --audit-level high
+      # Logged evidence is mandatory; downloadable archives are supplementary.
+      # This keeps artifact storage outages separate from actual quality failures.
+      - name: Validate and log non-secret build evidence
+        id: evidence
+        if: always()
+        env:
+          ECO_QUALITY_OUTCOME: ${{ job.status }}
+          ECO_EVIDENCE_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/prepare-ci-evidence.mjs build
+      - name: Archive compact build evidence
+        id: archive
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eco-build-evidence
+          path: output/ci-evidence/build/compact
+          retention-days: 7
+          compression-level: 9
+          if-no-files-found: error
+      - name: Report unavailable build archive
+        if: ${{ always() && steps.archive.outcome == 'failure' }}
+        run: |
+          echo '::warning::Build archive unavailable. Mandatory validated evidence remains in the evidence step log; test and security failures remain failures.'
+          echo 'Build archive unavailable. Use the validated JSON in the evidence step log. This archive failure does not change quality results.' >> "$GITHUB_STEP_SUMMARY"
+
+  database:
+    name: PostgreSQL access isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      # Track the maintained PostgreSQL 17 patch image. This fixture does not contact Supabase.
+      - run: docker pull postgres:17-bookworm
+      - name: Test migrations in a disposable offline database
+        run: |
+          docker run --rm --network none --read-only --user postgres \
+            --tmpfs /tmp:rw,nosuid,noexec,size=256m \
+            --mount "type=bind,source=$PWD,target=/workspace,readonly" \
+            --mount "type=bind,source=$(command -v node),target=/usr/local/bin/node,readonly" \
+            --workdir /workspace \
+            --env ECO_NATIVE_PG_BIN=/usr/lib/postgresql/17/bin \
+            postgres:17-bookworm node --test tests/access-sql.test.mjs tests/admin-sql.test.mjs tests/suppliers-sql.test.mjs tests/supplier-ports-sql.test.mjs tests/parser-sql.test.mjs tests/inbox-sql.test.mjs tests/commercial-enquiries-sql.test.mjs tests/intelligence-sql.test.mjs
+
+
+  browser:
+    name: Browser verification · ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: administration
+            label: Administration
+            scripts: |
+              tests/administration.e2e.mjs
+              tests/admin-health-refresh.e2e.mjs
+              tests/shared-contribution-availability.e2e.mjs
+              tests/eco-release-gates.e2e.mjs
+            artifacts: |
+              output/administration-ui
+              output/shared-contribution-availability
+              output/eco-release-gates-ui
+          - group: suppliers
+            label: Suppliers
+            scripts: |
+              tests/shared-suppliers.e2e.mjs
+              tests/supplier-retirement.e2e.mjs
+              tests/eco-supplier-spc-view.e2e.mjs
+              tests/supplier-pic-isolation.e2e.mjs
+            artifacts: |
+              output/shared-suppliers-ui
+              output/supplier-retirement-ui
+              output/supplier-spc-view-ui
+              output/supplier-pic-isolation-ui
+          - group: enquiries
+            label: Parser and test workspace
+            scripts: |
+              tests/test-workspace.e2e.mjs
+              tests/owner-capabilities.e2e.mjs
+              tests/parser-service.e2e.mjs
+              tests/parser-review.e2e.mjs
+              tests/shared-inbox.e2e.mjs
+              tests/whatsapp-intake.e2e.mjs
+              tests/commercial-enquiries.e2e.mjs
+              tests/privacy-page.e2e.mjs
+            artifacts: |
+              output/test-workspace-ui
+              output/owner-capabilities
+              output/parser-service-ui
+              output/parser-review-ui
+              output/shared-inbox-ui
+              output/whatsapp-intake-ui
+              output/commercial-enquiries-ui
+              output/privacy-ui
+          - group: knowledge
+            label: Knowledge and private profiles
+            scripts: |
+              tests/location-flattening.e2e.mjs
+              tests/country-port-profiles.e2e.mjs
+              tests/private-profile-tabs.e2e.mjs
+              tests/eco-supplier-ports.e2e.mjs
+              tests/intelligence.e2e.mjs
+            artifacts: |
+              output/location-flattening-ui
+              output/country-port-profiles-ui
+              output/private-profile-tabs-ui
+              output/supplier-ports-ui
+              output/intelligence-ui
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm build
+      - name: Verify themes, phone widths, access states and freshness
+        env:
+          ECO_BROWSER_SCRIPTS: ${{ matrix.scripts }}
+          ECO_ADMIN_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_ADMIN_UI_OUTPUT: output/administration-ui
+          ECO_RELEASE_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_TEST_OUTPUT: output/shared-contribution-availability
+          ECO_SUPPLIER_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_SUPPLIER_UI_OUTPUT: output/shared-suppliers-ui
+          ECO_SUPPLIER_SPC_OUTPUT: output/supplier-spc-view-ui
+          ECO_SUPPLIER_PORT_OUTPUT: output/supplier-ports-ui
+          ECO_SUPPLIER_GUARD_ORIGIN: http://127.0.0.1:4286
+          ECO_SUPPLIER_GUARD_OUTPUT: output/supplier-pic-isolation-ui
+          ECO_LOCATION_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_LOCATION_UI_OUTPUT: output/location-flattening-ui
+          ECO_COUNTRY_PORT_ORIGIN: http://127.0.0.1:4286
+          ECO_COUNTRY_PORT_OUTPUT: output/country-port-profiles-ui
+          ECO_PRIVATE_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_PRIVATE_UI_OUTPUT: output/private-profile-tabs-ui
+          ECO_INTELLIGENCE_ORIGIN: http://127.0.0.1:4286
+          ECO_INTELLIGENCE_OUTPUT: output/intelligence-ui
+          ECO_TEST_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_OWNER_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_OWNER_UI_OUTPUT: output/owner-capabilities
+          ECO_PARSER_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_PARSER_REVIEW_ORIGIN: http://127.0.0.1:4286
+          ECO_WHATSAPP_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_COMMERCIAL_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_PRIVACY_UI_ORIGIN: http://127.0.0.1:4286
+        run: |
+          pnpm exec vite preview --host 127.0.0.1 --port 4286 > /tmp/eco-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          node --input-type=module -e 'for(let i=0;i<60;i++){try{if((await fetch("http://127.0.0.1:4286")).ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,250))}process.exit(1)'
+          while IFS= read -r script; do
+            if [[ -n "$script" ]]; then node "$script"; fi
+          done <<< "$ECO_BROWSER_SCRIPTS"
+      - name: Validate and log browser verification evidence
+        id: evidence
+        if: always()
+        env:
+          ECO_QUALITY_OUTCOME: ${{ job.status }}
+          ECO_EVIDENCE_HEAD: ${{ github.event.pull_request.head.sha }}
+          ECO_EVIDENCE_GROUP: ${{ matrix.group }}
+          ECO_EVIDENCE_DIRS: ${{ matrix.artifacts }}
+        run: node scripts/prepare-ci-evidence.mjs browser
+      - name: Archive compact browser evidence
+        id: archive
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eco-browser-${{ matrix.group }}
+          path: output/ci-evidence/${{ matrix.group }}/compact
+          retention-days: 7
+          compression-level: 9
+          if-no-files-found: error
+      - name: Archive bounded failure diagnostics
+        id: diagnostics
+        if: ${{ always() && steps.evidence.outcome == 'success' && (failure() || cancelled()) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eco-browser-${{ matrix.group }}-failure-diagnostics
+          path: output/ci-evidence/${{ matrix.group }}/diagnostics
+          retention-days: 3
+          if-no-files-found: error
+      - name: Report unavailable browser archives
+        if: ${{ always() && (steps.archive.outcome == 'failure' || steps.diagnostics.outcome == 'failure') }}
+        run: |
+          echo '::warning::Browser archive unavailable. Mandatory validated evidence remains in the evidence step log; failed browser checks remain failures.'
+          echo 'Browser archive unavailable. Use the validated JSON and screenshot hashes in the evidence step log. Screenshot hashes cannot reconstruct pixels; any missing failure images are unavailable.' >> "$GITHUB_STEP_SUMMARY"

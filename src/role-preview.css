@@ -1,0 +1,49 @@
+.role-preview-controls { position:relative; min-width:0; }
+.role-preview-options { position:absolute; right:0; bottom:calc(100% + 8px); z-index:20; display:grid; gap:6px; width:210px; max-width:calc(100vw - 24px); padding:10px; border:1px solid var(--ui-control-border,var(--line)); border-radius:var(--ui-radius-control,5px); background:var(--theme-panel,var(--surface)); color:var(--theme-ink,var(--ink)); box-shadow:0 8px 24px #001b2d33; }
+.role-preview-options button { width:100%; justify-content:flex-start; }
+.role-preview-options button[aria-pressed="true"] { border-color:var(--ui-focus); background:var(--theme-raised,var(--surface)); }
+.role-preview-options p { margin:0; font-size:var(--ui-text-label); overflow-wrap:anywhere; }
+#root .home-display-controls .role-preview-controls > button { background:#082d45ed; color:#eff7fa; border-color:#d9faff70; }
+.personal-settings { display:grid; grid-template-columns:minmax(0,440px) minmax(0,440px); align-items:start; gap:32px; max-width:940px; }
+.personal-password h2 { font-size:var(--ui-text-section); margin:0 0 18px; }
+.personal-password .password-settings { padding:0; max-width:none; }
+@media(max-width:760px) { .personal-settings { grid-template-columns:minmax(0,1fr); gap:24px; } }
+.role-preview-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--ui-focus,#158da4); border-radius: 5px; background: var(--surface); color: var(--ink); min-width: 0; }
+.role-preview-banner > div { display: grid; gap: 3px; min-width: 0; }
+.role-preview-banner strong { font-size: var(--ui-text-body,13px); }
+.role-preview-banner span { font-size: var(--ui-text-label,12px); color: var(--muted); }
+.role-preview-banner button { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.role-preview-banner p { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
+.workspace-preview-banner { padding: 8px 12px 0; }
+.home-preview-banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 8; width: min(580px,calc(100% - 24px)); }
+/* Reserve a separate row while the logo and account panel leave too little room between them. */
+@media (max-width: 1350px) {
+  .home-preview-banner { position: relative; top: auto; left: auto; transform: none; flex: 0 0 100%; width: 100%; }
+}
+:root[data-interface="mobile"] .home-preview-banner { position: relative; top: auto; left: auto; transform: none; flex: 0 0 auto; margin: 8px 12px; width: auto; }
+@media (max-width: 760px) { .role-preview-banner { padding: 9px 10px; } }
+
+.home-preview-banner { --muted: var(--theme-muted,#4c6279); font-family: var(--ui-font); font-size: var(--ui-text-body,13px); }
+@media (max-width:760px), (pointer:coarse) { .role-preview-form select { font-size:16px; } }
+
+.home-preview-banner:empty, .workspace-preview-banner:empty { display:none; }
+
+:root[data-interface="mobile"] .trader-hud { grid-template-columns:minmax(0,1fr); }
+:root[data-interface="mobile"] .trader-hud .hud-header { justify-content:space-between; }
+:root[data-interface="mobile"] .trader-hud .hud-points-row { padding:4px 8px 8px; display:flex; gap:4px; }
+:root[data-interface="mobile"] .hud-resource-activity { flex:1; }
+.trader-hud .hud-resource-activity > .hud-contribution-count { font-size:18px; max-width:none; margin-left:8px; }
+.hud-resource-activity > span { font-size:var(--ui-text-label,12px); font-weight:600; }
+.hud-compliments-message { margin:0; padding:0 12px 16px; font-size:var(--ui-text-body,13px); }
+.window-foot-actions { flex-wrap:wrap; }
+@media(max-width:760px) {
+  .home-display-controls:has(.role-preview-controls) .ecosystem-feedback { flex-basis:100%; }
+  .home-display-controls:has(.role-preview-controls) { justify-content:flex-end; }
+}
+:root[data-interface="mobile"] .home-display-controls:has(.role-preview-controls) .ecosystem-feedback,
+:root[data-interface="mobile"] .window-foot-actions:has(.role-preview-controls) .ecosystem-feedback { grid-column:1 / -1; }
+:root[data-interface="mobile"] .home-display-controls:has(.role-preview-controls),
+:root[data-interface="mobile"] .window-foot-actions:has(.role-preview-controls) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+:root[data-interface="mobile"] .role-preview-controls > button { width:100%; }
+:root[data-interface="mobile"] .hud-resource-activity > .hud-contribution-count { margin-left:0; }
+:root[data-interface="mobile"] .window-foot-actions .window-theme-toggle { min-height:44px; }

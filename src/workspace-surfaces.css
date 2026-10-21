@@ -1,0 +1,633 @@
+/* Working pages are open, ruled documents. The immersive home owns its own surface. */
+.workspace:not(.is-home) .main-content {
+  --line: #ccd6d5;
+  --muted: #556b75;
+  --surface: #fbfcf8;
+  color: #082e45;
+  background: #fbfcf8;
+}
+
+.workspace:not(.is-home) .main-content .page-heading {
+  align-items: flex-end;
+  padding-bottom: 26px;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #092e43;
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home) .main-content .page-heading h1 {
+  font-size: clamp(2rem, 3.2vw, 3.4rem);
+  letter-spacing: -0.055em;
+  line-height: 1.08;
+  max-width: 22ch;
+  overflow-wrap: anywhere;
+}
+.workspace:not(.is-home) .main-content .page-heading p {
+  color: #526972;
+  max-width: 64ch;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(.eyebrow, .section-label, .context-label) {
+  color: #506c70;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.workspace:not(.is-home) .main-content .page-heading .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+.workspace:not(.is-home) .main-content .page-heading .eyebrow::before {
+  content: "";
+  width: 22px;
+  height: 5px;
+  flex-shrink: 0;
+  background: #a8e63c;
+}
+.workspace:not(.is-home) .main-content .card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 27px 0;
+  min-width: 0;
+}
+.workspace:not(.is-home) .main-content > .card {
+  margin-bottom: 24px;
+}
+.workspace:not(.is-home) .main-content .card-heading {
+  gap: 18px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.workspace:not(.is-home) .main-content .card-heading h2 {
+  font-size: 1.32rem;
+  letter-spacing: -0.035em;
+}
+.workspace:not(.is-home) .main-content .card-heading p {
+  color: #5a7077;
+  line-height: 1.65;
+}
+.workspace:not(.is-home) .main-content .button {
+  border-radius: 3px;
+  box-shadow: none;
+  padding: 12px 19px;
+  min-height: 46px;
+  max-width: 100%;
+}
+.workspace:not(.is-home) .main-content .button.primary {
+  background: #b5ee48;
+  color: #092e43;
+  border-color: #b5ee48;
+}
+.workspace:not(.is-home) .main-content .button.primary:hover:not(:disabled) {
+  background: #c6fa62;
+  border-color: #8caf4b;
+  box-shadow: none;
+}
+.workspace:not(.is-home) .main-content .button.secondary {
+  border-color: #a9babd;
+  background: transparent;
+  color: #143c4e;
+}
+.workspace:not(.is-home) .main-content .badge {
+  border-radius: 2px;
+  font-weight: 650;
+  white-space: normal;
+  text-align: left;
+}
+.workspace:not(.is-home) .main-content .badge.green {
+  background: #e0efc8;
+  color: #365424;
+}
+.workspace:not(.is-home) .main-content :is(.square-icon, .directory-avatar) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #305760;
+}
+.workspace:not(.is-home) .main-content .notice {
+  border-radius: 0;
+  border-left: 3px solid #a8b9b6;
+  padding: 15px 18px;
+  color: #48616b;
+}
+.workspace:not(.is-home) .main-content .notice.amber {
+  color: #715221;
+  border-left-color: #be9041;
+}
+.workspace:not(.is-home) .main-content .notice.green {
+  color: #3f622e;
+  border-left-color: #8eb34e;
+}
+.workspace:not(.is-home) .main-content .notice.rose {
+  color: #943b3b;
+  border-left-color: #bb6565;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(.source-note, .review-meta, .results-count) {
+  color: #61777a;
+}
+
+/* Reading an enquiry follows one document, with a contextual margin. */
+.workspace:not(.is-home) .main-content .enquiry-layout {
+  grid-template-columns: minmax(0, 1.8fr) minmax(270px, 1fr);
+  gap: clamp(25px, 4vw, 65px);
+}
+.workspace:not(.is-home) .main-content .enquiry-main {
+  gap: 10px;
+}
+.workspace:not(.is-home) .main-content .input-card {
+  padding-top: 0;
+  border-top: 0;
+}
+.workspace:not(.is-home) .main-content .context-column {
+  border-left: 1px solid var(--line);
+  padding-left: clamp(22px, 2.5vw, 38px);
+  gap: 15px;
+}
+.workspace:not(.is-home) .main-content .context-column .card {
+  padding: 22px 0;
+}
+.workspace:not(.is-home) .main-content .context-label {
+  margin-bottom: 0;
+}
+.workspace:not(.is-home) .main-content .step-number {
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: #91b15d;
+  font-size: 1.85rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(
+    .field input,
+    .field select,
+    .field textarea,
+    .raw-input,
+    .enquiry-preview
+  ) {
+  border-radius: 2px;
+  border-color: #bdcecd;
+  min-width: 0;
+  max-width: 100%;
+  color: #183d4e;
+}
+.workspace:not(.is-home) .main-content .raw-input {
+  background: #fff !important;
+  border-color: #b5c8c6 !important;
+  border-left: 4px solid #a5d34a !important;
+  min-height: 240px;
+}
+.workspace:not(.is-home) .main-content .raw-input::placeholder {
+  color: #6b838b;
+}
+.workspace:not(.is-home) .main-content .calculated-field {
+  padding: 12px 0 12px 18px;
+  border: 0;
+  border-left: 3px solid #a4cd59;
+  border-radius: 0;
+  background: transparent;
+}
+.workspace:not(.is-home) .main-content .confirm-box {
+  border-radius: 0;
+  background: #f0f4e9;
+  border: 0;
+  color: #405858;
+}
+.workspace:not(.is-home) .main-content .enquiry-start {
+  align-items: flex-start;
+  text-align: left;
+  padding: 32px 0;
+}
+.workspace:not(.is-home) .main-content .enquiry-start .circle-icon {
+  background: transparent;
+  width: auto;
+  height: auto;
+  color: #5c823b;
+  margin-bottom: 17px;
+}
+.workspace:not(.is-home) .main-content .flow-mini {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home) .main-content .progress {
+  border-radius: 0;
+  height: 5px;
+  background: #e0e7dc;
+}
+.workspace:not(.is-home) .main-content .progress > span {
+  background: #97c749;
+  border-radius: 0;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(
+    .credit-pair,
+    .port-context p,
+    .port-notes,
+    .port-description,
+    .knowledge-copy p,
+    .context-tip,
+    .company-context > span,
+    .company-context small
+  ) {
+  color: #536e76;
+}
+
+/* Directories are navigable lists and an open record, never grids of tiles. */
+.workspace:not(.is-home)
+  .main-content
+  :is(.directory-layout, .port-directory-layout) {
+  grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.35fr);
+  gap: clamp(24px, 4vw, 64px);
+}
+.workspace:not(.is-home) .main-content .directory-list {
+  border-top: 0;
+  padding: 0;
+  background: transparent;
+}
+.workspace:not(.is-home) .main-content .directory-list-heading {
+  padding: 14px 0;
+  color: #506a72;
+}
+.workspace:not(.is-home) .main-content .directory-item {
+  padding: 20px 10px 20px 0;
+  border-bottom-color: var(--line);
+  background: transparent;
+}
+.workspace:not(.is-home) .main-content .directory-item.active {
+  border-left: 3px solid #96c844;
+  padding-left: 11px;
+  background: #edf3e4;
+}
+.workspace:not(.is-home) .main-content .directory-item:hover {
+  background: #f0f4e9;
+}
+.workspace:not(.is-home) .main-content .directory-item-copy strong {
+  color: #123d4e;
+  font-size: 0.91rem;
+  overflow-wrap: anywhere;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(.directory-item-copy > span, .directory-item-copy small) {
+  color: #536f72;
+}
+.workspace:not(.is-home) .main-content .directory-detail {
+  padding-top: 20px;
+  border-top: 3px solid #082e45;
+}
+.workspace:not(.is-home) .main-content .detail-hero {
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home) .main-content .detail-hero > div {
+  min-width: 0;
+}
+.workspace:not(.is-home) .main-content .detail-hero h2 {
+  font-size: 1.9rem;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+.workspace:not(.is-home) .main-content .customer-credit-strip {
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  border-radius: 0;
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home) .main-content .customer-credit-strip strong {
+  font-size: 2.2rem;
+  letter-spacing: -0.05em;
+  overflow-wrap: anywhere;
+}
+.workspace:not(.is-home) .main-content .customer-credit-strip span {
+  color: #5d736f;
+}
+.workspace:not(.is-home) .main-content .detail-list {
+  gap: 0;
+}
+.workspace:not(.is-home) .main-content .detail-list > div {
+  padding: 12px 0;
+  border-bottom: 1px solid #e0e6e0;
+}
+.workspace:not(.is-home) .main-content .detail-list dt {
+  color: #587077;
+}
+.workspace:not(.is-home) .main-content .knowledge-banner {
+  border: 0;
+  border-block: 1px solid var(--line);
+  border-radius: 0;
+  padding: 20px 0;
+  background: transparent;
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home) .main-content .knowledge-banner > div {
+  flex-basis: 16rem;
+  min-width: 0;
+}
+.workspace:not(.is-home) .main-content .knowledge-banner strong {
+  color: #203e40;
+}
+.workspace:not(.is-home) .main-content .knowledge-banner p {
+  color: #5b706f;
+}
+.workspace:not(.is-home) .main-content .port-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.workspace:not(.is-home) .main-content .port-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding: 24px 15px 24px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  border-radius: 0;
+  height: auto;
+}
+.workspace:not(.is-home) .main-content .port-card:hover {
+  transform: none;
+  background: #f1f5e9;
+}
+.workspace:not(.is-home) .main-content .port-card.active {
+  background: #edf3e4;
+  box-shadow: inset 3px 0 #9bcd47;
+  padding-left: 16px;
+}
+.workspace:not(.is-home) .main-content .port-card-top {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+  width: auto;
+  align-self: start;
+  justify-content: flex-end;
+}
+.workspace:not(.is-home) .main-content .port-card-top .square-icon {
+  display: none;
+}
+.workspace:not(.is-home) .main-content .port-card-name {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 1.28rem;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+.workspace:not(.is-home) .main-content .port-card-country {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  min-height: 0;
+  color: #577279;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(.port-card-summary, .port-card .tag-list, .port-card-bottom) {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #526e73;
+}
+.workspace:not(.is-home) .main-content .port-card-summary {
+  margin-top: 5px;
+}
+.workspace:not(.is-home) .main-content .port-card-bottom {
+  border: 0;
+  padding-top: 5px;
+}
+
+/* Commercial figures sit on a single ruled strip; decisions read as a journal. */
+.workspace:not(.is-home) .main-content .stats-grid {
+  gap: 0;
+  border-block: 1px solid var(--line);
+  margin-bottom: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.workspace:not(.is-home) .main-content .stat-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 24px 24px 24px 0;
+}
+.workspace:not(.is-home) .main-content .stat-card > strong {
+  font-size: clamp(1.6rem, 2.5vw, 2.8rem);
+  letter-spacing: -0.055em;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(.stat-card > span, .stat-card > small) {
+  color: #5c7174;
+}
+.workspace:not(.is-home) .main-content .review-list {
+  gap: 0;
+}
+.workspace:not(.is-home) .main-content .review-item {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 28px 0;
+  background: transparent;
+}
+.workspace:not(.is-home) .main-content .review-item:first-child {
+  padding-top: 10px;
+}
+.workspace:not(.is-home) .main-content .review-item-head {
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home) .main-content .review-item h3 {
+  font-size: 1.2rem;
+}
+.workspace:not(.is-home) .main-content .review-item > p {
+  color: #526c74;
+  max-width: 80ch;
+}
+.workspace:not(.is-home) .main-content .tabs {
+  gap: 25px;
+  margin-bottom: 22px;
+}
+.workspace:not(.is-home) .main-content .tabs button {
+  color: #576f77;
+  padding-bottom: 16px;
+  min-height: 44px;
+}
+.workspace:not(.is-home) .main-content .tabs button.active {
+  color: #103448;
+}
+.workspace:not(.is-home) .main-content .tabs button.active::after {
+  height: 4px;
+  background: #a8da43;
+  border-radius: 0;
+}
+.workspace:not(.is-home) .main-content .management-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
+  gap: 40px;
+}
+.workspace:not(.is-home) .main-content th {
+  padding-block: 15px;
+  color: #48636d;
+  border-bottom: 2px solid #244653;
+}
+.workspace:not(.is-home) .main-content td {
+  padding-block: 20px;
+  border-bottom-color: #dce5df;
+}
+.workspace:not(.is-home) .main-content td small {
+  color: #5f7781;
+}
+.workspace:not(.is-home) .main-content tbody tr:hover {
+  background: #f0f4e9;
+}
+.workspace:not(.is-home) .main-content .table-wrap {
+  max-width: 100%;
+  scrollbar-color: #9cab9d transparent;
+}
+.workspace:not(.is-home) .main-content .search-box {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #90a7aa;
+  border-radius: 0;
+  height: auto;
+  min-height: 46px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 0;
+  color: #4c6872;
+}
+.workspace:not(.is-home) .main-content .search-box input {
+  padding: 4px 0;
+  color: #21495a;
+}
+.workspace:not(.is-home) .main-content .search-box input::placeholder {
+  color: #678087;
+}
+.workspace:not(.is-home) .main-content .filter-select select {
+  border-radius: 2px;
+  min-height: 46px;
+  height: auto;
+  padding-block: 10px;
+  max-width: 100%;
+  background: transparent;
+  color: #46646c;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(.directory-toolbar, .parser-actions, .form-bottom, .preview-foot) {
+  flex-wrap: wrap;
+}
+.workspace:not(.is-home)
+  .main-content
+  :is(
+    .sample-select,
+    .sample-select select,
+    .directory-toolbar > *,
+    .card-heading > *
+  ) {
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace:not(.is-home) .main-content .sample-select select {
+  white-space: normal;
+}
+
+@media (max-width: 1100px) {
+  .workspace:not(.is-home) .main-content .enquiry-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace:not(.is-home) .main-content .context-column {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    border-left: 0;
+    padding-left: 0;
+    gap: 24px;
+  }
+  .workspace:not(.is-home)
+    .main-content
+    :is(.directory-layout, .port-directory-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace:not(.is-home) .main-content .directory-list {
+    max-height: 440px;
+  }
+  .workspace:not(.is-home) .main-content .port-grid {
+    max-height: 510px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace:not(.is-home) .main-content .page-heading {
+    padding-bottom: 23px;
+    gap: 20px;
+  }
+  .workspace:not(.is-home) .main-content .page-heading h1 {
+    font-size: 2.15rem;
+  }
+  .workspace:not(.is-home) .main-content .card {
+    padding-inline: 0;
+  }
+  .workspace:not(.is-home) .main-content .detail-hero h2 {
+    font-size: 1.65rem;
+  }
+  .workspace:not(.is-home) .main-content .detail-hero > .badge {
+    margin-left: 0;
+  }
+  .workspace:not(.is-home) .main-content .form-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  }
+  .workspace:not(.is-home) .main-content .detail-list > div {
+    flex-wrap: wrap;
+    gap: 5px 16px;
+  }
+  .workspace:not(.is-home) .main-content .detail-list dt {
+    flex: 1 1 9rem;
+  }
+  .workspace:not(.is-home) .main-content .detail-list dd {
+    text-align: left;
+    max-width: 100%;
+    flex: 1 1 9rem;
+  }
+  .workspace:not(.is-home)
+    .main-content
+    .knowledge-banner
+    .contribution-reward {
+    margin-left: 0;
+  }
+  .workspace:not(.is-home) .main-content .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  }
+  .workspace:not(.is-home) .main-content .stat-card {
+    padding: 20px 12px 20px 0;
+  }
+  .workspace:not(.is-home) .main-content .port-card {
+    padding: 20px 10px 20px 0;
+  }
+  .workspace:not(.is-home) .main-content .port-card.active {
+    padding-left: 13px;
+  }
+  .workspace:not(.is-home)
+    .main-content
+    :is(.heading-action, .audit-filters .field) {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .workspace:not(.is-home) .main-content .credit-pair {
+    flex-wrap: wrap;
+  }
+}
+
+.workspace.is-work .credit-available strong { overflow-wrap: anywhere; }
+.workspace.is-work .context-card-title { flex-wrap: wrap; }

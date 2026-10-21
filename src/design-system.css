@@ -1,0 +1,232 @@
+/* The working UI's final shared layer. Illustrated home and chart geometry stay local. */
+:root {
+  --ui-font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-font-heading: "Manrope", "DM Sans", sans-serif;
+  --ui-text-meta: 11px;
+  --ui-text-label: 12px;
+  --ui-text-body: 13px;
+  --ui-text-section: 14px;
+  --ui-text-title: 20px;
+  --ui-weight-body: 450;
+  --ui-weight-label: 600;
+  --ui-weight-heading: 700;
+  --ui-radius-control: 5px;
+  --ui-control-height: 30px;
+  --ui-field-height: 36px;
+  --ui-control-padding: 5px 10px;
+  --ui-control-surface: var(--ws-field, var(--surface, #f5f9fc));
+  --ui-control-ink: var(--ink, #17364a);
+  --ui-control-border: var(--line, #91aabd);
+  --ui-control-hover: #e5f1f4;
+  --ui-focus: #158da4;
+  --ui-primary: #c5f574;
+  --ui-primary-hover: #b9ed67;
+  --ui-primary-border: #b7df75;
+  --ui-primary-ink: #19301d;
+  --ui-danger: #a42f3b;
+  --ui-danger-surface: #fff0f1;
+  --ui-danger-border: #c47981;
+  --ui-private-surface: #f0eafa;
+  --ui-private-ink: #61477f;
+  --ui-private-border: #c8b6dc;
+  --ui-disabled-opacity: .55;
+}
+:root[data-theme="dark"] {
+  --ui-control-hover: #294358;
+  --ui-focus: #78d9dd;
+  --ui-primary-border: #aace69;
+  --ui-danger: #ffb4c0;
+  --ui-danger-surface: #3b2736;
+  --ui-danger-border: #b47d8d;
+  --ui-private-surface: #342b43;
+  --ui-private-ink: #dfc9f7;
+  --ui-private-border: #846d9f;
+}
+
+/* Finite type scale for ordinary work surfaces, without changing the harbour's rem scale. */
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) {
+  --ui-control-surface: var(--ws-field, var(--surface, #f5f9fc));
+  --ui-control-ink: var(--ink, #17364a);
+  --ui-control-border: var(--line, #91aabd);
+  font-family: var(--ui-font);
+  font-size: var(--ui-text-body);
+  font-weight: var(--ui-weight-body);
+  line-height: 1.5;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(h1, h2, h3, h4) {
+  font-family: var(--ui-font-heading);
+  font-weight: var(--ui-weight-heading);
+  line-height: 1.35;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(h1, h2) { font-size: var(--ui-text-title); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(h3, h4, .window-toolbar strong) { font-size: var(--ui-text-section); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .card-heading h2, .section-title, .buyer-profile__section-header h3, .knowledge-block-head h3,
+  .knowledge-section-head h3, .users-access-editor h3
+) { font-size: var(--ui-text-section); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  p, .knowledge-prose, .buyer-profile__remark-text, .buyer-competition-entry p, .users-access-list strong
+) { font-size: var(--ui-text-body); line-height: 1.5; }
+#root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(
+  .field, .field > span, form > label, .check-label, .access-checkbox, dt, .center-field-heading,
+  .center-format-heading > label, .section-label
+) { font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); line-height: 1.5; }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  small, .source-note, .review-meta, .knowledge-attribution-stamp, .buyer-profile__coverage,
+  .users-access-badges em, .users-access-hint, .feedback-reward
+) { font-size: var(--ui-text-meta); line-height: 1.5; }
+#root :is(.workspace-window, .modal, .workspace-module) :is(th, td) { font-size: var(--ui-text-label); line-height: 1.5; }
+#root :is(.workspace-window, .modal, .workspace-module) th { font-weight: var(--ui-weight-label); }
+
+/* Actions: the existing Feedback button is the geometry and colour reference. */
+#root :is(.ui-button, .button),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
+  .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
+  .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
+  .knowledge-editor-actions > button, .knowledge-sheet-toolbar > button,
+  .knowledge-pagination > button, .knowledge-related > button, .table-controls > button,
+  .center-lifecycle > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
+  .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
+  .supplier-information-actions > button, .location-recents button, .supplier-recents button
+) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--ui-control-height);
+  height: auto;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--ui-control-border);
+  border-radius: var(--ui-radius-control);
+  padding: var(--ui-control-padding);
+  background: var(--ui-control-surface);
+  color: var(--ui-control-ink);
+  box-shadow: none;
+  font-family: var(--ui-font);
+  font-size: var(--ui-text-label);
+  font-weight: var(--ui-weight-label);
+  line-height: 18px;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: normal;
+  text-decoration: none;
+  filter: none;
+}
+#root :is(.ui-button, .button):hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
+  .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
+  .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
+  .knowledge-editor-actions > button, .knowledge-sheet-toolbar > button,
+  .knowledge-pagination > button, .knowledge-related > button, .table-controls > button,
+  .center-lifecycle > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
+  .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
+  .supplier-information-actions > button, .location-recents button, .supplier-recents button
+):hover:not(:disabled) { background: var(--ui-control-hover); border-color: var(--ui-focus); box-shadow: none; filter: none; }
+#root :is(.ui-button--primary, .button.primary),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
+  .button.primary, .ui-button--primary, .lime-control, .knowledge-update-button, .ecosystem-feedback
+) { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
+#root :is(.ui-button--primary, .button.primary):hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
+  .button.primary, .ui-button--primary, .lime-control, .knowledge-update-button, .ecosystem-feedback
+):hover:not(:disabled) { background: var(--ui-primary-hover); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
+#root :is(.ui-button--danger, .button.danger),
+#root :is(.workspace-window, .modal, .workspace-module) :is(.button.danger, .ui-button--danger) {
+  color: var(--ui-danger); background: var(--ui-danger-surface); border-color: var(--ui-danger-border);
+}
+#root :is(.ui-button--danger, .button.danger):hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module) :is(.button.danger, .ui-button--danger):hover:not(:disabled) {
+  color: var(--ui-danger); background: color-mix(in srgb, var(--ui-danger-surface) 88%, var(--ui-danger)); border-color: var(--ui-danger);
+}
+
+/* Icon actions retain their shape; record rows, trees and custom charts are not action buttons. */
+#root :is(.ui-button--icon, .icon-button),
+#root :is(.workspace-window, .modal, .workspace-module) :is(.ui-button--icon, .icon-button, .modal-close, .window-tool, .knowledge-icon-control, .enquiry-icon, .credit-record-pager > button, .buyer-profile__pages > button, .supplier-page-controls > button, .location-back) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  flex-basis: auto;
+  width: var(--ui-control-height);
+  height: var(--ui-control-height);
+  min-width: var(--ui-control-height);
+  min-height: var(--ui-control-height);
+  padding: 5px;
+  border: 1px solid var(--ui-control-border);
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-control-ink);
+  background: var(--ui-control-surface);
+  box-shadow: none;
+}
+#root :is(.ui-button--icon, .icon-button):hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module) :is(.ui-button--icon, .icon-button, .modal-close, .window-tool, .knowledge-icon-control, .enquiry-icon, .credit-record-pager > button, .buyer-profile__pages > button, .supplier-page-controls > button, .location-back):hover:not(:disabled) {
+  color: var(--ui-control-ink); background: var(--ui-control-hover); border-color: var(--ui-focus);
+}
+#root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(.button, .lime-control, .icon-button, .modal-close, .window-tool, .attachments-trigger) > svg,
+#root :is(.ui-button, .button, .icon-button) > svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* Navigation keeps its existing selected state; only its shared type and geometry change. */
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .tabs > button, .center-tabs > button, .knowledge-tabs > button, .profile-tabs-list > button, .buyer-profile__tabs > button,
+  .office-view-tabs [role="tab"], .segmented > button, .enquiry-terms > button,
+  .credit-workflow-tabs > button, .credit-attention-filter, .location-filters > button
+) {
+  min-height: var(--ui-control-height);
+  padding: var(--ui-control-padding);
+  border-radius: var(--ui-radius-control);
+  font-family: var(--ui-font);
+  font-size: var(--ui-text-label);
+  font-weight: var(--ui-weight-label);
+  line-height: 18px;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(.text-button, .row-link) {
+  font-family: var(--ui-font); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); line-height: 1.5;
+}
+#root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+  font-family: var(--ui-font);
+  font-size: var(--ui-text-body);
+  font-weight: var(--ui-weight-body);
+  line-height: 1.5;
+  border-radius: var(--ui-radius-control);
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(.field > input, .field > select, .users-access-toolbar > input, .users-access-editor input:not([type="checkbox"]), .users-access-editor select) {
+  min-height: var(--ui-field-height); padding: 7px 10px;
+}
+#root :is(.workspace-window, .modal) .users-access-editor select { padding-right: 34px; }
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(button, a, input, select, textarea, summary):focus-visible,
+#root :is(.ui-button, .button, .icon-button):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(button, input, select, textarea):disabled,
+#root :is(.ui-button, .button, .icon-button):disabled { cursor: not-allowed; opacity: var(--ui-disabled-opacity); }
+
+/* The explicitly shared home Feedback action uses these tokens without restyling the artwork HUD. */
+#root .home-display-controls .ecosystem-feedback {
+  min-height: var(--ui-control-height); padding: var(--ui-control-padding); border-radius: var(--ui-radius-control);
+  font-family: var(--ui-font); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label);
+  border-color: var(--ui-primary-border); background: var(--ui-primary); color: var(--ui-primary-ink);
+}
+/* Personal details expands inside the dark harbour HUD in either page theme. */
+#root .profile-dropdown {
+  font-family: var(--ui-font); font-size: var(--ui-text-body); line-height: 1.5;
+}
+#root .account-inline-panel {
+  --ui-control-surface: #17374b;
+  --ui-control-ink: #edf5fb;
+  --ui-control-border: #6c8d9f;
+  --ui-control-hover: #29485d;
+  --ui-focus: #78d9dd;
+}
+#root .profile-dropdown label > span { font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
+#root .profile-dropdown input {
+  font-family: var(--ui-font); font-size: var(--ui-text-body); font-weight: var(--ui-weight-body);
+  border-radius: var(--ui-radius-control); min-height: var(--ui-field-height); height: var(--ui-field-height);
+}
+#root .profile-dropdown > header h2 { font-family: var(--ui-font-heading); font-size: var(--ui-text-section); font-weight: var(--ui-weight-heading); }
+#root .profile-dropdown .profile-save.ui-button { width: auto; justify-self: start; }
+@media (max-width: 760px), (pointer: coarse) {
+  :root { --ui-control-height: 44px; --ui-field-height: 44px; --ui-control-padding: 10px 12px; }
+  #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]) { font-size: 16px; }
+  #root :is(.workspace-window, .modal, .workspace-module) :is(.text-button, .row-link) { min-height: 44px; align-items: center; }
+  #root .users-access-actions > button { flex: 1 1 140px; }
+  #root .profile-dropdown input { font-size: 16px; }
+}

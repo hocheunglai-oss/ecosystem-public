@@ -1,0 +1,18 @@
+.buyer-competition__reward {display:inline-flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;}
+.buyer-competition__form {padding:12px;border-bottom:1px solid var(--buyer-line);}
+.buyer-competition__form textarea {display:block;box-sizing:border-box;width:100%;min-height:100px;padding:10px;border:1px solid var(--buyer-line);border-radius:4px;background:var(--buyer-surface);color:var(--ink);font:inherit;line-height:1.5;resize:vertical;}
+.buyer-competition-entry {padding:12px;}
+.buyer-competition-entry + .buyer-competition-entry {border-top:1px solid var(--buyer-line);}
+.buyer-competition-entry p {line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;}
+.buyer-competition-entry footer {margin-top:7px;color:var(--muted);font-size:10px;overflow-wrap:anywhere;}
+.buyer-shared-list-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;}
+.buyer-shared-list-heading:has(>button:only-child) {justify-content:flex-end;}
+.buyer-competition:has(>.buyer-shared-list-heading) {position:relative;}
+.buyer-competition>.buyer-profile__section-header {min-height:46px;padding-right:112px;}
+.buyer-competition>.buyer-shared-list-heading {position:absolute;right:0;top:0;min-height:46px;box-sizing:border-box;}
+.buyer-shared-list-row {display:flex;align-items:flex-start;gap:6px;margin-bottom:8px;}
+.buyer-shared-list-row textarea {min-height:36px;resize:vertical;}
+.buyer-shared-list-row .icon-button {flex-shrink:0;min-width:30px;min-height:32px;}
+.buyer-profile__remarks>section:has(>.buyer-shared-list-heading) {padding:0;}
+.buyer-profile__remarks .buyer-shared-list-heading {margin:0;}
+.buyer-profile__remarks .buyer-shared-list-heading + .buyer-profile__coverage {padding:0 10px 6px;}

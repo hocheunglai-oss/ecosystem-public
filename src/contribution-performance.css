@@ -1,0 +1,43 @@
+.contribution-performance { min-width: 0; }
+.contribution-performance-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.contribution-performance-heading h2 { margin: 0; font-size: 14px; }
+.contribution-data-scope { padding: 10px 12px; background: var(--activity-soft); border-left: 3px solid var(--activity-accent); font-size: 10px; line-height: 1.6; color: var(--muted); }
+.contribution-data-scope strong { display: block; color: var(--ink); }
+.contribution-directory-error { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-block: 12px; font-size: 11px; color: var(--muted); }
+.contribution-performance-filters { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 10px; margin-block: 14px; }
+.contribution-performance-filters label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 650; }
+.contribution-performance-filters :is(input, select) { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--line); border-radius: 5px; padding: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
+.contribution-performance-table-scroll { overflow-x: auto; }
+.contribution-performance-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.contribution-performance-table th { text-align: left; font-weight: 650; }
+.contribution-performance-table :is(th, td) { padding: 10px; border-bottom: 1px solid var(--line); }
+.contribution-performance-table thead { background: var(--activity-soft); color: var(--muted); font-size: 9px; }
+.contribution-performance-table tbody th > span { display: block; color: var(--muted); margin-top: 5px; font-size: 9px; }
+.contribution-performance-table .is-selected { background: var(--activity-panel); }
+.contribution-performance-table :is(th,td):nth-child(3), .contribution-performance-table :is(th,td):nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
+.contribution-performance-status { font-size: 9px; font-weight: 650; line-height: 1.5; }
+.contribution-performance-status[data-status="outstanding"] { color: var(--activity-accent); }
+.contribution-performance-status[data-status="unavailable"] { color: var(--muted); font-weight: 500; }
+.contribution-performance-table .text-button { font-size: 10px; white-space: nowrap; }
+.contribution-performance-table .text-button:disabled { cursor: default; opacity: .4; }
+.contribution-performance-detail { margin-top: 20px; }
+.contribution-performance-summary { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); gap: 12px; margin-block: 12px; }
+.contribution-performance-summary .activity-status { margin-bottom: 0; }
+.contribution-performance-summary .activity-chart { margin-bottom: 0; }
+@media (max-width: 640px) {
+  .contribution-performance-filters, .contribution-performance-summary { grid-template-columns: minmax(0,1fr); }
+  .contribution-performance-heading { align-items: stretch; flex-direction: column; }
+  .contribution-performance-heading .activity-period-filter { justify-content: space-between; }
+  .contribution-performance-table :is(thead) { display: none; }
+  .contribution-performance-table, .contribution-performance-table tbody { display: block; }
+  .contribution-performance-table tr { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .contribution-performance-table tbody th { grid-column: 1 / -1; }
+  .contribution-performance-table :is(th, td) { display: block; border: 0; padding: 0; min-width: 0; overflow-wrap: anywhere; }
+  .contribution-performance-table td::before { display: block; content: attr(data-label); color: var(--muted); font-size: 9px; font-weight: 600; margin-bottom: 5px; }
+  .contribution-performance-table :is(th,td):nth-child(3), .contribution-performance-table :is(th,td):nth-child(4) { text-align: left; }
+}
+.management-demo-records > summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 650; }
+.management-demo-records > summary:focus-visible { outline: 2px solid var(--activity-accent, #278d9a); outline-offset: 4px; }
+.management-demo-actions { display: flex; justify-content: flex-end; margin: 14px 0; }
+.management-demo-records > .stats-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 640px) { .management-demo-records > .stats-grid { grid-template-columns: minmax(0,1fr); } }

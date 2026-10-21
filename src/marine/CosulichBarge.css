@@ -1,0 +1,13 @@
+.cosulich-barge { pointer-events: none; }
+.cosulich-barge__shadow { fill: #062f3b; opacity: .48; }
+.cosulich-barge__contact { fill: #07303a; opacity: .3; }
+.cosulich-barge--lng .cosulich-barge__shadow { fill: #041f2b; opacity: .56; }
+.cosulich-barge--lng .cosulich-barge__contact { fill: #041c28; opacity: .46; }
+.cosulich-barge__reflection { opacity: .18; }
+.cosulich-barge__moorings { stroke: #b3a180; stroke-width: .7; opacity: .75; }
+.cosulich-barge--night .cosulich-barge__shadow { fill: #010f21; opacity: .64; }
+.cosulich-barge--night .cosulich-barge__contact { fill: #020e1c; opacity: .42; }
+.cosulich-barge--lng.cosulich-barge--night .cosulich-barge__shadow { fill: #010f21; opacity: .7; }
+.cosulich-barge--lng.cosulich-barge--night .cosulich-barge__contact { fill: #020e1c; opacity: .56; }
+.cosulich-barge--night .cosulich-barge__moorings { stroke: #68797b; opacity: .55; }
+.cosulich-barge--night .cosulich-barge__reflection { opacity: .14; }

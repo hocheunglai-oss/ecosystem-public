@@ -1,0 +1,39 @@
+.phone-requests {
+  min-width: 0;
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-family: var(--ui-font);
+  font-size: var(--ui-text-body);
+}
+.phone-requests > header { display: flex; align-items: center; margin-bottom: 8px; }
+.phone-requests > header h3 { margin: 0; font-family: var(--ui-font-heading); font-size: var(--ui-text-section); font-weight: var(--ui-weight-heading); }
+.phone-request-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 8px; }
+.phone-request { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--ui-radius-control); background: var(--surface); }
+.phone-request-person { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.phone-request-person strong { font-weight: var(--ui-weight-heading); overflow-wrap: anywhere; }
+.phone-request-person > span, .phone-request-email, .phone-request time { color: var(--muted); font-size: var(--ui-text-meta); }
+.phone-request-email { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+.phone-request dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 12px 0; }
+.phone-request dt { color: var(--muted); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
+.phone-request dd { margin: 3px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.phone-request-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.phone-request-actions { display: flex; gap: 8px; }
+.phone-request-message { margin: 8px 0; color: var(--ink); font-size: var(--ui-text-body); overflow-wrap: anywhere; }
+.phone-request-message p { margin: 0 0 6px; }
+.phone-request-message.is-error { color: var(--ui-danger); }
+.phone-requests--compact { margin: 12px; }
+.phone-requests--compact .phone-request-list { grid-template-columns: minmax(0, 1fr); }
+.phone-requests--compact .phone-request { padding: 10px; }
+.phone-requests--compact .phone-request dl { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.account-inline-panel .phone-requests {
+  --ink: var(--ui-control-ink);
+  --muted: #bcd1dc;
+  --line: var(--ui-control-border);
+  --surface: var(--ui-control-surface);
+  --ui-danger: #ffb4c0;
+}
+@media (max-width: 760px) {
+  .phone-request dl { grid-template-columns: minmax(0, 1fr); }
+  .phone-request-actions { width: 100%; }
+  .phone-request-actions > button { flex: 1; }
+}

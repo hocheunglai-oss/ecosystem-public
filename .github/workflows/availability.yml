@@ -1,0 +1,41 @@
+name: ECO availability
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-availability
+  cancel-in-progress: false
+
+jobs:
+  availability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            config/ecoConnections.ts
+            scripts/check-availability.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Verify availability and record independent evidence
+        env:
+          ECO_MONITOR_INGEST_SECRET: ${{ secrets.ECO_MONITOR_INGEST_SECRET }}
+        run: node scripts/check-availability.mjs
+      - name: Preserve independent check evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eco-availability-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/monitoring/availability.json
+          retention-days: 14
+          if-no-files-found: error

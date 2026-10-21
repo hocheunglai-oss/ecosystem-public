@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "sourceRepository": "hocheunglai-oss/bunker-map",
+  "sourceCommit": "8d6b20f9255d42c13ac926c417083248a1b46c82",
+  "importAdaptation": "relative-imports-explicit-ts-v2",
+  "reviewedAt": "2026-10-15",
+  "files": [
+    {
+      "path": "lib/enquiryWorksheetParser.ts",
+      "sourceSha256": "5fdedd14f0aafb4a85dc4c5ac5d62bc76bfe2b4b2b60c3de3c97dbca06a50804",
+      "vendorSha256": "96f3ab62bbfda7c37f91d62ad64b8c8452c40464a565cb279a2f5a6f97c11275"
+    },
+    {
+      "path": "lib/enquiryPortIndex.ts",
+      "sourceSha256": "a7a7ac02fe24dd82a1ed665ec4b3539e3126f42dd8a027c913dacb4ddd1bf139",
+      "vendorSha256": "7607775df676d69d79fe9db4d055fc0f53414ebeeb6008a7527854320b6f1fd9"
+    },
+    {
+      "path": "lib/enquiryShortener.ts",
+      "sourceSha256": "5ba603d7d06fd40d7dd44d36eeb21f8434743222d06a89bd70b176d5910a7627",
+      "vendorSha256": "0df04b3ba78a0544ac4c729289245106dccf48e5b3b2d6ac0fc3a29adf14fc95"
+    },
+    {
+      "path": "lib/spcEnquiryText.ts",
+      "sourceSha256": "86573daff4e861038528300b443a4fa137208d063fb68ecd0614cd25d0c95d6f",
+      "vendorSha256": "9aaa0146ceb6206976846c64efdc60a3b4f88846954299952cb1c58af68fa8ac"
+    },
+    {
+      "path": "data/priceSetterTabs.ts",
+      "sourceSha256": "1fe1fd7842ef6271fcdd371b102b5e7e215901a9f46e36b50487ed5d1285a1a6",
+      "vendorSha256": "1fe1fd7842ef6271fcdd371b102b5e7e215901a9f46e36b50487ed5d1285a1a6"
+    },
+    {
+      "path": "data/reportSections.ts",
+      "sourceSha256": "e175ffebaedafdcb81744fcf55b93269177cc65f8c0ab36ced0dddc244000125",
+      "vendorSha256": "e175ffebaedafdcb81744fcf55b93269177cc65f8c0ab36ced0dddc244000125"
+    }
+  ]
+}

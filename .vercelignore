@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+artifacts
+docs
+output
+scripts/*
+!scripts/generate-system-information.mjs
+tests
+.env*
+.vercel
+*.tsbuildinfo
+supabase/.temp/

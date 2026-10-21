@@ -1,0 +1,34 @@
+:root .modal.window-dialog[data-window-size]:has(> .supplier-pic-form) { height: fit-content; min-height: 0; max-height: calc(100dvh - 48px); }
+:root .modal.window-dialog[data-window-size="expanded"]:has(> .supplier-pic-form) { width: min(600px, calc(100vw - 48px)); }
+:root .modal.window-dialog[data-window-size="compact"]:has(> .supplier-pic-form) { width: min(440px, calc(100vw - 96px)); }
+.supplier-pic-cell { min-width: 0; }
+.supplier-pic-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 7px;
+  width: 100%; min-height: 30px; margin: 0; padding: 4px 6px;
+  border: 1px solid transparent; border-radius: var(--ui-radius-control);
+  background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.supplier-pic-trigger span { min-width: 0; overflow-wrap: anywhere; }
+.supplier-pic-trigger svg { flex: 0 0 auto; color: var(--muted); }
+.supplier-pic-trigger:hover { border-color: var(--line); background: var(--surface); }
+.supplier-pic-trigger:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+.supplier-pic-form { width: 100%; max-width: 520px; margin: 0 auto; display: grid; gap: 18px; padding: 20px 0; }
+.supplier-pic-form p { margin: 0; color: var(--muted); }
+.supplier-pic-supplier { font-size: var(--ui-text-section); overflow-wrap: anywhere; }
+.supplier-pic-form > label { display: grid; gap: 7px; font-size: var(--ui-text-label); font-weight: 600; color: var(--muted); }
+.supplier-pic-form select { padding: 7px 10px; }
+.supplier-pic-form footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.supplier-pic-error { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--ink); }
+.supplier-pic-error span { flex: 1 1 200px; overflow-wrap: anywhere; }
+
+
+
+@media (max-width: 600px), (pointer: coarse){
+  .supplier-pic-trigger, .supplier-pic-form select { min-height: 44px; }
+  .supplier-pic-form select { font-size: 16px; }
+  .supplier-pic-form { gap: 16px; padding: 12px 0; }
+}
+@media (max-width: 600px){
+  :root .modal.window-dialog[data-window-size="expanded"]:has(> .supplier-pic-form) { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); }
+  :root .modal.window-dialog[data-window-size="compact"]:has(> .supplier-pic-form) { width: calc(100vw - 36px); max-height: calc(100dvh - 64px); }
+}

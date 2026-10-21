@@ -1,0 +1,43 @@
+/* Wider context column, compact credit summary and queue records. */
+.workspace-window .enquiry-center:not(.enquiry-center-intelligence) { grid-template-columns: minmax(0,1fr) minmax(280px,320px); gap: 18px; }
+.workspace-window .enquiry-buyer-field { display: block; }
+.workspace-window .center-detail-grid { grid-template-columns: minmax(0,1fr); }
+.workspace-window .center-credit-indicator { padding: 11px 12px 9px; }
+.workspace-window .center-credit-numbers { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); margin-top: 9px; gap: 8px; }
+.workspace-window .center-credit-numbers > div { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.workspace-window .center-credit-numbers strong,
+.workspace-window .center-credit-numbers > div:last-child strong { font-size: 19px; }
+.workspace-window .center-credit-track { margin-top: 8px; }
+.workspace-window .center-incoming { margin-top: 12px; }
+.workspace-window .center-incoming > header { min-height: 26px; padding: 0; margin: 0 0 6px; border: 0; gap: 8px; }
+.workspace-window .center-incoming > header h3 { margin: 0; }
+.workspace-window .center-incoming-list { padding: 0; border: 0; }
+.workspace-window .center-incoming-row { margin-bottom: 5px; padding: 0; border-radius: 5px; }
+.workspace-window .center-incoming-open { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 8px; padding: 8px 9px 4px; }
+.workspace-window .center-incoming-open > strong { grid-column: 1; grid-row: 1; }
+.workspace-window .center-incoming-open > small { grid-column: 2; grid-row: 1; justify-content: flex-end; white-space: nowrap; }
+.workspace-window .center-incoming-open > span { grid-column: 1 / -1; grid-row: 2; }
+.workspace-window .center-lifecycle { padding: 3px 9px 7px; gap: 5px; }
+.workspace-window .center-lifecycle button { flex: 1; padding: 4px 5px; }
+@media(max-width:1120px) {
+  .workspace-window .enquiry-center:not(.enquiry-center-intelligence) { grid-template-columns: minmax(0,1fr) 280px; gap: 14px; }
+}
+@media(max-width:850px) {
+  .workspace-window .enquiry-center:not(.enquiry-center-intelligence) { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  .workspace-window .center-sidebar { padding-top: 10px; }
+  .workspace-window .center-incoming-list { max-height: 260px; }
+}
+
+.workspace-window .center-credit-limit { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 10px; color: var(--muted); }
+.workspace-window .center-credit-limit strong { color: var(--ink); font-size: 14px; }
+.workspace-window .center-credit-indicator .center-credit-track { height: 12px; border-radius: 3px; background: #b4d9bc; overflow: hidden; }
+.workspace-window .center-credit-indicator .center-credit-track > span { display: block; height: 100%; background: #24788e; box-shadow: none; }
+.workspace-window .center-credit-legend { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 10px; color: var(--muted); }
+.workspace-window .center-credit-legend > span { display: inline-flex; align-items: center; gap: 4px; }
+.workspace-window .center-credit-legend i { width: 7px; height: 7px; background: #24788e; border-radius: 2px; }
+.workspace-window .center-credit-legend > span:last-child i { background: #b4d9bc; }
+
+:root[data-theme="dark"] .workspace-window .center-credit-indicator .center-credit-track { background: #b4d9bc; }
+
+/* Keep the manual vessel lookup next to its field at phone and desktop widths. */
+.enquiry-imo-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 8px; min-width: 0; }

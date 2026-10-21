@@ -1,0 +1,22 @@
+/* Keep the site-wide presentation consistent, including lazy-loaded workspaces. */
+#root,
+#root * {
+  text-transform: uppercase !important;
+}
+
+/* Addresses and credentials keep their original case, including revealed passwords. */
+#root :is(
+  input[type="email" i],
+  input[type="password" i],
+  [inputmode="email" i],
+  [autocomplete~="email" i],
+  [autocomplete~="current-password" i],
+  [autocomplete~="new-password" i],
+  [autocomplete~="one-time-code" i],
+  [data-preserve-case],
+  [data-email-value],
+  a[href^="mailto:" i]
+),
+#root [data-preserve-case] * {
+  text-transform: none !important;
+}

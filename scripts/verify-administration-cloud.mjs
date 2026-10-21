@@ -1,0 +1,145 @@
+/** Operator-only ECO verification. Creates two marked disposable identities, never touches staff or sends invitations. */
+import { chromium, expect } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import assert from 'node:assert/strict';
+import { ecoConnections as target } from '../config/ecoConnections.ts';
+import { installStagingCookies } from '../tests/fixtures/protection-cookies.mjs';
+const root=fileURLToPath(new URL('..',import.meta.url)),runId=randomBytes(8).toString('hex'),output=root+'output/administration-cloud/'+runId;
+const quote=v=>"'"+String(v).replaceAll("'","''")+"'";
+const run=args=>execFileSync('pnpm',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:90000,maxBuffer:4*1024*1024});
+const sb=args=>run(['dlx','--allow-build=supabase','supabase@2.120.0',...args]);
+const vc=args=>run(['dlx','vercel@63.1.2',...args]);
+const privateWrite=(path,data)=>{writeFileSync(path,data,{mode:0o600});chmodSync(path,0o600);};
+let step='preflight',base,browser,service,contexts=[],identities=[],records=[],completed=false,cleaned=false;
+const save=()=>privateWrite(output+'/recovery.private.json',JSON.stringify({runId,step,base,identities,records,completed,cleaned},null,2));
+const mark=value=>{step=value;save();console.log(JSON.stringify({step}));};
+const rows=sql=>{privateWrite(output+'/query.private.sql',sql);const r=JSON.parse(sb(['db','query','--linked','--project-ref',target.supabaseProjectRef,'--file',output+'/query.private.sql','--output','json']));return Array.isArray(r)?r:r.rows;};
+const post=(ctx,path,data,extra={})=>ctx.request.post(base+path,{headers:{origin:base,'x-eco-request':'1',...extra},data,timeout:45000});
+const get=(ctx,path)=>ctx.request.get(base+path,{timeout:45000});
+const okJson=async response=>{
+ if(response.status()!==200){const body=await response.json().catch(()=>({}));const url=new URL(response.url());throw Object.assign(new Error('Cloud API check failed.'),{name:'CloudApiCheckError',apiStatus:response.status(),apiPath:url.pathname,apiQueryKeys:[...url.searchParams.keys()],apiMessage:typeof body.message==='string'?body.message.slice(0,160):undefined});}
+ return response.json();
+};
+async function verify(){
+ assert.ok(process.argv.includes('--allow-cloud-mutations'),'Disposable cloud fixtures require explicit operator flag.');
+ base=process.env.ECO_VERIFY_ORIGIN;assert.ok(base&&new URL(base).origin===base&&new URL(base).protocol==='https:');
+ assert.ok(base===target.productionOrigin || /^[a-z0-9-]+\.vercel\.app$/.test(new URL(base).hostname));
+ assert.equal(JSON.parse(sb(['whoami','--output-format','json'])).username,'hocheunglai-oss');
+ const project=JSON.parse(sb(['projects','list','--output','json'])).find(p=>p.id===target.supabaseProjectRef);
+ assert.equal(project?.organization_id,target.supabaseOrganizationId);assert.equal(project?.region,target.supabaseRegion);assert.equal(project?.name,'ECO');assert.equal(project?.status,'ACTIVE_HEALTHY');
+ const deployment=JSON.parse(vc(['inspect',base,'--json','--scope',target.vercel.teamId]));
+ assert.equal(deployment.readyState,'READY');assert.equal(deployment.name,target.vercel.projectName);assert.ok(deployment.builds?.some(b=>b.output?.some(o=>o.digest?.startsWith(target.vercel.projectId+'/'))));
+ if(process.env.ECO_VERIFY_DEPLOYMENT_ID)assert.equal(deployment.id,process.env.ECO_VERIFY_DEPLOYMENT_ID);
+ mkdirSync(output,{recursive:true,mode:0o700});save();
+ assert.ok(rows("select version from supabase_migrations.schema_migrations where version='20261014095316'").length===1,'Administration migration must be applied first.');
+ const keys=JSON.parse(readFileSync(root+'output/access/eco-api-keys.private.json','utf8'));
+ service=createClient(`https://${target.supabaseProjectRef}.supabase.co`,keys.find(k=>k.type==='secret').api_key,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(20000)})}});
+ try{
+  mark('create-disposable-identities');const office=rows("select id,name from eco_private.offices where id<>'CREDIT' order by name limit 1")[0];assert.ok(office);
+  browser=await chromium.launch({headless:true});
+  for(const role of ['admin','trader']){
+   const id=randomUUID(),email=`eco-administration-check-${runId}-${role}@example.com`,password='EcoAdmin9-'+randomBytes(20).toString('base64url');identities.push({id,email});save();
+   const created=await service.auth.admin.createUser({id,email,password,email_confirm:true,app_metadata:{eco_verification:runId}});assert.ifError(created.error);assert.equal(created.data.user.id,id);
+   const profile={displayName:`ECO ADMIN CHECK ${role.toUpperCase()}`,officeId:office.id,isAdmin:role==='admin',isActive:true,isManager:false,isSpcTrader:false,sourceSpcId:randomUUID()};
+   rows(`begin;select eco_private.provision_user(${quote(id)}::uuid,${quote(JSON.stringify(profile))}::jsonb);update eco_private.users set activated_at=now(),password_prompt_dismissed_at=now() where id=${quote(id)}::uuid;commit;`);
+   const context=await browser.newContext();await installStagingCookies(context,base);contexts.push(context);
+   const login=await okJson(await post(context,'/api/access/login',{email,password}));assert.equal(login.user.id,id);
+  }
+  const [admin,trader]=contexts;const anonymous=await browser.newContext();await installStagingCookies(anonymous,base);contexts.push(anonymous);
+  mark('authentication-and-csrf-boundaries');
+  for(const path of ['feedback','feedback/contributions','feedback/triage','imports','imports/begin','imports/transition','imports/retry','audit','health','system','system-health','system-information']){const response=await get(anonymous,'/api/admin/'+path);assert.equal(response.status(),401);assert.match(response.headers()['cache-control'],/no-store/);}
+  for(const path of ['audit','system-health','system-information'])assert.equal((await get(trader,'/api/admin/'+path)).status(),403);
+  assert.ok([401,503].includes((await post(anonymous,'/api/monitor/evidence',{})).status()));
+  const data={requestId:randomUUID(),title:`CLOUD FIXTURE ${runId}`,description:'SYNTHETIC PRIVATE DESCRIPTION - MUST NOT APPEAR IN AUDIT',category:'issue',pagePath:'/settings'};
+  assert.equal((await post(trader,'/api/admin/feedback',data,{origin:'https://untrusted.example'})).status(),403);
+  assert.equal((await post(trader,'/api/admin/feedback',{...data,submitterId:identities[0].id})).status(),400);
+  mark('shared-feedback-idempotency-and-triage');
+  const item=(await okJson(await post(trader,'/api/admin/feedback',data))).item;records.push({kind:'feedback',id:item.id});save();assert.equal(item.submitterId,identities[1].id);
+  assert.equal((await okJson(await post(trader,'/api/admin/feedback',data))).item.id,item.id);
+  assert.equal((await post(trader,'/api/admin/feedback',{...data,title:'Different payload'})).status(),409);
+  const other=(await okJson(await post(admin,'/api/admin/feedback',{...data,requestId:randomUUID(),title:`ADMIN FIXTURE ${runId}`}))).item;records.push({kind:'feedback',id:other.id});save();
+  const own=await okJson(await get(trader,'/api/admin/feedback?scope=all&search='+runId));assert.deepEqual(own.items.map(x=>x.id),[item.id]);
+  const all=await okJson(await get(admin,'/api/admin/feedback?search='+runId));assert.equal(all.items.length,2);
+  const mine=await okJson(await get(admin,'/api/admin/feedback?scope=mine&search='+runId));assert.deepEqual(mine.items.map(x=>x.id),[other.id]);
+  const triage={requestId:randomUUID(),id:item.id,expectedRevision:1,status:'resolved',priority:'high',assigneeId:identities[0].id,resolution:'Synthetic verification only'};
+  assert.equal((await post(trader,'/api/admin/feedback/triage',triage)).status(),403);
+  const resolved=(await okJson(await post(admin,'/api/admin/feedback/triage',triage))).item;assert.equal(resolved.revision,2);assert.equal(resolved.status,'resolved');
+  assert.equal((await okJson(await post(admin,'/api/admin/feedback/triage',triage))).item.revision,2);
+  assert.equal((await post(admin,'/api/admin/feedback/triage',{...triage,requestId:randomUUID()})).status(),409);
+  const duplicate=(await okJson(await post(trader,'/api/admin/feedback',{...data,requestId:randomUUID(),title:'  '+data.title.toLowerCase()+'  ',description:data.description.toLowerCase()}))).item;records.push({kind:'feedback',id:duplicate.id});save();assert.notEqual(duplicate.id,item.id);
+  assert.equal((await okJson(await get(trader,'/api/admin/feedback/contributions'))).count,1);
+  assert.equal((await okJson(await get(trader,'/api/admin/feedback/contributions?period=all'))).count,1);
+  const audit=await okJson(await get(admin,'/api/admin/audit?search='+item.id));assert.ok(audit.items.some(x=>x.action==='feedback-created'));assert.ok(audit.items.some(x=>x.action==='feedback-triaged'));assert.doesNotMatch(JSON.stringify(audit),/SYNTHETIC PRIVATE DESCRIPTION/);
+  mark('import-owner-transitions-and-safe-retry');
+  const source={requestId:randomUUID(),kind:'enquiry',sourceName:`fixture-${runId}`,sourceType:'text/plain'};
+  const job=(await okJson(await post(trader,'/api/admin/imports/begin',source))).item;records.push({kind:'import',id:job.id});save();assert.equal(job.provenance,'client-reported');
+  const transition={requestId:randomUUID(),id:job.id,expectedRevision:1,status:'failed',warningCount:1,errorCode:'FIXTURE_PARSER_FAILED'};
+  assert.equal((await post(admin,'/api/admin/imports/transition',transition)).status(),403);
+  assert.equal((await post(trader,'/api/admin/imports/transition',{...transition,status:'published'})).status(),400);
+  assert.equal((await okJson(await post(trader,'/api/admin/imports/transition',transition))).item.status,'failed');
+  const retry={requestId:randomUUID(),id:job.id,expectedRevision:2};const waiting=(await okJson(await post(admin,'/api/admin/imports/retry',retry))).item;assert.equal(waiting.status,'awaiting-retry');assert.equal(waiting.attempt,1);
+  const resumed=(await okJson(await post(trader,'/api/admin/imports/begin',{...source,requestId:randomUUID(),retryOf:job.id,expectedRevision:waiting.revision}))).item;assert.equal(resumed.attempt,2);
+  const ready=(await okJson(await post(trader,'/api/admin/imports/transition',{...transition,requestId:randomUUID(),expectedRevision:resumed.revision,status:'awaiting-review',warningCount:0,errorCode:''}))).item;assert.equal(ready.status,'awaiting-review');
+  assert.equal((await okJson(await get(trader,'/api/admin/imports?search='+runId))).items.length,1);
+  mark('effective-preview-and-operational-evidence');
+  assert.equal((await post(admin,'/api/access/preview',{role:'trader',officeId:office.id})).status(),200);
+  assert.equal((await get(admin,'/api/admin/audit')).status(),403);assert.equal((await get(admin,'/api/admin/system-health')).status(),403);
+  assert.equal((await post(admin,'/api/admin/feedback',{...data,requestId:randomUUID()})).status(),403);
+  assert.equal((await post(admin,'/api/admin/imports/begin',{...source,requestId:randomUUID()})).status(),403);
+  assert.equal((await post(admin,'/api/access/preview/end',{})).status(),200);
+  const health=await okJson(await get(admin,'/api/admin/system-health'));assert.equal(health.schemaVersion,1);assert.ok(health.checks.some(x=>x.id==='database'&&['healthy','degraded'].includes(x.status)));
+  const system=await okJson(await get(admin,'/api/admin/system-information'));assert.equal(system.targets.databaseProjectRef,target.supabaseProjectRef);assert.equal(system.targets.databaseRegion,target.supabaseRegion);assert.ok(system.build.sourceSha256);assert.ok(system.migrations.bundledHead>='20261014095316');
+  mark('browser-feedback-to-admin-triage-and-own-status');
+  const traderPage=await trader.newPage(),adminPage=await admin.newPage(),pageErrors=[];
+  for(const page of [traderPage,adminPage]){page.setDefaultTimeout(30000);page.on('pageerror',()=>pageErrors.push(true));await page.setViewportSize({width:1440,height:1000});await page.goto(base);await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();}
+  await traderPage.getByRole('button',{name:'Feedback for ecosystem',exact:true}).click();
+  const composer=traderPage.getByRole('form',{name:'Submit feedback',exact:true});await expect(composer).toBeVisible();
+  await composer.getByLabel('Title',{exact:true}).fill(`BROWSER FIXTURE ${runId}`);
+  await composer.getByLabel('Details',{exact:true}).fill('Synthetic browser verification of shared feedback and administrator resolution.');
+  await composer.getByLabel('Page (optional)',{exact:true}).selectOption('enquiry');
+  const submission=traderPage.waitForResponse(r=>r.url()===base+'/api/admin/feedback'&&r.request().method()==='POST');
+  await composer.getByRole('button',{name:'Submit feedback',exact:true}).click();const uiItem=(await okJson(await submission)).item;records.push({kind:'feedback',id:uiItem.id});save();
+  assert.equal(uiItem.submitterId,identities[1].id);assert.equal(uiItem.pagePath,'/enquiry');await expect(composer.getByRole('status')).toContainText(/Feedback submitted/i);
+  await traderPage.screenshot({path:output+'/browser-feedback-submitted.png',fullPage:true});
+  await adminPage.getByRole('button',{name:'Settings',exact:true}).click();await adminPage.getByRole('button',{name:'Administration',exact:true}).click();
+  await adminPage.getByLabel('Search Feedback',{exact:true}).fill(uiItem.title);await adminPage.getByRole('button',{name:new RegExp(uiItem.title)}).click();
+  const details=adminPage.getByRole('complementary',{name:'Feedback details',exact:true});await expect(details).toBeVisible();
+  await details.getByLabel('Status',{exact:true}).selectOption('resolved');await details.getByLabel('Assigned to',{exact:true}).selectOption(identities[0].id);
+  await details.getByLabel('Resolution',{exact:true}).fill('Verified shared browser submission and administrator resolution.');
+  const saved=adminPage.waitForResponse(r=>r.url()===base+'/api/admin/feedback/triage'&&r.request().method()==='POST');
+  await details.getByRole('button',{name:'Save changes',exact:true}).click();const uiResolved=(await okJson(await saved)).item;assert.equal(uiResolved.status,'resolved');assert.equal(uiResolved.assigneeId,identities[0].id);
+  await expect(adminPage.locator('.admin-notice[role=status]')).toContainText(/Feedback updated/i);const resolvedRow=adminPage.getByRole('button',{name:new RegExp(uiItem.title)});await expect(resolvedRow).toBeVisible();await expect(resolvedRow).toContainText(/resolved/i);await expect(adminPage.getByText('Loading feedback…',{exact:true})).toHaveCount(0);await adminPage.screenshot({path:output+'/browser-admin-resolved.png',fullPage:true});
+  await traderPage.locator('.eco-feedback-portal > .tabs').getByRole('button',{name:'My feedback',exact:true}).click();
+  const ownFeedback=traderPage.getByRole('region',{name:'My feedback',exact:true});const ownRow=ownFeedback.locator('article').filter({hasText:uiItem.title});
+  await expect(ownRow).toContainText(/resolved/i);await expect(ownRow).toContainText(/Verified shared browser submission and administrator resolution/i);
+  await traderPage.setViewportSize({width:390,height:844});await traderPage.screenshot({path:output+'/browser-trader-status-mobile.png',fullPage:true});
+  assert.equal((await okJson(await get(trader,'/api/admin/feedback/contributions'))).count,2);assert.equal(pageErrors.length,0);
+  completed=true;save();privateWrite(output+'/verification.json',JSON.stringify({runId,base,deploymentId:deployment.id,completed:true,browserFeedback:true,browserAdminTriage:true,browserOwnStatus:true,feedback:true,revisionConflict:true,idempotency:true,ownOnly:true,audit:true,imports:true,rolePreview:true,health:true,systemInformation:true},null,2));
+ }finally{
+  for(const c of contexts)await post(c,'/api/access/logout',{}).catch(()=>{});await browser?.close();mark('cleanup-owned-fixtures');
+  const candidates=rows(`select id,email,raw_app_meta_data->>'eco_verification' as marker from auth.users where email in (${identities.map(x=>quote(x.email)).join(',')||'null'})`);
+  assert.ok(candidates.every(x=>x.marker===runId&&identities.some(i=>i.id===x.id&&i.email===x.email)),'Fixture ownership mismatch: no cleanup performed.');
+  if(candidates.length){const ids=candidates.map(x=>quote(x.id)+'::uuid').join(',');
+   rows(`begin;
+    delete from eco_private.feedback_contributions where user_id in (${ids});
+    delete from eco_private.administration_events where actor_id in (${ids});
+    delete from eco_private.administration_requests where actor_id in (${ids});
+    delete from eco_private.feedback where submitter_id in (${ids});
+    delete from eco_private.import_jobs where submitter_id in (${ids});
+    delete from eco_private.access_audit where actor_id in (${ids}) or (actor_id is null and action='provision-user' and target_id in (${ids}));
+    delete from eco_private.phone_change_requests where user_id in (${ids});
+    delete from eco_private.admin_operations where actor_id in (${ids}) or target_id in (${ids});
+    delete from eco_private.revoked_sessions where user_id in (${ids});
+    delete from eco_private.role_previews where user_id in (${ids});
+    delete from eco_private.users where id in (${ids});commit;`);
+   for(const c of candidates)assert.ifError((await service.auth.admin.deleteUser(c.id)).error);
+  }
+  assert.equal(rows(`select id from auth.users where email in (${identities.map(x=>quote(x.email)).join(',')||'null'})`).length,0);
+  cleaned=true;save();privateWrite(output+'/query.private.sql','-- Completed fixture cleanup.');console.log(JSON.stringify({completed,cleaned,report:output+'/recovery.private.json'}));
+ }
+}
+verify().catch(error=>{console.error(JSON.stringify({failed:true,step,name:error.name,apiStatus:error.apiStatus,apiPath:error.apiPath,apiQueryKeys:error.apiQueryKeys,apiMessage:error.apiMessage,actual:typeof error.actual==='number'?error.actual:undefined,expected:typeof error.expected==='number'?error.expected:undefined,location:error.stack?.split('\n').filter(l=>l.includes('verify-administration-cloud.mjs:')).slice(0,3)}));process.exitCode=1;});

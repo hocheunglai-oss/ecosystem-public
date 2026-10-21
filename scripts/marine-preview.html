@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ECOSYSTEM · Marine film workbench</title>
+    <style>
+      body {
+        margin: 0;
+        background: #071a2b;
+        color: #dce7ee;
+        font: 14px system-ui;
+      }
+      header {
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      strong {
+        letter-spacing: 0.15em;
+      }
+      canvas {
+        width: 100%;
+        display: block;
+        max-height: calc(100vh - 70px);
+        object-fit: contain;
+      }
+      input {
+        flex: 1;
+      }
+      button {
+        background: #cfef80;
+        border: 0;
+        border-radius: 4px;
+        padding: 8px 16px;
+        color: #142b20;
+      }
+      #status {
+        min-width: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>ECOSYSTEM / MARINE FILM</strong><button id="play">Play</button
+      ><input
+        id="time"
+        type="range"
+        min="0"
+        max="120"
+        value="0"
+        step=".05"
+      /><span id="status">Preparing assets</span>
+    </header>
+    <canvas id="scene" width="1672" height="940"></canvas>
+    <script type="module" src="/scripts/marine-preview.ts"></script>
+  </body>
+</html>

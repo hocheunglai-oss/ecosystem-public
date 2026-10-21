@@ -1,0 +1,43 @@
+{
+  "name": "ecosystem",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173",
+    "build": "node scripts/generate-system-information.mjs && tsc -b && tsc -p tsconfig.server.json && vite build && node scripts/generate-system-information.mjs --check",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test": "pnpm run system:generate && tsx --test tests/*.test.ts",
+    "test:access-db": "node --test tests/access-sql.test.mjs",
+    "security:build": "node scripts/check-build-security.mjs",
+    "security:source": "node scripts/check-public-source.mjs",
+    "security:inventory": "node scripts/dependency-inventory.mjs",
+    "system:verify": "node scripts/generate-system-information.mjs --check",
+    "test:admin-db": "node --test tests/admin-sql.test.mjs",
+    "test:supplier-db": "node --test tests/suppliers-sql.test.mjs",
+    "system:generate": "node scripts/generate-system-information.mjs"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.117.3",
+    "drizzle-orm": "0.45.4",
+    "lucide-react": "^1.47.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "mediabunny": "^1.59.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

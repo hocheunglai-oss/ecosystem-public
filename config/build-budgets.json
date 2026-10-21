@@ -1,0 +1,6 @@
+{
+  "description": "Regression ceilings for the current prototype, not performance targets or a latency guarantee. Lower these as business screens are split and media is optimized.",
+  "maxJavaScriptGzipBytes": 280000,
+  "maxCssGzipBytes": 65000,
+  "maxTotalBuildBytes": 150000000
+}

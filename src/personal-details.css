@@ -1,0 +1,29 @@
+.personal-details {
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--ui-font);
+}
+.personal-details h2 {
+  margin: 0 0 16px;
+  font-family: var(--ui-font-heading);
+  font-size: var(--ui-text-section);
+  font-weight: var(--ui-weight-heading);
+}
+.personal-details dl { display: grid; gap: 0; margin: 0; }
+.personal-details dl > div { min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.personal-details dl > div:first-child { padding-top: 0; }
+.personal-details dt { color: var(--muted); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
+.personal-details dd { margin: 5px 0 0; color: var(--ink); font-size: var(--ui-text-body); overflow-wrap: anywhere; }
+.personal-phone-value { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.personal-phone-status { display: grid; gap: 3px; margin: 10px 0 0; color: var(--muted); font-size: var(--ui-text-label); }
+.personal-phone-status strong { font-weight: var(--ui-weight-label); }
+.personal-phone-form { display: grid; gap: 10px; margin-top: 12px; }
+.personal-phone-form label { display: grid; gap: 6px; color: var(--ink); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
+.personal-phone-form input { width: 100%; min-width: 0; min-height: var(--ui-field-height); padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--ui-radius-control); background: var(--ui-control-surface); color: var(--ink); font-family: var(--ui-font); font-size: var(--ui-text-body); }
+.personal-phone-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.personal-phone-error { margin-top: 10px; color: var(--ui-danger); font-size: var(--ui-text-body); }
+.personal-phone-error p { margin: 0 0 6px; }
+@media (max-width: 760px) {
+  .personal-phone-actions > button { flex: 1; }
+  .personal-phone-form input { font-size: 16px; }
+}

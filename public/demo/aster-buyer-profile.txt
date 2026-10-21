@@ -1,0 +1,17 @@
+ECOSYSTEM — FICTIONAL BUYER PROFILE FOR DEMONSTRATION
+
+STANDARD NAME: ASTER OCEAN NAVIGATION PTE LTD
+CUSTOMER ID: ECO20001
+GROUP: ASTER OCEAN GROUP
+PERSON IN CHARGE: SAMPLE TRADER
+OFFICE: HKG
+CONTACT: ASTER FLEET PURCHASING
+EMAIL: purchasing@aster.example
+APPROVED CREDIT: USD 1,800,000
+PAYMENT TERMS: 30 DAYS
+RISK RATING: 1
+PARENT COMPANY GUARANTEE: YES
+
+All company identities, addresses, financial positions and commercial examples in
+this file are fictional. This document is a local demo attachment, not a credit
+approval, guarantee or operational instruction.

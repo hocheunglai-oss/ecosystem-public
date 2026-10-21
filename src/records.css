@@ -1,0 +1,75 @@
+.record-sheet { --record-cell: #fff; display: flex; flex-direction: column; height: 100%; min-height: 360px; min-width: 0; gap: 16px; color: var(--ink); }
+:root[data-theme="dark"] .record-sheet { --record-cell: var(--theme-field,#0d1a28); }
+.record-sheet__toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.record-sheet__toolbar label, .record-sheet__pagination label { display: flex; gap: 6px; flex-direction: column; font-size: 11px; color: var(--muted); }
+.record-sheet :is(input,select) { font: inherit; color: var(--ink); background: var(--ws-field,#fff); border: 1px solid var(--line); border-radius: 5px; height: 34px; padding: 6px 9px; min-width: 0; }
+.record-sheet__toolbar .record-sheet__search { flex-direction: row; align-items: center; position: relative; flex: 1; min-width: 220px; max-width: 400px; }
+.record-sheet__search svg { position: absolute; left: 10px; }
+.record-sheet__search input { width: 100%; padding-left: 32px; }
+.record-sheet .button { min-height: 34px; padding: 7px 10px; font-size: 11px; }
+.record-sheet__export { margin-left: auto; }
+.record-sheet__grid { overflow: auto; max-height: 65vh; flex: 1; min-height: 180px; border: 1px solid var(--line); border-radius: 5px; background: var(--ws-field,#fff); }
+.record-sheet table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 11px; }
+.record-sheet :is(th,td) { box-sizing: border-box; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; height: 38px; padding: 8px 10px; white-space: nowrap; min-width: 100px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; background: var(--record-cell); color: var(--ink); }
+.record-sheet th { position: sticky; top: 0; z-index: 3; color: var(--muted); background: var(--ws-surface,#edf4f8); text-transform: none; letter-spacing: 0; font-size: 10px; }
+.record-sheet th button { border: 0; padding: 0; display: flex; align-items: center; gap: 7px; color: inherit; font: inherit; background: transparent; cursor: pointer; }
+.record-sheet th small { font-size: 9px; font-weight: 400; }
+.record-sheet .record-sheet__date { position: sticky; left: 0; z-index: 2; width: 106px; min-width: 106px; max-width: 106px; }
+.record-sheet .record-sheet__vessel { position: sticky; left: 106px; z-index: 2; width: 190px; min-width: 190px; max-width: 190px; box-shadow: 2px 0 0 var(--line); }
+.record-sheet th:is(.record-sheet__date,.record-sheet__vessel) { z-index: 4; }
+.record-sheet__vessel button { max-width: 100%; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 11px; }
+.record-sheet tbody:not(.record-sheet__fixture) tr:nth-child(even) td,
+.record-sheet .record-sheet__fixture:nth-of-type(even) td { background: color-mix(in srgb, var(--record-cell) 94%, var(--muted) 6%); }
+.record-sheet tbody:not(.record-sheet__fixture) tr:hover td,
+.record-sheet .record-sheet__fixture:hover td { background: color-mix(in srgb, var(--record-cell) 90%, var(--ws-cyan,#239db0) 10%); }
+.record-sheet__fixture td { height: 32px; padding-top: 6px; padding-bottom: 6px; }
+.record-sheet__fixture td[rowspan] { vertical-align: top; padding-top: 9px; }
+.record-sheet__fixture tr:not(:last-child) td:not([rowspan]) { border-bottom-color: color-mix(in srgb, var(--line) 45%, transparent); }
+.record-sheet .record-sheet__number { text-align: right; font-variant-numeric: tabular-nums; }
+.record-sheet details p { white-space: pre-wrap; min-width: 180px; max-width: 240px; line-height: 1.5; overflow-wrap: anywhere; }
+.record-sheet details summary { cursor: pointer; }
+.record-sheet__pagination { display: flex; align-items: center; gap: 20px; font-size: 11px; }
+.record-sheet__pagination label { flex-direction: row; align-items: center; margin-left: auto; }
+.record-sheet__pagination > div { display: flex; align-items: center; gap: 12px; }
+.record-sheet__empty { padding: 24px; color: var(--muted); }
+.record-sheet__error { color: var(--theme-rose,#aa3b45); font-size: 12px; margin: 0; }
+@media(max-width:700px) {
+ .record-sheet__toolbar { gap: 10px; }
+ .record-sheet__toolbar .record-sheet__search { min-width: 100%; max-width: none; }
+ .record-sheet__toolbar label { flex: 1; }
+ .record-sheet :is(input,select) { min-height: 40px; max-width: 100%; }
+ .record-sheet__toolbar select { width: 100%; }
+ .record-sheet__grid { min-height: 300px; max-height: 62vh; }
+ .record-sheet .record-sheet__date { position: static; }
+ .record-sheet .record-sheet__vessel { left: 0; min-width: 150px; max-width: 150px; width: 150px; }
+ .record-sheet th.record-sheet__date { position: sticky; }
+ .record-sheet__pagination { flex-wrap: wrap; gap: 10px; }
+ .record-sheet__pagination > div { width: 100%; justify-content: space-between; }
+ .record-sheet .button { min-height: 40px; }
+}
+.workspace-window:is([data-workspace="fixtures"],[data-workspace="lost"]) { width: min(1600px, calc(100vw - 44px)); }
+.workspace-window:is([data-workspace="fixtures"],[data-workspace="lost"]) .window-content { display: flex; flex-direction: column; overflow: hidden; min-height: 0; padding: 20px 24px; }
+.workspace-window:is([data-workspace="fixtures"],[data-workspace="lost"]) .window-content > .workspace-module:not([hidden]),
+.workspace-module-fixtures, .workspace-module-lost { height: 100%; min-height: 0; }
+.record-sheet { min-height: 0; }
+.record-sheet__grid { min-height: 120px; max-height: none; }
+.record-sheet__toolbar, .record-sheet__pagination { flex-shrink: 0; }
+@media(max-width:700px) {
+ .workspace-window:is([data-workspace="fixtures"],[data-workspace="lost"]) .window-content { padding: 16px; }
+}
+@media(max-height:540px) {
+ .workspace-window:is([data-workspace="fixtures"],[data-workspace="lost"]) .window-content { overflow: auto; }
+ .record-sheet { min-height: 340px; }
+}
+@media(max-width:700px) {
+ .record-sheet__toolbar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; }
+ .record-sheet__toolbar .record-sheet__search { grid-column: 1 / -1; min-width: 0; }
+ .record-sheet__toolbar label { min-width: 0; }
+ .record-sheet__export { margin-left: 0; justify-content: center; }
+}
+@media(max-width:380px) {
+ .record-sheet__toolbar { grid-template-columns: 1fr; }
+ .record-sheet__toolbar label { flex-direction: row; align-items: center; justify-content: space-between; }
+ .record-sheet__toolbar label:not(.record-sheet__search) :is(select,input) { width: 76%; }
+ .record-sheet__export { justify-self: end; }
+}

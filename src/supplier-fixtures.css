@@ -1,0 +1,24 @@
+.supplier-fixtures { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.supplier-fixtures__search { display: flex; align-items: center; gap: 8px; width: min(100%, 420px); color: var(--muted); }
+.supplier-fixtures__search input { min-width: 0; width: 100%; }
+.supplier-fixtures :is(input, select) { min-height: 34px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--ws-field, #fff); color: var(--ink); font: inherit; font-size: 11px; }
+.supplier-fixtures__table-wrap { min-width: 0; max-height: min(55vh, 560px); overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--ws-field, #fff); }
+.supplier-fixtures table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 11px; }
+.supplier-fixtures :is(th, td) { padding: 9px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; background: var(--ws-field, #fff); color: var(--ink); }
+.supplier-fixtures th { position: sticky; top: 0; z-index: 1; background: var(--ws-surface, #edf4f8); color: var(--muted); font-size: 10px; }
+.supplier-fixtures th button { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.supplier-fixtures th small { font-size: 9px; font-weight: 400; }
+.supplier-fixtures td[rowspan] { vertical-align: top; }
+.supplier-fixtures tbody:nth-of-type(even) td { background: color-mix(in srgb, var(--ws-field, #fff) 94%, var(--muted) 6%); }
+.supplier-fixtures .supplier-fixtures__number { text-align: right; font-variant-numeric: tabular-nums; }
+.supplier-fixtures__pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 11px; }
+.supplier-fixtures__pagination label, .supplier-fixtures__pagination > div { display: flex; align-items: center; gap: 8px; }
+.supplier-fixtures__pagination label { margin-left: auto; }
+.supplier-fixtures__pagination button { display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--line); border-radius: 4px; background: var(--ws-field, #fff); color: var(--ink); cursor: pointer; }
+.supplier-fixtures__pagination button:disabled { cursor: default; opacity: .45; }
+.supplier-fixtures__empty { padding: 16px; color: var(--muted); font-size: 12px; }
+@media (max-width: 600px) {
+  .supplier-fixtures :is(input, select) { min-height: 40px; }
+  .supplier-fixtures__pagination > div { width: 100%; justify-content: space-between; }
+  .supplier-fixtures__pagination button { min-width: 40px; min-height: 40px; }
+}

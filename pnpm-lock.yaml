@@ -46,8 +46,8 @@ importers:
         specifier: ^6.1.1
         version: 6.1.1(vite@8.3.3(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15))
       mediabunny:
-        specifier: ^1.59.1
-        version: 1.59.1
+        specifier: ^1.61.6
+        version: 1.61.6
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -796,8 +796,8 @@ packages:
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  mediabunny@1.59.1:
-    resolution: {integrity: sha512-K6vFvOZ7x36fqP3MaFFWFLYEfGF192qY4LQ6QB+L5eB74SUJjEgq9ZRztYpk9RJOjSyxooPZBV4WE0k8PKcjaQ==}
+  mediabunny@1.61.6:
+    resolution: {integrity: sha512-VHEZ53/7jGl4dQ+uOdndsZufFYwEUFWv9UXgvrGun3OapyzoqI9iaPOD7z3xxY/nAttLZBNwswgJzMtGJAquOQ==}
 
   nanoid@3.3.19:
     resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
@@ -1313,7 +1313,7 @@ snapshots:
     dependencies:
       react: 19.3.0
 
-  mediabunny@1.59.1:
+  mediabunny@1.61.6:
     dependencies:
       '@types/dom-mediacapture-transform': 0.1.12
       '@types/dom-webcodecs': 0.1.13

@@ -66,6 +66,15 @@ async function openEnquiries(page) {
   await expect(panel).toBeVisible();
   return panel;
 }
+export function matchesDraftSave(response, expected) {
+  try {
+    const request = response.request();
+    if (request.method() !== 'POST' || response.url() !== expected.base + '/api/enquiries/records') return false;
+    const body = request.postDataJSON();
+    return body?.dataMode === 'live' && body.action === 'save' &&
+      body.source?.rawText === expected.rawText && body.reviewed?.vessel === expected.vessel;
+  } catch { return false; }
+}
 async function browserWorkflow(identity, password, engine, width, theme, label) {
   const ctx = await context(identity, password, engine, {
     viewport: { width, height: 1000 }, isMobile: width < 760, hasTouch: width < 760,
@@ -81,11 +90,23 @@ async function browserWorkflow(identity, password, engine, width, theme, label) 
     let panel = await openEnquiries(page);
     await panel.getByLabel('Raw enquiry', { exact: true }).fill(draft.source.rawText);
     await expect(panel.getByRole('button', { name: 'Send to SPC', exact: true })).toBeEnabled();
-    await panel.getByRole('button', { name: 'Save draft', exact: true }).click();
-    await expect(panel.getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true })).toBeVisible();
+    // Unsaved local drafts already expose the same Open <vessel> button. Wait
+    // for this exact save's response before testing durable server state.
+    const [response] = await Promise.all([
+      page.waitForResponse(response => matchesDraftSave(response, {
+        base: manifest.base, rawText: draft.source.rawText, vessel: draft.reviewed.vessel,
+      })),
+      panel.getByRole('button', { name: 'Save draft', exact: true }).click(),
+    ]);
+    const receipt = await result(response);
+    assert.equal(receipt.item.id, response.request().postDataJSON().id);
+    assert.equal(receipt.item.ownerId, identity.id);
+    assert.equal(receipt.item.vessel, draft.reviewed.vessel);
+    assert.equal(receipt.item.status, 'draft');
+    await expect(panel.locator(`[data-commercial-id="${receipt.item.id}"]`).getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true })).toBeVisible();
     const list = await result(await get(ctx));
-    const saved = list.items.find(item => item.vessel === draft.reviewed.vessel);
-    assert.ok(saved); assert.equal(saved.status, 'draft');
+    const saved = list.items.find(item => item.id === receipt.item.id);
+    assert.ok(saved); assert.equal(saved.vessel, draft.reviewed.vessel); assert.equal(saved.status, 'draft');
     await page.reload({ waitUntil: 'domcontentloaded' }); panel = await openEnquiries(page);
     await panel.getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true }).click();
     await expect(panel.getByLabel('Raw enquiry', { exact: true })).toHaveValue(draft.source.rawText);

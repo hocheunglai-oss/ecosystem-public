@@ -1,3 +1,4 @@
+import { privateRemarkAction } from './fixtures/profile-actions';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSeedState, upgradeDemoState} from '../src/lib/seed';
@@ -40,15 +41,15 @@ test('reporting dates use Hong Kong midnight and keep former enquiry conversions
 
 test('private buyer remarks are owner-scoped, survive reload, and never enter shared audit or contributions',()=>{
  const state=createSeedState();const audit=structuredClone(state.audit);
- const one=applyAction(state,{type:'save-buyer-private-remark',buyerId,text:'Confidential personal note'},trader,now);
- const two=applyAction(one,{type:'save-buyer-private-remark',buyerId,text:'Admin own note'},admin,now);
+ const one=applyAction(state,privateRemarkAction(state,buyerId,trader.id,'Confidential personal note'),trader,now);
+ const two=applyAction(one,privateRemarkAction(one,buyerId,admin.id,'Admin own note'),admin,now);
  const restored=upgradeDemoState(JSON.parse(JSON.stringify(two)));
  assert.equal(buyerPrivateRemark(restored,buyerId,trader.id),'Confidential personal note');
  assert.equal(buyerPrivateRemark(restored,buyerId,admin.id),'Admin own note');
  assert.equal(buyerPrivateRemark(restored,buyerId,credit.id),'');assert.equal(buyerPrivateRemark(restored,'company-bluewater',trader.id),'');
  assert.deepEqual(restored.audit,audit);assert.deepEqual(restored.contributions,state.contributions);
- const cleared=applyAction(restored,{type:'save-buyer-private-remark',buyerId,text:''},trader,now);assert.equal(buyerPrivateRemark(cleared,buyerId,trader.id),'');assert.equal(buyerPrivateRemark(cleared,buyerId,admin.id),'Admin own note');
- assert.throws(()=>applyAction(state,{type:'save-buyer-private-remark',buyerId:'bad',text:'test'},trader,now));
+ const cleared=applyAction(restored,privateRemarkAction(restored,buyerId,trader.id,''),trader,now);assert.equal(buyerPrivateRemark(cleared,buyerId,trader.id),'');assert.equal(buyerPrivateRemark(cleared,buyerId,admin.id),'Admin own note');
+ assert.throws(()=>applyAction(state,privateRemarkAction(state,'bad',trader.id,'test'),trader,now));
 });
 
 test('credit remarks require a Credit or Admin role; group remarks publish immediately and reward once',()=>{

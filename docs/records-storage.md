@@ -22,4 +22,4 @@ A proposed page response is `{ rows, nextCursor, hasNextPage, snapshotAt, totalE
 
 ## Storage and recovery
 
-Supabase is ECO's live database and protected document store. Browser file storage and legacy record projections retain their existing scope until separately migrated. Independent encrypted Google Drive backups are planned, not operational or restore-tested. Recovery evidence, destination identities and operator procedures remain private; UI tests do not establish backup recoverability.
+Supabase is ECO's live database and protected document store. Browser file storage and legacy record projections retain their existing scope until separately migrated. The independent encrypted Google Drive backup workflow is implemented. Its operational and restore-tested status must be established by current run and recovery evidence. Recovery evidence, destination identities and operator procedures remain private; UI tests do not establish backup recoverability.

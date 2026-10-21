@@ -8,6 +8,8 @@ Read `docs/development-roadmap.md` before planning or building ECO features. It 
 
 Present interface labels in CAPS sitewide. Preserve the original case of email addresses, URLs, link values and credential values, including revealed passwords. Never uppercase a URL path/query or rewrite its destination. Apply exceptions to the values, never to an entire form or panel.
 
+Use EDIT to enter editing and SAVE to publish changes. Each visible profile tab has one EDIT action for its editable content, rather than a separate launcher on every box. Reuse `KnowledgeUpdateButton` for credited actions: its green treatment shows CONTRIBUTION +1 on hover or keyboard focus without adding that text to the visible action label. Private and otherwise uncredited profile edits/saves use `contribution={false}` and remain neutral. Keep meaningful feedback labels such as FEEDBACK FOR ECOSYSTEM and SUBMIT FEEDBACK, with the credited treatment. Button styling does not award credit; preserve existing publication, no-change, same-day deduplication and ownership rules. A shared/private editor may retain separate SAVE controls for its separate persistence scopes.
+
 ## Desktop and mobile verification
 
 Every interface or visual change must be checked on desktop and mobile in both day/light and night/dark modes, including affected signed-out and signed-in screens. Verify narrow and representative phone widths, screenshot appearance, artwork colour, contrast, clipping, overlap and horizontal overflow. Use mobile WebKit as well as Chromium where available; state any untested browser/device. Keep shared artwork, scale, shadows and loading behaviour consistent across desktop and mobile.
@@ -68,7 +70,7 @@ The owner will supply named WhatsApp groups for operator-maintained configuratio
 
 Maintain evidence for the internal security baseline; do not present it as certification. Prioritize speed, reliability and overall performance. Prefer automated checks and background controls over extra steps in routine trading. Distinguish implemented controls, untested plans, external provider evidence and owner-approved exceptions. Keep assigned operational ownership in private records.
 
-Detailed privacy and security information belongs inside authenticated Settings. Do not expose sensitive operational details on the signed-out screen or in public frontend assets. Hiding a button is not an access boundary: the detailed response must require a valid server session. Supabase remains the live database and protected document store. Independent encrypted Google Drive backups are planned; do not describe them as operational or restore-tested until evidence exists, and keep backup destinations and recovery details private.
+Detailed privacy and security information belongs inside authenticated Settings. Do not expose sensitive operational details on the signed-out screen or in public frontend assets. Hiding a button is not an access boundary: the detailed response must require a valid server session. Supabase remains the live database and protected document store. The independent encrypted Google Drive backup workflow is implemented. Describe it as operational or restore-tested only when current run and recovery evidence supports that claim. Keep backup destinations and recovery details private.
 
 ## Source and production releases
 

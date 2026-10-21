@@ -1,4 +1,6 @@
 import { ProfileTabs } from './ProfileTabs';
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
+import { useAccess } from './auth';
 import { usePrivateProfileTabs, PrivateProfileTabPanel, PrivateProfileTabsManager, PrivateProfileTabsStatus } from './PrivateProfileTabs';
 import { CreditUsage } from './CreditUsage';
 import AttachmentsButton from './AttachmentsButton';
@@ -7,7 +9,7 @@ import BuyerSharedList from './BuyerSharedList';
 import { buyerPrivateEntries, buyerTeamEntries } from './lib/buyerSharedLists';
 import { KnowledgePanel } from './KnowledgeWorkspace';
 import { BuyerCompetition } from './BuyerCompetition';
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowUpRight, ChevronDown, FileText, LockKeyhole, Plus, Search } from 'lucide-react';
 import { useDemo } from './store';
 import { actors, availableCredit, canTrade, outcomeQuantityText, type Company, type Outcome } from './lib/model';
@@ -37,6 +39,16 @@ function BuyerFacts({ items, className = '' }: { items: [string, ReactNode][]; c
 
 export function BuyerProfile({ buyer, open, enquiryId }: { buyer: Company; open: OpenModal; enquiryId?: string }) {
   const { state, actor } = useDemo();
+  const { preview } = useAccess();
+  const [overviewEditors, setOverviewEditors] = useState<string[]>([]);
+  const overview = useRef<HTMLDivElement>(null);
+  useEffect(() => { setOverviewEditors([]); }, [buyer.id, actor.id, preview]);
+  useEffect(() => {
+    if (!overviewEditors.length) return;
+    const frame = requestAnimationFrame(() => { if (overview.current && !overview.current.hidden && !overview.current.contains(document.activeElement)) overview.current.querySelector<HTMLTextAreaElement>('textarea')?.focus(); });
+    return () => cancelAnimationFrame(frame);
+  }, [overviewEditors]);
+  const closeOverviewEditor = (name: string) => setOverviewEditors(current => current.filter(value => value !== name));
   const id = useId();
   const [tab, setTab] = useState<string>('Overview');
   const [inlineEditorTab, setInlineEditorTab] = useState<string | null>(null);
@@ -70,7 +82,8 @@ export function BuyerProfile({ buyer, open, enquiryId }: { buyer: Company; open:
     <PrivateProfileTabsStatus controller={privateTabs} />
     {activePrivate && privateTabs.data && !privateTabs.manager && <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-private:${activePrivate.id}`}><PrivateProfileTabPanel key={`${privateTabs.scopeKey}:${activePrivate.id}:${privateTabs.data.private.revision}`} controller={privateTabs} tab={activePrivate} editorTabs={[...tabs.map((title, index) => ({ id: `shared:${index}`, title, visibility: 'shared' as const })), ...privateTabs.tabs.map(item => ({ ...item, id: `private:${item.id}` }))]} editorTabId={`private:${activePrivate.id}`} initialEditing={inlineEditorTab === `private:${activePrivate.id}`} onSelectEditorTab={next => { setInlineEditorTab(next.startsWith('private:') ? next : null); setTab(next.startsWith('shared:') ? tabs[Number(next.slice(7))] : next); }} onManageTabs={privateTabs.openManagerAfterDiscard} /></div>}
     <PrivateProfileTabsManager controller={privateTabs} sharedTabs={tabs.map((title, index) => ({ id: `shared:${index}`, title, visibility: 'shared' as const }))} onSaved={saved => { if (activePrivate && !saved.some(item => item.id === activePrivate.id)) setTab('Overview'); else if (!activePrivate && saved.length) setTab(`private:${saved[0].id}`); }} />
-    <div {...panel('Overview')} className="buyer-overview-grid">
+    <div {...panel('Overview')} ref={overview} className="buyer-overview-grid">
+      {!preview && !overviewEditors.length && <div className="buyer-profile__form-actions" style={{ gridColumn: '1 / -1' }}><KnowledgeUpdateButton onClick={() => setOverviewEditors(['team', 'private', ...(canTrade(actor) ? ['competition'] : []), ...(['credit', 'admin'].includes(actor.role) ? ['credit'] : [])])} /></div>}
       <div className="buyer-overview-column buyer-overview-credit">
       <BuyerSection title="Credit Information" className="buyer-profile__credit" action={<><AttachmentsButton scope={{ target: { kind: 'credit', id: buyer.id } }} />{(buyer.creditUpdatedAt || buyer.reviewDate) && <small>Last review {date(buyer.creditUpdatedAt || buyer.reviewDate)}</small>}</>}>
         <div className="buyer-credit-visual"><CreditUsage limit={effectiveLimit} used={buyer.exposure} available={available} label="Credit limit used" /></div>
@@ -93,7 +106,7 @@ export function BuyerProfile({ buyer, open, enquiryId }: { buyer: Company; open:
       {showGroup && group.length > 0 && <BuyerSection title={buyer.accountGroupName || 'Group'}><div className="buyer-profile__table-wrap"><table><thead><tr><th>Customer ID</th><th>Buyer</th><th>Person in charge</th><th>Office</th><th className="numeric">Credit used</th></tr></thead><tbody>{group.map(item => <tr key={item.id}><td>{item.customerId || '—'}</td><td>{item.name}</td><td>{person(item.personInChargeId, actor) || '—'}</td><td>{item.office || '—'}</td><td className="numeric">{money(item.exposure)}</td></tr>)}</tbody></table></div></BuyerSection>}
       </div>
       <div className="buyer-overview-column buyer-overview-performance">
-      <BuyerCompetition key={`competition:${actor.id}:${buyer.id}`} buyerId={buyer.id}/>
+      <BuyerCompetition key={`competition:${actor.id}:${buyer.id}`} buyerId={buyer.id} editing={overviewEditors.includes('competition')} onEditingChange={() => closeOverviewEditor('competition')} />
       <BuyerSection title="Performance" className="buyer-profile__performance" action={<select aria-label="Performance period" value={period} onChange={event=>setPeriod(event.target.value as BuyerPeriod)}><option value="12m">Last 12 months</option><option value="year">This year</option><option value="all">All records</option></select>}>
         <BuyerFacts className="buyer-profile__metrics" items={[
           ['Number of stem', performance.stems.length], ['Stem delayed', performance.stemDelayed ?? '—'], ['Average Payment day', days(performance.averagePaymentDays)], ['Average Delay', days(performance.averageDelay)],
@@ -107,8 +120,8 @@ export function BuyerProfile({ buyer, open, enquiryId }: { buyer: Company; open:
       </BuyerSection>
       </div>
       <div className="buyer-overview-column buyer-overview-notes">
-        <BuyerCreditHistory key={`credit:${actor.id}:${buyer.id}`} buyer={buyer} onAllHistory={() => { selectTab('Credit History'); document.getElementById(`${id}-shared:${tabs.indexOf('Credit History')}`)?.focus(); }}/>
-        <BuyerRemarks key={`remarks:${actor.id}:${buyer.id}`} buyer={buyer}/>
+        <BuyerCreditHistory key={`credit:${actor.id}:${buyer.id}`} buyer={buyer} editing={overviewEditors.includes('credit')} onEditingChange={() => closeOverviewEditor('credit')} onAllHistory={() => { selectTab('Credit History'); document.getElementById(`${id}-shared:${tabs.indexOf('Credit History')}`)?.focus(); }} />
+        <BuyerRemarks key={`remarks:${actor.id}:${buyer.id}`} buyer={buyer} editors={overviewEditors} onCloseEditor={closeOverviewEditor} />
       </div>
     </div>
     {activeTab==='Stem Records' && <div {...panel('Stem Records')}><BuyerStems key={buyer.id} stems={buyerPerformance(state,buyer.id,'all').stems} today={performance.today}/></div>}
@@ -150,21 +163,20 @@ function BuyerCompanyInformation({buyer,open}:{buyer:Company;open:OpenModal}) {
     <KnowledgePanel key={buyer.id} target={{kind:'company',id:buyer.id}} open={open}/>
   </div>;
 }
-function BuyerCreditHistory({ buyer, onAllHistory }: { buyer: Company; onAllHistory: () => void }) {
+function BuyerCreditHistory({ buyer, onAllHistory, editing, onEditingChange }: { buyer: Company; onAllHistory: () => void; editing: boolean; onEditingChange: () => void }) {
   const { state, actor, run } = useDemo();
   const [creditText, setCreditText] = useState(buyer.creditRemarks || '');
-  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (editing) setCreditText(buyer.creditRemarks || ''); }, [editing]);
   const recent = creditHistoryFor(state, buyer.id).slice(0, 3);
   const canEdit = actor.role === 'credit' || actor.role === 'admin';
   const active = state.creditHistory?.find(entry => entry.id === buyer.activeCreditRemarkId && entry.companyId === buyer.id && entry.type === 'remark');
   return <BuyerSection title="Credit History" className="buyer-credit-history" action={<div className="buyer-remark-actions">
     <button type="button" className="button secondary buyer-history-link" onClick={onAllHistory}>All history <ArrowUpRight size={13}/></button>
-    {canEdit && !editing && <button type="button" className="buyer-small-action" onClick={() => { setCreditText(buyer.creditRemarks || ''); setEditing(true); }}>Edit</button>}
   </div>}>
     <div className="buyer-credit-history__current">
-      {editing ? <form onSubmit={event => {event.preventDefault();if(run({type:'save-buyer-credit-remarks',buyerId:buyer.id,text:creditText},'Credit History saved.'))setEditing(false);}}>
+      {editing && canEdit ? <form onSubmit={event => {event.preventDefault();if(run({type:'save-buyer-credit-remarks',buyerId:buyer.id,text:creditText},'Credit History saved.'))onEditingChange();}}>
         <textarea aria-label="Credit History" value={creditText} maxLength={10000} rows={4} onChange={event=>setCreditText(event.target.value)}/>
-        <div className="buyer-profile__form-actions"><button type="button" className="button secondary" onClick={()=>setEditing(false)}>Cancel</button><button className="button primary">Save</button></div>
+        <div className="buyer-profile__form-actions"><button type="button" className="button secondary" onClick={onEditingChange}>Cancel</button><KnowledgeUpdateButton type="submit" contribution={false} disabled={creditText === (buyer.creditRemarks || '')} /></div>
       </form> : <div className="buyer-credit-history__recent">{recent.length ? recent.map(entry => <article key={entry.id}>
         <p className="buyer-profile__remark-text">{entry.summary || '—'}</p>
         <footer>{entry.id === active?.id && <strong>Active · </strong>}{[person(entry.by), entry.effectiveDateUnknown ? '—' : date(entry.effectiveAt)].filter(Boolean).join(' · ')}</footer>
@@ -173,15 +185,15 @@ function BuyerCreditHistory({ buyer, onAllHistory }: { buyer: Company; onAllHist
   </BuyerSection>;
 }
 
-function BuyerRemarks({ buyer }: { buyer: Company }) {
+function BuyerRemarks({ buyer, editors, onCloseEditor }: { buyer: Company; editors: string[]; onCloseEditor: (name: string) => void }) {
   const { state, actor } = useDemo();
   return <BuyerSection title="Remarks">
     <div className="buyer-profile__remarks">
       <section aria-label="Team Remarks">
-        <BuyerSharedList buyerId={buyer.id} kind="team" label="Team Remarks" entries={buyerTeamEntries(state, buyer)} />
+        <BuyerSharedList buyerId={buyer.id} kind="team" label="Team Remarks" entries={buyerTeamEntries(state, buyer)} editing={editors.includes('team')} onEditingChange={() => onCloseEditor('team')} />
       </section>
       <section aria-label="Private Remarks">
-        <BuyerSharedList buyerId={buyer.id} kind="private" label="Private Remarks" headingIcon={<LockKeyhole size={14} aria-hidden="true"/>} entries={buyerPrivateEntries(state, buyer.id, actor.id)} />
+        <BuyerSharedList buyerId={buyer.id} kind="private" label="Private Remarks" headingIcon={<LockKeyhole size={14} aria-hidden="true"/>} entries={buyerPrivateEntries(state, buyer.id, actor.id)} editing={editors.includes('private')} onEditingChange={() => onCloseEditor('private')} />
       </section>
     </div>
   </BuyerSection>;

@@ -1,10 +1,11 @@
 import KnowledgeUpdateButton from "./KnowledgeUpdateButton";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, FileText, GripVertical, Plus, Table2, Trash2, Type, Pencil } from "lucide-react";
+import { ArrowLeft, ArrowRight, ClipboardPaste, FileText, GripVertical, Plus, Table2, Trash2, Type, Pencil } from "lucide-react";
 import { dropDestination, dropEdge, type DropEdge } from "./lib/dropPosition";
 import { Modal } from "./ui";
 import { useDemo } from "./store";
 import { uid } from "./lib/model";
+import { emptyIntelligenceKeyInfo, intelligenceFields, INTELLIGENCE_VALUE_MAX_LENGTH, sameIntelligenceKeyInfo } from './lib/intelligenceFields';
 import { isEmailText, uppercaseText } from "./lib/uppercase";
 import {
   countryKnowledgeSections,
@@ -15,8 +16,12 @@ import {
   type KnowledgeTarget,
 } from "./lib/knowledge";
 import KnowledgeTableEditor from "./KnowledgeTableEditor";
+import type { ImportedTable } from "./lib/tablePaste";
 import "./knowledge-editor.css";
 
+import TablePasteDialog from "./TablePasteDialog";
+import OfficialFuelTable, { useOfficialFuelTable } from './OfficialFuelTable';
+import { isOfficialNotes, officialNotes, officialTableTitle, updateOfficialNote } from './lib/officialTableNotes';
 const blockNames = { text: "Text", table: "Table", file: "File" };
 const blockIcons = { text: Type, table: Table2, file: FileText };
 function makeBlock(type: KnowledgeBlock["type"]): KnowledgeBlock {
@@ -37,8 +42,11 @@ function fixedTab(title: string, target: KnowledgeTarget) {
 
 export interface KnowledgeEditorTab { id: string; title: string; visibility: 'shared' | 'private' }
 export function KnowledgeEditor({ target, initial, initialSection, initialBlock, onSaved, onManageTabs, reservedTabNames = [], mode = "edit", onClose,
-  embedded = false, onCommit, onDirtyChange, editorTabs, editorTabId, onSelectEditorTab, readOnlyNames = false, saveLabel,
+  embedded = false, onCommit, onDirtyChange, editorTabs, editorTabId, onSelectEditorTab, readOnlyNames = false, saveLabel, contribution = true, keyInfoPortId, officialTable = false,
 }: {
+  officialTable?: boolean;
+  contribution?: boolean;
+  keyInfoPortId?: string;
   embedded?: boolean;
   onCommit?: (document: KnowledgeDocument) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
@@ -57,8 +65,14 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
   mode?: "edit" | "section" | "rename" | "text" | "table";
   onClose: () => void;
 }) {
-  const { run, toast } = useDemo();
+  const { state, run, toast } = useDemo();
+  const [keyInfoId] = useState(() => uid('key-info-editor'));
+  const [officialId] = useState(() => uid('official-table-editor'));
+  const officialFeed = useOfficialFuelTable(officialTable);
+  const [baseKeyInfo] = useState(() => ({ ...(state.ports.find(port => port.id === keyInfoPortId)?.intelligenceKeyInfo ?? emptyIntelligenceKeyInfo()) }));
+  const [keyInfo, setKeyInfo] = useState(() => ({ ...baseKeyInfo }));
   const [saving, setSaving] = useState(false), [saveError, setSaveError] = useState("");
+  const [pasting, setPasting] = useState(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const editableSections = initial.sections.filter(section => !isReadOnlyKnowledgeSection(section));
@@ -75,7 +89,7 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
   });
   const [active, setActive] = useState(mode === "section" ? newSectionId : initialTabId);
   const section = draft.sections.find(section => section.id === active) ?? draft.sections[0];
-  const [selected, setSelected] = useState(() => initialBlock ?? ((mode === "text" || mode === "table") ? section.blocks.at(-1)?.id : section.blocks[0]?.id));
+  const [selected, setSelected] = useState(() => officialTable && (!initialBlock || section.blocks.find(isOfficialNotes)?.id === initialBlock) && mode === 'edit' ? officialId : initialBlock ?? ((mode === "text" || mode === "table") ? section.blocks.at(-1)?.id : keyInfoPortId ? keyInfoId : section.blocks[0]?.id));
   const [dragging, setDragging] = useState<string>();
   const [dropTarget, setDropTarget] = useState<{ id: string; edge: DropEdge }>();
   const touchDrag = useRef<{ id: string; y: number; active: boolean; destination?: { id: string; edge: DropEdge } }>(undefined);
@@ -83,12 +97,16 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
   const [naming, setNaming] = useState(mode === "section" || mode === "rename");
   const nameInput = useRef<HTMLInputElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
-  const block = section.blocks.find(item => item.id === selected) ?? section.blocks[0];
+  const editingKeyInfo = Boolean(keyInfoPortId && section.id === initialTabId && selected === keyInfoId);
+  const officialSection = officialTable && section.id === initialTabId;
+  const editingOfficial = officialSection && selected === officialId;
+  const block = editingKeyInfo || editingOfficial ? undefined : section.blocks.find(item => item.id === selected) ?? section.blocks[0];
   const blockIndex = section.blocks.findIndex(item => item.id === block?.id);
   const baseSection = base.sections.find(item => item.id === section.id);
   const isFixed = Boolean(baseSection && fixedTab(baseSection.title, target));
   const tabOnly = mode === "section" || mode === "rename";
-  const dirty = !sameKnowledge(base, draft);
+  const knowledgeDirty = !sameKnowledge(base, draft);
+  const dirty = knowledgeDirty || Boolean(keyInfoPortId && !sameIntelligenceKeyInfo(baseKeyInfo, keyInfo));
   const editorChoices = editorTabs ? [...editorTabs.filter(tab => tab.visibility === 'private'), ...editorTabs.filter(tab => tab.visibility === 'shared')] : undefined;
   useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
   useEffect(() => { if (!dirty) return; const handler = (event: BeforeUnloadEvent) => event.preventDefault(); window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, [dirty]);
@@ -119,6 +137,17 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
     setActive(destination.id);
     setNaming(false);
     setSelected(next.id);
+  }
+  function addPastedTable(imported: ImportedTable) {
+    if (section.blocks.length >= 100) return;
+    const next: KnowledgeBlock = {
+      id: uid("block"), type: "table", title: "",
+      columns: imported.columns.map(name => ({ id: uid("column"), name })),
+      rows: imported.rows.map(cells => ({ id: uid("row"), cells })),
+    };
+    change(document => document.sections.find(item => item.id === section.id)!.blocks.push(next));
+    setSelected(next.id); setPasting(false);
+    requestAnimationFrame(() => titleInput.current?.focus());
   }
   function addTab() {
     const id = uid("section");
@@ -164,7 +193,9 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
       finally { if (alive.current) setSaving(false); }
       return;
     }
-    if (run({ type: "save-knowledge", change: { target, baseVersion: base.version, baseDocument: base, document: draft }, reason: section.title + " updated" }, "Updated.")) {
+    const change = { target, baseVersion: base.version, baseDocument: base, document: draft };
+    if (run(keyInfoPortId ? { type: 'save-port-information', portId: keyInfoPortId, keyInfo, baseKeyInfo, change: knowledgeDirty ? change : undefined, reason: section.title + ' updated' }
+      : { type: "save-knowledge", change, reason: section.title + " updated" }, "Updated.")) {
       onSaved?.(section.id, section.title.trim());
       onClose();
     }
@@ -212,10 +243,16 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
               <div className="knowledge-editor-additions" role="group" aria-label="Add section">
                 <button type="button" disabled={section.blocks.length >= 100} onClick={() => add("text")}><Type size={14} />Add Text</button>
                 <button type="button" disabled={section.blocks.length >= 100} onClick={() => add("table")}><Table2 size={14} />Add Table</button>
+                <button type="button" disabled={section.blocks.length >= 100} onClick={() => setPasting(true)}><ClipboardPaste size={14} />Paste Table</button>
               </div>
             </header>
             <div className="knowledge-outline-list">
+            {keyInfoPortId && section.id === initialTabId && <div className={`knowledge-outline-item${editingKeyInfo ? ' is-selected' : ''}`}>
+              <button className="knowledge-outline-select" type="button" aria-label="Edit Key Info" aria-pressed={editingKeyInfo} onClick={() => setSelected(keyInfoId)}><FileText size={14} /><span><strong>Key Info</strong></span></button>
+            </div>}
+            {officialSection && <div className={`knowledge-outline-item${editingOfficial ? ' is-selected' : ''}`}><button className="knowledge-outline-select" type="button" aria-label={`Edit ${officialTableTitle}`} aria-pressed={editingOfficial} onClick={() => setSelected(officialId)}><Table2 size={14} /><span><strong>{officialTableTitle}</strong><small>MPA</small></span></button></div>}
             {section.blocks.map((item, index) => {
+              if (officialSection && item === section.blocks.find(isOfficialNotes)) return null;
               const Icon = blockIcons[item.type];
               return <div key={item.id} className={`knowledge-outline-item${item.id === block?.id ? " is-selected" : ""}${dragging === item.id ? " is-dragging" : ""}${dropTarget?.id === item.id ? ` is-drop-${dropTarget.edge}` : ""}`} data-block-id={item.id}
                 onDragOver={event => { if (dragging) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; const bounds = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: item.id, edge: dropEdge(event.clientY, bounds.top, bounds.height) }); } }}
@@ -233,10 +270,14 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
             })}
             </div>
           </nav>
-          {block ? <div className="knowledge-block-detail" key={block.id}>
+          {editingOfficial ? <div className="knowledge-block-detail"><OfficialFuelTable {...officialFeed} notes={officialNotes(section)} onNoteChange={(fuel, value) => change(document => updateOfficialNote(document.sections.find(item => item.id === section.id)!, fuel, value, document.sections))} /></div> : editingKeyInfo ? <div className="knowledge-block-detail"><h3>Key Info</h3><div className="knowledge-key-info-fields">
+            {intelligenceFields.map(field => <label key={field.key}>{field.label}<textarea aria-label={field.label} rows={3} maxLength={INTELLIGENCE_VALUE_MAX_LENGTH} value={keyInfo[field.key] ?? ''} onChange={event => { const value = event.target.value; setKeyInfo(current => ({ ...current, [field.key]: value.trim() ? value : null })); }} /></label>)}
+          </div></div> : block ? <div className="knowledge-block-detail" key={block.id}>
             <header className="knowledge-block-detail-head">
+              <label className="knowledge-block-title-field">Title
               <input ref={titleInput} className="knowledge-block-title" aria-label={"Block " + (blockIndex + 1) + " title"} placeholder={block.type === "file" ? "File name" : "Title"}
                 required pattern={".*\\S.*"} maxLength={150} value={block.title} onChange={event => updateBlock({ ...block, title: event.target.value })} />
+              </label>
               <button type="button" className="knowledge-icon-control" aria-label={"Delete block " + (blockIndex + 1)} title="Delete block" onClick={() => {
                 if (window.confirm("DELETE THIS BLOCK?")) {
                   change(document => { const current = document.sections.find(item => item.id === section.id)!; current.blocks = current.blocks.filter(item => item.id !== block.id); });
@@ -244,8 +285,8 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
                 }
               }}><Trash2 size={14} /></button>
             </header>
-            {block.type === "text" ? <textarea className="knowledge-text-canvas" aria-label={"Block " + (blockIndex + 1) + " text"} rows={12} placeholder="Text" maxLength={30000} value={block.text}
-              onChange={event => updateBlock({ ...block, text: event.target.value })} />
+            {block.type === "text" ? <label className="knowledge-text-field">Text<textarea className="knowledge-text-canvas" aria-label={"Block " + (blockIndex + 1) + " text"} rows={12} placeholder="Text" maxLength={30000} value={block.text}
+              onChange={event => updateBlock({ ...block, text: event.target.value })} /></label>
               : block.type === "file" ? <label className="knowledge-field knowledge-file-field">HTTPS file link<input type="url" required value={block.url} onChange={event => updateBlock({ ...block, url: event.target.value })} /></label>
                 : <KnowledgeTableEditor table={block} onChange={updateBlock} />}
           </div> : <div className="knowledge-editor-empty"><span>No information</span></div>}
@@ -253,10 +294,12 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
       </>}
       <footer className="knowledge-editor-tools knowledge-editor-actions">
         <button type="button" onClick={close}>Cancel</button>
-        <KnowledgeUpdateButton disabled={saving || !dirty || Boolean(nameError)} type="submit">{saving ? "SAVING…" : saveLabel ?? (tabOnly ? mode === "section" ? "Add Tab" : "Save" : "CONTRIBUTE +1")}</KnowledgeUpdateButton>
+        <KnowledgeUpdateButton contribution={contribution} disabled={saving || !dirty || Boolean(nameError)} type="submit">{saving ? "SAVING…" : saveLabel ?? (tabOnly && mode === "section" ? "Add Tab" : "Save")}</KnowledgeUpdateButton>
       </footer>
     </form>;
-  return embedded ? form : <Modal title={tabOnly ? mode === "section" ? "Add Tab" : "Rename Tab" : "Update information"} onClose={close} wide={!tabOnly}>{form}</Modal>;
+  return <>{embedded ? form : <Modal title={tabOnly ? mode === "section" ? "Add Tab" : "Rename Tab" : "Update information"} onClose={close} wide={!tabOnly}>{form}</Modal>}
+    {pasting && <TablePasteDialog onClose={() => setPasting(false)} onImport={addPastedTable} />}
+  </>;
 }
 
 

@@ -1,0 +1,13 @@
+.table-paste{display:grid;gap:12px;width:100%;max-width:1100px;margin:auto;min-width:0}
+.table-paste p{margin:0;font-size:var(--ui-text-label)}
+.table-paste textarea{width:100%;min-width:0;resize:vertical;font-family:monospace;text-transform:none}
+.table-paste-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.table-paste-header{display:flex;gap:8px;align-items:center;min-height:44px}
+.table-paste-header input{width:auto}
+.table-paste-preview{max-height:42dvh;overflow:auto;overscroll-behavior:contain}
+.table-paste .table-paste-preview.knowledge-table-wrap table :is(th,td){min-width:140px;max-width:360px;padding:7px;white-space:pre-wrap;overflow-wrap:anywhere}
+.table-paste .table-paste-preview.knowledge-table-wrap table th:first-child{position:static;width:auto;min-width:140px;padding:7px;text-align:left}
+.table-paste footer{justify-content:flex-end}
+.knowledge-spreadsheet .sheet-cell{display:block;width:100%;min-width:0;min-height:31px;padding:6px 8px;border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;line-height:1.5;resize:vertical}
+.knowledge-spreadsheet .sheet-cell:focus-visible{outline:2px solid var(--ui-focus);outline-offset:-2px}
+@media(max-width:760px){.knowledge-spreadsheet .sheet-cell{min-height:44px;font-size:16px}}

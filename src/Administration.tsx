@@ -1,3 +1,4 @@
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import {
   useEffect,
   useCallback,
@@ -421,9 +422,9 @@ export function FeedbackComposer({
             onChange={(event) => edit(() => setDescription(event.target.value))}
           />
         </Field>
-        <button type="submit" className="ui-button ui-button--primary">
+        <KnowledgeUpdateButton type="submit">
           {busy ? "Submitting…" : "Submit feedback"}
-        </button>
+        </KnowledgeUpdateButton>
       </fieldset>
     </form>
   );

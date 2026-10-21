@@ -119,7 +119,7 @@ test('extraction and key info track the actor and date per entry and per changed
   assert.deepEqual(knowledgeKeyInfoUpdate(state, target.id, 'qualityClaim'), original);
   assert.deepEqual(knowledgeEntryUpdate(state, target, 'keyinfo-source-qualityClaim'), original);
   const before = state.ports.find(port => port.id === target.id)?.intelligenceKeyInfo ?? emptyIntelligenceKeyInfo();
-  state = applyAction(state, { type: 'save-intelligence', portId: target.id, baseKeyInfo: before, keyInfo: { ...before, isoSpecs: 'All' }, reason: 'Specification confirmed' }, actors[1], laterAt);
+  state = applyAction(state, { type: 'save-port-information', portId: target.id, baseKeyInfo: before, keyInfo: { ...before, isoSpecs: 'All' }, reason: 'Specification confirmed' }, actors[1], laterAt);
   assert.deepEqual(knowledgeKeyInfoUpdate(state, target.id, 'qualityClaim'), original);
   assert.deepEqual(knowledgeKeyInfoUpdate(state, target.id, 'isoSpecs'), { updatedBy: actors[1].id, updatedAt: laterAt });
 });

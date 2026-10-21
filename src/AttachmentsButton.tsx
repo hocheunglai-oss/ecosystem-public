@@ -1,6 +1,6 @@
 import { useIntelligence } from './Intelligence';
 import { useTestWorkspace } from './TestWorkspace';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Paperclip } from 'lucide-react';
 import { useDemo } from './store';
@@ -8,7 +8,7 @@ import { useAttachmentCatalog } from './lib/attachmentStorage';
 import { activeAttachmentCatalog, legacyAttachmentItems, scopeLabel, type AttachmentScope } from './lib/attachments';
 import './attachments.css';
 
-const AttachmentBrowser = lazy(() => import('./AttachmentBrowser'));
+import AttachmentBrowser from './AttachmentBrowser';
 export default function AttachmentsButton({ scope }: { scope: AttachmentScope }) {
   const { dataMode } = useTestWorkspace();
   const { state } = useDemo();
@@ -27,6 +27,6 @@ export default function AttachmentsButton({ scope }: { scope: AttachmentScope })
     <button type="button" className="attachments-trigger" aria-label={`Attachments${count ? ` (${count})` : ''} for ${scopeLabel(state, scope, { suppliers: snapshot?.suppliers })}`} aria-haspopup="dialog" onClick={event => { event.stopPropagation(); setOpened(true); }}>
       <Paperclip size={13} aria-hidden="true" />Attachments{count ? ` (${count})` : ''}
     </button>
-    {opened && createPortal(<Suspense fallback={<span role="status">Loading attachments…</span>}><AttachmentBrowser scope={scope} onClose={() => setOpened(false)} /></Suspense>, document.getElementById('root')!)}
+    {opened && createPortal(<AttachmentBrowser scope={scope} onClose={() => setOpened(false)} />, document.getElementById('root')!)}
   </span>;
 }

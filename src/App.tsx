@@ -1,3 +1,4 @@
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useBuyerCreditAvailable } from './ReleaseGate';
 import { ECO_2_RELEASE_NOTICE, isBuyerCreditWorkspace } from '../shared/ecoRelease';
 import { useSharedFeedback } from './lib/useSharedFeedback';
@@ -6,8 +7,6 @@ import {
   useCallback,
   useRef,
   useState,
-  lazy,
-  Suspense,
   type CSSProperties,
   type MouseEvent,
 } from "react";
@@ -61,7 +60,7 @@ import { trapDialogFocus } from "./dialogFocus";
 import { useTheme } from "./theme";
 import { workspaceGroups as groups, workspaceTitles, type OpenWorkspace, type WorkspaceNavigationContext } from "./workspaceNavigation";
 
-const MarineWorld = lazy(() => import("./MarineWorld").then((module) => ({ default: module.MarineWorld })));
+import { MarineWorld } from "./MarineWorld";
 
 const roleLabel = (role: string) =>
   role === "admin"
@@ -369,9 +368,9 @@ function WorkspaceWindow({
       </div>
       <div className="window-foot"><span>ECOSYSTEM | FRATELLI COSULICH</span>
         <div className="window-foot-actions">
-        <button className="window-theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => open({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
+        <KnowledgeUpdateButton className="window-theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => open({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={13} aria-hidden="true" /> Feedback for ecosystem
-        </button>
+        </KnowledgeUpdateButton>
         <button className="window-theme-toggle" onClick={themeControl.toggle} aria-busy={themeControl.pending} title={themeControl.error?.toUpperCase() || undefined}>
           {themeControl.requested === 'light' ? <Moon size={13} aria-hidden="true" /> : <Sun size={13} aria-hidden="true" />}
           {themeControl.requested === 'light' ? 'Dark mode' : 'Light mode'}
@@ -456,10 +455,10 @@ function Workspace() {
       onClickCapture={interceptLegacyLink}
     >
       {mobile ? <MobileHarbourBackground theme={theme} signedIn={Boolean(session)} /> : <div className="ecosystem-world">
-        <Suspense fallback={null}><MarineWorld
+        <MarineWorld
           theme={theme}
           motionEnabled={motionEnabled}
-        /></Suspense>
+        />
       </div>}
       {!session ? (
         <Login />
@@ -550,9 +549,9 @@ function Workspace() {
       )}
       <footer className="world-controls">ECOSYSTEM | FRATELLI COSULICH</footer>
       <div className="home-display-controls">
-        {session && <button className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
+        {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={15} aria-hidden="true" /> Feedback for ecosystem
-        </button>}
+        </KnowledgeUpdateButton>}
         <button
           className="theme-toggle"
           onClick={toggleTheme}

@@ -136,13 +136,26 @@ async function verifyCombinedSources(page, workspace, state, shot) {
     const originalKey = source === 'COUNTRY' ? countryKey : portKey;
     const otherKey = source === 'COUNTRY' ? portKey : countryKey;
     const savedBefore = await snapshot(page);
-    const block = profile.locator('.knowledge-block').filter({ has: page.getByRole('heading', { name: `${source} SOURCE TEXT`, exact: true }) });
-    await block.getByRole('button', { name: new RegExp(`^(?:Update|Contribute.*) ${source} SOURCE TEXT$`, 'i') }).click();
+    await btn(profile.locator('.knowledge-content-toolbar'), 'EDIT').click();
+    await profile.getByLabel('Information source', { exact: true }).selectOption(`${originalKey}:${source}-operations`);
     const editor = profile.locator('.knowledge-editor');
     await expect(editor.getByLabel('Edit tab', { exact: true })).toHaveCount(0);
     await expect(btn(editor, 'Manage tabs')).toHaveCount(0);
+    if (source === 'COUNTRY') {
+      const chooser = profile.getByLabel('Information source', { exact: true }), text = editor.getByLabel('Block 1 text', { exact: true });
+      await text.fill('UNSAVED COUNTRY SOURCE DRAFT');
+      page.once('dialog', dialog => dialog.dismiss());
+      await chooser.selectOption(`${portKey}:PORT-operations`);
+      await expect(chooser).toHaveValue(`${countryKey}:COUNTRY-operations`);
+      await expect(text).toHaveValue('UNSAVED COUNTRY SOURCE DRAFT');
+      page.once('dialog', dialog => dialog.accept());
+      await chooser.selectOption(`${portKey}:PORT-operations`);
+      await expect(text).toHaveValue('ORIGINAL PORT SHARED BODY');
+      await chooser.selectOption(`${countryKey}:COUNTRY-operations`);
+      await expect(text).toHaveValue('ORIGINAL COUNTRY SHARED BODY');
+    }
     await editor.getByLabel('Block 1 text', { exact: true }).fill(`EDITED ${source} SOURCE`);
-    await btn(editor, 'CONTRIBUTE +1').click();
+    await btn(editor, /^SAVE$/i).click();
     await expect(editor).toHaveCount(0);
     const saved = await snapshot(page);
     assert.equal(saved.knowledgeRecords[originalKey].sections.find(section => section.id === `${source}-operations`).blocks[0].text, `EDITED ${source} SOURCE`);
@@ -155,7 +168,7 @@ async function verifyCombinedSources(page, workspace, state, shot) {
     await expect(profile.locator('.profile-tab-content')).toContainText(`PRIVATE ${source} BODY`);
     await btn(profile.locator('.profile-tab-content'), 'EDIT').click();
     await profile.getByLabel('Block 1 text', { exact: true }).fill(`PRIVATE ${source} EDITED`);
-    await btn(profile.locator('.knowledge-editor'), 'SAVE').click();
+    await btn(profile.locator('.knowledge-editor'), /^SAVE$/i).click();
     await expect(profile.locator('.knowledge-editor')).toHaveCount(0);
     assert.deepEqual(state.requests.at(-1).target, target, 'Inherited and primary private edits retain their original server scope');
     await expect(profile.locator('.profile-tab-content')).toContainText(`PRIVATE ${source} EDITED`);
@@ -169,7 +182,7 @@ async function verifyCombinedSources(page, workspace, state, shot) {
     await expect(profile.locator('.profile-tab-content')).toContainText(`PRIVATE ${source} DUPLICATE BODY`);
     await btn(profile.locator('.profile-tab-content'), 'EDIT').click();
     await profile.getByLabel('Block 1 text', { exact: true }).fill(`PRIVATE ${source} DUPLICATE EDITED`);
-    await btn(profile.locator('.knowledge-editor'), 'SAVE').click();
+    await btn(profile.locator('.knowledge-editor'), /^SAVE$/i).click();
     await expect(profile.locator('.knowledge-editor')).toHaveCount(0);
     assert.deepEqual(state.requests.at(-1).target, source === 'COUNTRY' ? countryTarget : portTarget, 'Same-titled private tabs keep distinct source identity');
   }
@@ -238,8 +251,12 @@ async function verifyHolidays(page, workspace, width, shot) {
   const profile = await openFromIndex(workspace, 'country', 'Netherlands');
   const trigger = btn(profile.locator('.knowledge-header'), 'Public holidays');
   await expect(profile.locator('.knowledge-local-time')).toContainText('Time now');
-  await expect(trigger).toContainText('25 DEC');
-  await expect(trigger).toContainText('CHRISTMAS');
+  await expect(trigger).toContainText('TODAY IS NOT A PUBLIC HOLIDAY');
+  await trigger.focus();
+  const hint = profile.getByRole('tooltip');
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText('25 DEC 2026');
+  await expect(hint).toContainText('CHRISTMAS');
   await shot('holiday-beside-clock');
   await trigger.click();
   let modal = page.getByRole('dialog', { name: 'PUBLIC HOLIDAYS', exact: true });
@@ -296,7 +313,7 @@ async function verifyPrivacy(page, workspace, state, shot) {
   for (const title of [...privateTitles, 'DUPLICATE OWNER NOTE']) await expect(profile.getByRole('tab').filter({ hasText: title })).toHaveCount(0);
   await expect(profile).not.toContainText('UNSAVED INHERITED SECRET');
   await expect(btn(profile, 'Manage tabs')).toHaveCount(0);
-  await expect(profile.getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
+  await expect(profile.getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
   await shot('preview-combined-profile');
   state.preview = null;
   state.user = { ...user, id: '10000000-0000-4000-8000-000000000002', displayName: 'OTHER LOCATION ADMIN' };

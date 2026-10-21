@@ -27,6 +27,15 @@ function hat(id: string, awardedAt: string, extra: Partial<HatAward> = {}): HatA
     awardedAt, update: { updatedBy: 'otto', updatedAt: '2025-01-01T00:00:00.000Z' }, ...extra };
 }
 
+test('combined port-tab publication counts Key Info when the document edit is only whitespace', () => {
+  const combined = update('combined', { note: 'Existing fact' }, { note: ' Existing fact ' });
+  combined.keyInfoBase = emptyIntelligenceKeyInfo();
+  combined.proposedKeyInfo = { ...emptyIntelligenceKeyInfo(), isoSpecs: 'CONFIRMED SPECIFICATION' };
+  assert.equal(contributionActivity(state([combined]), 'otto', '7d', NOW).total, 1);
+  combined.knowledgeChange = change({ note: 'Existing fact' }, { note: 'Updated verified fact' });
+  assert.equal(contributionActivity(state([combined]), 'otto', '7d', NOW).total, 1, 'Both fact types still form one contribution');
+});
+
 test('contribution tiers use exactly the requested zero, ten and eleven boundaries', () => {
   for (const [total, key, label] of [
     [0, 'inactive', 'INACTIVE'],

@@ -161,7 +161,9 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
         await expect(emptyQuick).toBeVisible();
         await emptyQuick.getByRole('button',{name:'Close dialog',exact:true}).click();
         let editor=await picEditor(page,first);
-        await expect(editor.getByRole('button',{name:'CONTRIBUTE +1',exact:true})).toBeDisabled();
+        await expect(editor.getByRole('button',{name:'SAVE',exact:true})).toBeDisabled();
+        await expect(editor.getByRole('button',{name:'SAVE',exact:true})).toHaveAttribute('aria-description','CONTRIBUTION +1');
+        await expect(editor.getByRole('button',{name:'EDIT',exact:true})).toHaveCount(0);
         await expect(editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true})).toBeEnabled();
         await expect(editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true}).locator('option[value="FIXTURE ADMIN"]')).toHaveAttribute('disabled','');
         assert.deepEqual(await editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true}).locator('option:not(:disabled)').evaluateAll(options=>options.map(option=>option.value)),['','FIXTURE TRADER']);
@@ -179,7 +181,7 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
         await expect(editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true})).toHaveValue('FIXTURE ADMIN');
         await editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true}).selectOption('FIXTURE TRADER');
         state.dropResponse=true;
-        await editor.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();
+        await editor.getByRole('button',{name:'SAVE',exact:true}).click();
         await expect(editor.getByRole('alert')).toBeVisible();
         assert.equal(state.updates,1,'A lost response may already have committed');
         await refocusSupplierList(page,workspace,state);
@@ -187,7 +189,7 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
         await expect(editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true})).toHaveValue('FIXTURE TRADER');
         await expect(editor.getByRole('alert')).toBeVisible();
         await expect(table.locator('tbody tr')).toHaveCount(0);
-        await editor.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();
+        await editor.getByRole('button',{name:'SAVE',exact:true}).click();
         await expect(editor).toHaveCount(0);
         const attempts=state.requests.filter(request=>request.path==='update');
         assert.equal(attempts.length,2);
@@ -224,7 +226,7 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
           if(mode==='spc-trader'){
             const editor=await picEditor(page,table.locator('tbody tr').first());
             await editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true}).selectOption('FIXTURE TRADER');
-            await editor.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();
+            await editor.getByRole('button',{name:'SAVE',exact:true}).click();
             await expect(editor).toHaveCount(0);
             assert.equal(state.updates,1);
           }else{
@@ -233,7 +235,7 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
             await table.locator('tbody tr').first().getByRole('button',{name:'CONTACT (1)',exact:true}).click();
             const quick=page.getByRole('dialog',{name:'BP MARINE · CONTACT',exact:true});
             await expect(quick).toContainText('SALES DESK');
-            await expect(quick.getByRole('button',{name:'CONTRIBUTE +1',exact:true})).toHaveCount(0);
+            await expect(quick.getByRole('button',{name:/^(EDIT|SAVE)$/,exact:true})).toHaveCount(0);
             await quick.getByRole('button',{name:'Close dialog',exact:true}).click();
             assert.equal(state.requests.filter(request=>request.method==='POST').length,0);
           }

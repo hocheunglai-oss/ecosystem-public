@@ -1,3 +1,4 @@
+import { reportingDate } from './reportingDate';
 import { actors, canTrade, isPendingOutcome, type Actor, type DemoState, type Outcome } from './model';
 import { fixtureProductLines, outcomeSupplierNames } from './fixtureSuppliers';
 import { uppercaseText } from './uppercase';
@@ -30,7 +31,6 @@ export interface RecordQuery {
   pageSize: number;
 }
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-const reportingDate = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Hong_Kong',year:'numeric',month:'2-digit',day:'2-digit'});
 export function recordDay(value: string) {
   const parsed=new Date(value);
   return Number.isFinite(parsed.getTime()) ? reportingDate.format(parsed) : '';

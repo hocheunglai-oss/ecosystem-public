@@ -1,3 +1,4 @@
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useSharedFeedback, type SharedFeedbackStatus } from './lib/useSharedFeedback';
 import { useEffect, useId, useState } from "react";
 import { contributionActivity, contributionPreviewCounts, contributionStatus, contributionStatusRules, type ContributionActivityEntry, type ContributionPeriod, type ContributionStatusKey } from "./lib/contributionActivity";
@@ -133,7 +134,7 @@ export function ActivityStatus({ activity, onContribute, initialGuideOpen = acti
       <button className="activity-guide-toggle" aria-expanded={guideOpen} aria-controls={guideId} onClick={() => setGuideOpen(value => !value)}>HOW TO CONTRIBUTE</button>
       {guideOpen && <div id={guideId} className="activity-contribution-guide" aria-label="How to contribute">
         <h3>MAKE A CONTRIBUTION</h3>
-        <p>CHOOSE A PROFILE, THEN USE CONTRIBUTE +1 TO PUBLISH USEFUL INFORMATION.</p>
+        <p>CHOOSE A PROFILE, THEN USE EDIT AND SAVE TO PUBLISH USEFUL INFORMATION.</p>
         <button onClick={() => onContribute("ports")}><strong>COUNTRIES &amp; PORTS</strong><span>KEY INFO, DELIVERY NOTES AND LOCAL KNOWLEDGE ↗</span></button>
         <button onClick={() => onContribute("suppliers")}><strong>SUPPLIER PROFILES</strong><span>SUPPLIER INFORMATION AND DELIVERY DETAILS ↗</span></button>
         <button onClick={() => onContribute("counterparties")}><strong>BUYER PROFILES</strong><span>BUYER INFORMATION AND ACCOUNT KNOWLEDGE ↗</span></button>
@@ -214,8 +215,8 @@ export function ResourceWallet({ compact = false, onContribute, initialGuideOpen
           ? "YOU’RE KEEPING THE TEAM INFORMED. EVERY USEFUL UPDATE ADDS VALUE."
           : "YOUR KNOWLEDGE MAKES A DIFFERENCE. THANK YOU FOR SHARING IT."}</p>
       {onContribute && <div className="activity-tier-actions">
-        <button type="button" className="ui-button ui-button--primary" onClick={() => onContribute("ports")}>CONTRIBUTE +1 <span aria-hidden="true">↗</span></button>
-        <button type="button" className="ui-button ui-button--secondary" onClick={() => onContribute("feedback")}>FEEDBACK</button>
+        <KnowledgeUpdateButton onClick={() => onContribute("ports")}>EDIT <span aria-hidden="true">↗</span></KnowledgeUpdateButton>
+        <KnowledgeUpdateButton onClick={() => onContribute("feedback")}>FEEDBACK</KnowledgeUpdateButton>
       </div>}
     </div>
     <details className="activity-tier-details"><summary>HOW IT COUNTS</summary>

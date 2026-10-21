@@ -6,7 +6,7 @@ import { checkKnowledgeChange, publishKnowledge, knowledgeSectionRole, sameKnowl
 import { resourceAmount, teamForActor, type EconomyState } from './economy';
 export * from './economy';
 import { buyerGroupKey } from './buyerProfile';
-import { buyerCompetitionEntries, normalizedBuyerCompetition, validateBuyerCompetitionText } from './buyerCompetition';
+import { normalizedBuyerCompetition } from './buyerCompetition';
 import { retiredSupplierIds } from './supplierRetirement';
 import { lostReasonsFor, type LostReason } from "./lostReasons";
 import { emptyIntelligenceKeyInfo, intelligenceChangeSummary, sameIntelligenceKeyInfo, validateIntelligenceKeyInfo, type IntelligenceKeyInfo } from './intelligenceFields';
@@ -215,18 +215,14 @@ export type Action =
   | { type: 'save-knowledge'; change: KnowledgeChange; reason: string; source?: string }
   | { type: 'suggest-knowledge'; change: KnowledgeChange; reason: string; source?: string }
   | { type: 'save-buyer-private-list'; buyerId: string; entries: BuyerSharedDraftEntry[]; baseEntries: BuyerSharedDraftEntry[] }
-  | { type: 'save-buyer-private-remark'; buyerId: string; text: string }
   | { type: 'save-buyer-shared-list'; kind: BuyerSharedListKind; buyerId: string; entries: BuyerSharedDraftEntry[]; baseEntries: BuyerSharedDraftEntry[] }
-  | { type: 'add-buyer-competition'; buyerId: string; text: string }
   | { type: 'save-buyer-credit-remarks'; buyerId: string; text: string }
   | { type: 'set-active-credit-remark'; buyerId: string; historyId: string }
   | { type: 'mark-credit-request-read'; id: string }
   | { type: 'record-actual-volume'; id: string; quantity: number }
-  | { type: 'update-profile'; phone: string; email: string }
   | { type: 'save-enquiry'; enquiry: Enquiry }
   | { type: 'confirm-enquiry' | 'send-enquiry'; id: string }
   | { type: 'amend-enquiry' | 'postpone-enquiry' | 'cancel-enquiry'; id: string }
-  | { type: 'record-outcome'; id: string; kind: 'fixture' | 'lost'; quantity: number; margin: number; price: number; reason: string; products?: BookedProduct[]; complianceChecked?: boolean; creditChecked?: boolean }
   | { type: 'record-stem'; id: string; supplierId?: string; products: StemProduct[]; privateNote?: string; complianceChecked: boolean; creditChecked: boolean }
   | { type: 'record-loss'; id: string; reasonId: string; groupNote?: string; privateNote?: string }
   | { type: 'save-lost-reasons'; reasons: LostReason[] }
@@ -234,10 +230,9 @@ export type Action =
   | { type: 'acknowledge-credit'; id: string }
   | { type: 'decide-credit'; id: string; approve: boolean; amount: number; terms: string; note: string; expiresAt?: string }
   | { type: 'add-company'; company: Company; requestedLimit: number; reason: string; attachments?: CreditAttachment[]; duplicateConfirmed?: boolean; workflow?: 'p1'; nonPicConfirmed?: boolean }
-  | { type: 'save-intelligence'; portId: string; keyInfo: IntelligenceKeyInfo; baseKeyInfo?: IntelligenceKeyInfo; reason: string; source?: string }
+  | { type: 'save-port-information'; portId: string; keyInfo: IntelligenceKeyInfo; baseKeyInfo: IntelligenceKeyInfo; change?: KnowledgeChange; reason: string }
   | { type: 'submit-contribution'; feedbackPageId?: string; targetType: Contribution['targetType']; targetId: string; title: string; body: string; proposedKeyInfo?: IntelligenceKeyInfo; baseKeyInfo?: IntelligenceKeyInfo; source?: string }
-  | { type: 'review-contribution'; id: string; approve: boolean; note: string }
-  | { type: 'set-goals'; owner?: string; month: string; volume: number | null; profit: number | null };
+  | { type: 'review-contribution'; id: string; approve: boolean; note: string };
 
 const reportingMonthFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit',
@@ -497,21 +492,6 @@ export function applyAction(state: DemoState, action: Action, actor: Actor, now 
       audit(next, actor, now, 'Actual volume recorded', outcome.vessel, `${quantity} MT.`);
       break;
     }
-    case 'update-profile': {
-      const phone = normalizeContact('whatsapp', action.phone);
-      const email = normalizeContact('email', action.email);
-      if (!phone) throw new Error('Enter a valid phone number with country code.');
-      if (!email) throw new Error('Enter a valid email address.');
-      for (const contact of contactsFor(next)) {
-        if (contact.owner === actor.id) continue;
-        if (normalizeContact('whatsapp', contact.phone) === phone) throw new Error('This phone number belongs to another demo profile.');
-        if (normalizeContact('email', contact.email) === email) throw new Error('This email address belongs to another demo profile.');
-      }
-      next.profiles ??= {};
-      next.profiles[actor.id] = { phone, email };
-      audit(next, actor, now, 'Profile updated', actor.name, 'Personal enquiry contact details updated.');
-      break;
-    }
     case 'save-enquiry': {
       permit(actor, ['trader', 'manager']);
       const input = action.enquiry;
@@ -681,73 +661,6 @@ export function applyAction(state: DemoState, action: Action, actor: Actor, now 
       audit(next, actor, now, 'Lost reasons updated', 'Settings', `${reasons.filter(reason => reason.active).length} active reasons; order and labels saved.`);
       break;
     }
-    case 'record-outcome': {
-      const enquiry = ownEnquiry(next, action.id, actor);
-      if (enquiry.status !== 'sent') throw new Error('Confirm the enquiry before recording its outcome.');
-      if (next.outcomes.some(outcome => outcome.enquiryId === enquiry.id)) throw new Error('This enquiry already has a recorded outcome.');
-      if (action.kind !== 'fixture' && action.kind !== 'lost') throw new Error('Choose a valid trading outcome.');
-      let quantity = resourceAmount(action.quantity, 'Booked quantity');
-      let price = number(action.price, 'Price', 0);
-      let margin = number(action.margin, 'Margin');
-      const reason = action.kind === 'lost' ? required(action.reason, 'Lost reason') : action.reason.trim();
-      const company = companyById(next, enquiry.buyerId);
-      if (!next.ports.some(port => port.id === enquiry.portId)) throw new Error('A valid port is required for the trading outcome.');
-      let products: BookedProduct[] | undefined;
-      let commitment = 0;
-      let profit = 0;
-      if (action.kind === 'fixture') {
-        if (action.complianceChecked !== true || action.creditChecked !== true) throw new Error('Complete the compliance and credit checks before STEM.');
-        if (enquiry.products && enquiry.products.length > 1 && !action.products?.length) throw new Error('Enter booked quantity, price and margin for each product.');
-        if (action.products) {
-          if (!action.products.length) throw new Error('Enter a booked product.');
-          const requested = enquiry.products?.length ? enquiry.products.map(product => product.grade) : [enquiry.grade];
-          const grades = new Set<string>();
-          products = action.products.map(product => {
-            if (!requested.includes(product.grade) || grades.has(product.grade)) throw new Error('Booked grades must match the enquiry.');
-            grades.add(product.grade);
-            return {
-              grade: product.grade,
-              quantity: positive(resourceAmount(product.quantity, `${product.grade} booked quantity`), `${product.grade} booked quantity`),
-              price: positive(product.price, `${product.grade} fixture price`),
-              margin: number(product.margin, `${product.grade} margin`),
-            };
-          });
-          if (requested.length !== grades.size) throw new Error('Enter booked details for every requested product.');
-          quantity = resourceAmount(products.reduce((sum, product) => sum + product.quantity, 0), 'Booked quantity');
-          commitment = money(products.reduce((sum, product) => sum + number(product.quantity * product.price, 'Fixture exposure', 0), 0));
-          profit = money(products.reduce((sum, product) => sum + number(product.quantity * product.margin, 'Fixture profit'), 0));
-          // These weighted values keep legacy summary rows compatible; item rows retain the actual terms.
-          price = commitment / quantity;
-          margin = profit / quantity;
-        } else {
-          positive(quantity, 'Booked quantity');
-          positive(price, 'Fixture price');
-          commitment = money(number(price * quantity, 'Fixture exposure', 0));
-          profit = money(number(quantity * margin, 'Fixture profit'));
-        }
-        const blocked = companyTradingBlockedReason(company);
-        if (blocked) throw new Error(blocked);
-        positive(commitment, 'Fixture exposure');
-        if (availableCredit(company, now) < commitment) throw new Error(`Insufficient credit: USD ${availableCredit(company, now).toLocaleString('en-US')} available; USD ${commitment.toLocaleString('en-US')} required. Request additional credit first.`);
-        company.exposure = money(company.exposure + commitment);
-      }
-      const outcome: Outcome = { id: uid('outcome'), enquiryId: enquiry.id, kind: action.kind,
-        buyerId: enquiry.buyerId, portId: enquiry.portId, vessel: enquiry.vessel,
-        imo: enquiry.imo,
-        grade: products?.map(product => product.grade).join(' + ') || enquiry.grade,
-        quantity, price, margin, bookedAt: now, owner: actor.id, reason, ...(products ? { products } : {}),
-        ...(action.kind === 'fixture' ? { complianceChecked: true, creditChecked: true, checkedBy: actor.id, checkedAt: now } : {}) };
-      next.outcomes.unshift(outcome);
-      enquiry.status = action.kind;
-      enquiry.quantity = quantity;
-      enquiry.price = price;
-      enquiry.margin = margin;
-      audit(next, actor, now, action.kind === 'fixture' ? 'Fixture booked' : 'Lost enquiry recorded', enquiry.vessel,
-        action.kind === 'fixture'
-          ? `${products ? products.map(product => `${product.grade}: ${product.quantity} MT × USD ${product.margin}/MT margin`).join('; ') : `${quantity} MT × USD ${margin}/MT margin`} = USD ${profit} profit. USD ${commitment} added to exposure.`
-          : `${reason}. No credit exposure or commercial target progress added.`);
-      break;
-    }
     case 'request-credit': {
       permit(actor, ['trader', 'manager']);
       createRequest(next, actor, now, action);
@@ -860,22 +773,6 @@ export function applyAction(state: DemoState, action: Action, actor: Actor, now 
       audit(next, actor, now, `${label} updated`, buyer.name, 'List updated.');
       break;
     }
-    case 'add-buyer-competition': {
-      permit(actor, ['trader', 'manager']);
-      const buyer = companyById(next, action.buyerId);
-      const text = validateBuyerCompetitionText(action.text);
-      const normalized = normalizedBuyerCompetition(text);
-      if (buyerCompetitionEntries(next, buyer.id).some(entry => normalizedBuyerCompetition(entry.body) === normalized)) throw new Error('This Competition entry already exists for this buyer.');
-      // Keep the published contribution identified by its stable ID.
-      // Keep Competition separate from company knowledge, group remarks and private notes.
-      next.contributions.unshift({ id: uid('contribution'), targetType: 'buyer-competition', targetId: buyer.id,
-        title: `${buyer.name} · Competition`, body: text, author: actor.id, createdAt: now,
-        publishedAt: now, publication: 'direct', status: 'approved' });
-      const list = next.buyerSharedLists?.[buyerSharedListKey('competition', buyer.id)];
-      if (list) { list.entries.unshift({ id: next.contributions[0].id, text, author: actor.id, createdAt: now }); list.updatedBy = actor.id; list.updatedAt = now; }
-      audit(next, actor, now, 'Competition added', buyer.name, `${text}; contribution recorded.`);
-      break;
-    }
     case 'save-buyer-private-list': {
       companyById(next, action.buyerId);
       const current = buyerPrivateEntries(next, action.buyerId, actor.id);
@@ -884,16 +781,6 @@ export function applyAction(state: DemoState, action: Action, actor: Actor, now 
       next.buyerPrivateRemarks[JSON.stringify([actor.id, action.buyerId])] = { owner: actor.id, buyerId: action.buyerId,
         text: entries.map(entry => entry.text).join('\n\n'), entries, updatedAt: now };
       // Private content and revisions never enter shared contributions or audit.
-      break;
-    }
-    case 'save-buyer-private-remark': {
-      companyById(next, action.buyerId);
-      if (typeof action.text !== 'string' || action.text.length > 10000) throw new Error('Private Remarks must be 10,000 characters or fewer.');
-      const key = JSON.stringify([actor.id, action.buyerId]);
-      next.buyerPrivateRemarks ??= {};
-      if (action.text.trim()) next.buyerPrivateRemarks[key] = { owner: actor.id, buyerId: action.buyerId, text: action.text.trim(), updatedAt: now };
-      else delete next.buyerPrivateRemarks[key];
-      // Private content is intentionally absent from shared audit and contributions.
       break;
     }
     case 'save-buyer-credit-remarks': {
@@ -1011,22 +898,23 @@ export function applyAction(state: DemoState, action: Action, actor: Actor, now 
       audit(next, actor, now, 'Information updated', name, `${reason}; contribution recorded.`);
       break;
     }
-    case 'save-intelligence': {
+    case 'save-port-information': {
       const port = next.ports.find(item => item.id === action.portId);
       if (!port) throw new Error('Select a valid port.');
       const keyInfo = validateIntelligenceKeyInfo(action.keyInfo);
       const before = port.intelligenceKeyInfo ?? emptyIntelligenceKeyInfo();
-      if (action.baseKeyInfo !== undefined && !sameIntelligenceKeyInfo(before, validateIntelligenceKeyInfo(action.baseKeyInfo))) throw new Error('Key Info changed. Reopen the editor before saving.');
+      if (!sameIntelligenceKeyInfo(before, validateIntelligenceKeyInfo(action.baseKeyInfo))) throw new Error('Key Info changed. Reopen the editor before saving.');
+      const change = action.change ? checkKnowledgeChange(next, action.change) : undefined;
+      if (change && (change.target.kind !== 'port' || change.target.id !== port.id)) throw new Error('Select the same port for this update.');
+      const changed = !sameIntelligenceKeyInfo(before, keyInfo);
+      if (!changed && !change) throw new Error('No changes to save.');
       const reason = required(action.reason, 'Reason');
-      if (action.source !== undefined && typeof action.source !== 'string') throw new Error('Source must be text.');
-      const source = action.source?.trim();
-      if (sameIntelligenceKeyInfo(before, keyInfo)) throw new Error('No Key Info changes to save.');
-      stampKeyInfo(port, keyInfo, actor.id, now);
-      port.intelligenceKeyInfo = keyInfo;
-      port.updatedAt = now;
-      next.contributions.unshift({id:uid('contribution'),targetType:'port',targetId:port.id,title:`${port.name} · Key Info`,body:reason,author:actor.id,createdAt:now,publishedAt:now,publication:'direct',status:'approved',proposedKeyInfo:keyInfo,keyInfoBase:before,source});
-      audit(next, actor, now, 'Key Info updated', port.name,
-        `${intelligenceChangeSummary(before, keyInfo)}; ${reason}${source ? `; Source: ${source}` : ''}`);
+      if (reason.length > 5000) throw new Error('Reason is too long.');
+      // Validate both drafts before either is published; one tab save earns one contribution.
+      if (change) publishKnowledge(next, change, actor.id, now, reason);
+      if (changed) { stampKeyInfo(port, keyInfo, actor.id, now); port.intelligenceKeyInfo = keyInfo; port.updatedAt = now; }
+      next.contributions.unshift({ id: uid('contribution'), targetType: 'port', targetId: port.id, title: port.name, body: reason, author: actor.id, createdAt: now, publishedAt: now, publication: 'direct', status: 'approved', knowledgeChange: change, ...(changed ? { proposedKeyInfo: keyInfo, keyInfoBase: before } : {}) });
+      audit(next, actor, now, 'Information updated', port.name, `${reason}; contribution recorded.`);
       break;
     }
     case 'submit-contribution': {
@@ -1085,26 +973,6 @@ export function applyAction(state: DemoState, action: Action, actor: Actor, now 
       if (action.approve) keyInfoChanges = publishContribution(next, contribution, actor, now, note);
       audit(next, actor, now, `${contribution.targetType === 'feedback' ? 'Feedback' : 'Knowledge'} ${action.approve ? 'approved' : 'declined'}`, contribution.title,
         `${note}${keyInfoChanges ? `; ${keyInfoChanges}` : ''}${contribution.source ? `; Source: ${contribution.source}` : ''}`);
-      break;
-    }
-    case 'set-goals': {
-      permit(actor, ['admin']);
-      const owner = actors.find(person => person.id === action.owner && canTrade(person));
-      if (!owner) throw new Error('Select a valid trader.');
-      if (action.month !== reportingMonth(now)) throw new Error('Set goals for the current Hong Kong calendar month.');
-      if (action.volume !== null) positive(action.volume, 'Monthly volume target');
-      if (action.profit !== null) positive(action.profit, 'Monthly profit target');
-      const previous = next.goals.find(goal => goal.owner === owner.id && goal.month === action.month);
-      for (const metric of ['volume', 'profit'] as const) {
-        if (previous?.[metric] != null && (action[metric] === null || action[metric]! < previous[metric]!)) {
-          throw new Error(`Your ${metric} target is already set for this month. It can be increased, but cannot be lowered or removed after setting. Leave next month's target empty if you do not want to participate.`);
-        }
-      }
-      const goal: Goal = { owner: owner.id, month: action.month, volume: action.volume, profit: action.profit };
-      if (previous) next.goals[next.goals.indexOf(previous)] = goal;
-      else next.goals.push(goal);
-      audit(next, actor, now, 'Monthly goals updated', owner.name,
-        `${action.month}: booked volume ${action.volume === null ? 'not set' : `${action.volume} MT`}; profit ${action.profit === null ? 'not set' : `USD ${action.profit}`} (margin × quantity).`);
       break;
     }
     default: throw new Error('This demo action is not supported.');

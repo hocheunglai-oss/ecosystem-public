@@ -1,3 +1,4 @@
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, GripVertical, LockKeyhole, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { Modal } from './ui';
@@ -50,6 +51,7 @@ export function ManageProfileTabs<T extends ProfileTabDescriptor>({ tabs, defaul
   const id = useId(), inputs = useRef(new Map<string, HTMLInputElement>());
   const editable = (tab: ProfileTabDescriptor) => tab.visibility === 'private' ? canManagePrivate : canManageShared;
   const dirty = JSON.stringify(draft) !== JSON.stringify(base);
+  const sharedDirty = canManageShared && JSON.stringify(draft.filter(tab => tab.visibility === 'shared')) !== JSON.stringify(base.filter(tab => tab.visibility === 'shared'));
   const invalid = draft.some(tab => !tab.title.trim() || (tab.title.trim().toLocaleLowerCase() !== base.find(entry => entry.id === tab.id)?.title.trim().toLocaleLowerCase() && draft.some(other => other.id !== tab.id && other.visibility === tab.visibility && other.title.trim().toLocaleLowerCase() === tab.title.trim().toLocaleLowerCase())));
   const close = () => { if (!saving && (!dirty || window.confirm('Discard unsaved tab changes?'))) onClose(); };
   function add(visibility: 'shared' | 'private', template?: Pick<ProfileTabDescriptor, 'title' | 'builtin'>) {
@@ -89,7 +91,7 @@ export function ManageProfileTabs<T extends ProfileTabDescriptor>({ tabs, defaul
     </div>
     <div className="profile-tabs-additions">{alternateAction && <button type="button" className="button secondary" disabled={saving} onClick={() => { if (!dirty || window.confirm('Discard unsaved tab changes?')) alternateAction.run(); }}>{alternateAction.label}</button>}{canManageShared && <button type="button" className="button secondary" disabled={saving || draft.filter(tab => tab.visibility === 'shared').length >= limit('shared')} onClick={() => add('shared')}><Plus size={14} />Add tab</button>}{canManagePrivate && <button type="button" className="button secondary" disabled={saving || count('private') >= limit('private')} onClick={() => add('private')}><Plus size={14} />PRIVATE TAB</button>}{canManageShared && missingDefaults.length > 0 && <select aria-label="Restore default tab" value="" disabled={saving || draft.filter(tab => tab.visibility === 'shared').length >= limit('shared')} onChange={event => { const template = missingDefaults.find(item => item.builtin === event.target.value); if (template) add('shared', template); }}><option value="">Restore default tab</option>{missingDefaults.map(template => <option key={template.builtin} value={template.builtin}>{template.title}</option>)}</select>}</div>
     {invalid && <span className="profile-tabs-instruction">Use a different name for each tab.</span>}
-    <footer><button type="button" className="button secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={saving || invalid || !dirty}>{saving ? 'Saving…' : 'Save'}</button></footer>
+    <footer><button type="button" className="button secondary" disabled={saving} onClick={close}>Cancel</button><KnowledgeUpdateButton type="submit" contribution={sharedDirty} disabled={saving || invalid || !dirty}>{saving ? 'SAVING…' : 'SAVE'}</KnowledgeUpdateButton></footer>
   </form></Modal>;
 }
 
@@ -119,9 +121,9 @@ export function ProfileTabContent({ tab, canEdit, onSave, onDirtyChange, initial
   const editable = useRef(canEdit); editable.current = canEdit;
   useEffect(() => { if (!canEdit) { setEditing(false); onDirtyChange?.(false); } }, [canEdit, onDirtyChange]);
   const content = decodeProfileTabContent(tab.content, tab.title);
-  return <section className="profile-tab-content"><header><h3>{tab.title}</h3>{canEdit && !editing && <button type="button" className="button primary" onClick={() => setEditing(true)}>{tab.visibility === 'shared' ? 'CONTRIBUTE +1' : 'EDIT'}</button>}</header>
+  return <section className="profile-tab-content"><header><h3>{tab.title}</h3>{canEdit && !editing && <KnowledgeUpdateButton contribution={tab.visibility === 'shared'} onClick={() => setEditing(true)} />}</header>
     {editing && canEdit ? <KnowledgeEditor embedded readOnlyNames target={{ kind: 'supplier', id: tab.id }} initial={profileTabDocument(tab)} initialSection={tab.id}
-      {...navigation} onDirtyChange={onDirtyChange} saveLabel={tab.visibility === 'shared' ? 'CONTRIBUTE +1' : 'SAVE'}
+      {...navigation} onDirtyChange={onDirtyChange} saveLabel="SAVE" contribution={tab.visibility === 'shared'}
       onCommit={async document => { if (!editable.current) throw new Error('Tab editing unavailable.'); await onSave(encodeProfileTabContent(document.sections[0].blocks)); }}
       onClose={() => setEditing(false)} /> : content.length ? content.map(block => <ProfileContentBlockView key={block.id} block={block} />) : <p>—</p>}
   </section>;

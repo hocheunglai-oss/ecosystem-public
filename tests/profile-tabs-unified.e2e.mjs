@@ -198,13 +198,15 @@ async function verifyProfile(page, state, kind, width, shot) {
   for (let i = 0; i < await blank.count(); i++) if (!(await blank.nth(i).inputValue()).trim()) { newInput = blank.nth(i); break; }
   assert.ok(newInput, '+ PRIVATE TAB adds its row inside the same manager');
   await newInput.fill(newName);
-  await button(modal, 'Save').click();
+  await button(modal, /^SAVE$/i).click();
   await expect(modal).toHaveCount(0);
   await expect(await tab(profile, newName)).toBeVisible();
   await (await tab(profile, privateTitle(kind))).click();
   const content = profile.locator('.profile-tab-content');
+  await expect(button(content, 'EDIT')).not.toHaveAttribute('aria-description', 'CONTRIBUTION +1');
   await button(content, 'EDIT').click();
   const editor = profile.locator('.knowledge-editor').first();
+  await expect(button(editor, /^SAVE$/i)).not.toHaveAttribute('aria-description', 'CONTRIBUTION +1');
   await expect(editor).toBeVisible();
   await expect(page.getByRole('dialog', { name: /^Update information$/i })).toHaveCount(0);
   await expect(editor.getByLabel('Edit tab', { exact: true })).toHaveCount(0);
@@ -213,10 +215,10 @@ async function verifyProfile(page, state, kind, width, shot) {
   await editor.getByLabel('Block 1 text', { exact: true }).fill(`${privateText(kind)} EDITED`);
   await button(editor, 'Add Table').click();
   await editor.getByLabel('Block 2 title', { exact: true }).fill('PRIVATE TABLE');
-  await editor.locator('input[data-row="0"][data-col="0"]').fill('OWNER ONLY CELL');
+  await editor.getByLabel('Row 1, Name', { exact: true }).fill('OWNER ONLY CELL');
   await checkGeometry(page, editor, width);
   await shot(`${kind}-text-table-editor`);
-  await button(editor, 'SAVE').click();
+  await button(editor, /^SAVE$/i).click();
   await expect(editor).toHaveCount(0);
   await expect(content).toContainText(`${privateText(kind)} EDITED`);
   await expect(content).toContainText('OWNER ONLY CELL');
@@ -265,7 +267,7 @@ async function verifyRetryAndCancel(page, state, profile, kind) {
   const text = editor.getByLabel('Block 1 text', { exact: true });
   await text.fill(`${privateText(kind)} CONFLICT DRAFT`);
   state.conflict = true;
-  await button(editor, 'SAVE').click();
+  await button(editor, /^SAVE$/i).click();
   await expect(content.getByRole('alert')).toContainText('Tabs changed');
   await expect(text).toHaveValue(`${privateText(kind)} CONFLICT DRAFT`);
   state.conflict = false;
@@ -286,12 +288,12 @@ async function verifyRetryAndCancel(page, state, profile, kind) {
   await editor.getByRole('button', { name: 'Edit Text 1', exact: true }).click();
   await text.fill(`${privateText(kind)} RETRIED`);
   state.dropResponse = true;
-  await button(editor, 'SAVE').click();
+  await button(editor, /^SAVE$/i).click();
   await expect(content.getByRole('alert')).toBeVisible();
   const attempt = structuredClone(state.requests.at(-1));
   await focus(page);
   await expect(text).toHaveValue(`${privateText(kind)} RETRIED`);
-  await button(editor, 'SAVE').click();
+  await button(editor, /^SAVE$/i).click();
   await expect(editor).toHaveCount(0);
   assert.deepEqual(state.requests.at(-1), attempt, `${kind}: uncertain response retry preserves request ID, revision and payload`);
   await expect(content).toContainText(`${privateText(kind)} RETRIED`);
@@ -316,15 +318,15 @@ async function verifyManageOrder(page, profile, kind, newName, width, shot) {
     await transfer.dispose();
     assert.equal((await managerNames(modal))[0], newName);
   }
-  await button(modal, 'Save').click();
+  await button(modal, /^SAVE$/i).click();
   await expect(modal).toHaveCount(0);
   await button(profile, 'Manage tabs').click();
   await button(modal, `Remove tab ${newName}`).click();
-  await button(modal, 'Save').click();
+  await button(modal, /^SAVE$/i).click();
   await expect(await tab(profile, newName)).toHaveCount(0);
   await button(profile, 'Manage tabs').click();
   await modal.getByLabel('Tab 1 name', { exact: true }).fill(privateTitle(kind));
-  await button(modal, 'Save').click();
+  await button(modal, /^SAVE$/i).click();
   await expect(modal).toHaveCount(0);
 }
 
@@ -332,10 +334,9 @@ async function verifySharedEditing(page, state, width, shot) {
   for (const kind of ['country', 'port']) {
     const profile = await openProfile(page, kind);
     await (await tab(profile, sharedTitles[0])).click();
-    await expect(profile.locator('.knowledge-header').getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
+    await expect(profile.locator('.knowledge-header').getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
     const before = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), liveKey(user.id));
-    const block = profile.locator('.knowledge-block').filter({ has: page.getByRole('heading', { name: 'SHARED 1 NOTE', exact: true }) });
-    await block.getByRole('button', { name: /^(?:Update|Contribute.*) SHARED 1 NOTE$/i }).click();
+    await button(profile.locator('.knowledge-content-toolbar'), 'EDIT').click();
     const editor = profile.locator('.knowledge-editor');
     await expect(editor).toBeVisible();
     await expect(page.getByRole('dialog', { name: /^Update information$/i })).toHaveCount(0);
@@ -344,7 +345,7 @@ async function verifySharedEditing(page, state, width, shot) {
     await expect(editor.getByLabel('Block 1 text')).toHaveValue(`UNCHANGED ${kind.toUpperCase()} 1`);
     await editor.getByLabel('Block 1 text').fill(`EDITED ${kind.toUpperCase()} ONLY`);
     await shot(`${kind}-shared-inline`);
-    await button(editor, 'CONTRIBUTE +1').click();
+    await button(editor, /^SAVE$/i).click();
     await expect(editor).toHaveCount(0);
     const after = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), liveKey(user.id));
     const key = kind === 'country' ? 'country:Japan' : 'port:port-chiba';
@@ -354,12 +355,12 @@ async function verifySharedEditing(page, state, width, shot) {
   }
   const profile = await openProfile(page, 'supplier');
   await profile.getByRole('tab', { name: 'Supplier information', exact: true }).click();
-  await expect(profile.locator('.shared-supplier-profile-heading').getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
+  await expect(profile.locator('.shared-supplier-profile-heading').getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
   const before = structuredClone(state.record);
-  await button(profile.locator('.shared-supplier-content-toolbar'), 'CONTRIBUTE +1').click();
+  await button(profile.locator('.shared-supplier-content-toolbar'), 'EDIT').click();
   await profile.getByLabel('Payment terms', { exact: true }).fill('21');
   await shot('supplier-shared-inline');
-  await button(profile.locator('.shared-supplier-save'), 'CONTRIBUTE +1').click();
+  await button(profile.locator('.shared-supplier-save'), /^SAVE$/i).click();
   await expect(profile.getByLabel('Payment terms', { exact: true })).toHaveCount(0);
   assert.equal(state.record.info.paymentTerms, '21');
   assert.deepEqual(state.record.contacts, before.contacts);
@@ -378,11 +379,11 @@ async function verifyPartialManagerRetry(page, state) {
   await modal.getByLabel(`Tab ${at + 1} name`, { exact: true }).fill('SUPPLIER OPERATIONS');
   const before = state.requests.length;
   state.failSharedOnce = true;
-  await button(modal, 'Save').click();
+  await button(modal, /^SAVE$/i).click();
   await expect(modal.getByRole('alert')).toContainText('temporarily unavailable');
   await expect(modal.getByLabel('Tab 1 name', { exact: true })).toHaveValue('PRIVATE SUPPLIER RENAMED');
   assert.equal(state.requests.slice(before).filter(request => request.visibility === 'private').length, 1);
-  await button(modal, 'Save').click();
+  await button(modal, /^SAVE$/i).click();
   await expect(modal).toHaveCount(0);
   const attempts = state.requests.slice(before);
   assert.equal(attempts.filter(request => request.visibility === 'private').length, 1, 'Successful private save is not resubmitted when shared save retries');
@@ -398,10 +399,11 @@ async function verifyNavigationDiscard(page, state, shot) {
     const before = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).knowledgeRecords, liveKey(user.id));
     const requests = state.requests.length;
     if (visibility === 'private') await button(profile.locator('.profile-tab-content'), 'EDIT').click();
-    else await button(profile.locator('.knowledge-content-toolbar'), 'CONTRIBUTE +1').click();
+    else await button(profile.locator('.knowledge-content-toolbar'), 'EDIT').click();
     const editor = profile.locator('.knowledge-editor'), text = editor.getByLabel('Block 1 text', { exact: true });
     await text.fill(`UNSAVED ${visibility.toUpperCase()} NAVIGATION DRAFT`);
-    const index = page.getByRole('dialog', { name: 'Countries & Ports', exact: true }).getByRole('button', { name: 'Port Index', exact: true });
+    const narrow = page.viewportSize().width <= 600;
+    const index = page.getByRole('dialog', { name: 'Countries & Ports', exact: true }).getByRole('button', { name: narrow ? 'Back to Countries & Ports' : 'Port Index', exact: true });
     page.once('dialog', dialog => dialog.dismiss());
     await index.click();
     await expect(text).toHaveValue(`UNSAVED ${visibility.toUpperCase()} NAVIGATION DRAFT`);
@@ -409,7 +411,7 @@ async function verifyNavigationDiscard(page, state, shot) {
     page.once('dialog', dialog => dialog.accept());
     await index.click();
     await expect(editor).toHaveCount(0);
-    await expect(page.locator('.location-table')).toBeVisible();
+    await expect(page.locator(narrow ? '.location-recents' : '.location-table')).toBeVisible();
     assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).knowledgeRecords, liveKey(user.id)), before);
     assert.equal(state.requests.length, requests, 'Discarding navigation draft sends no private save');
   }
@@ -446,7 +448,7 @@ async function verifyGates(page, state, shot) {
   await expect(await tab(profile, privateTitle('country'))).toHaveCount(0);
   await expect(profile.locator('.knowledge-editor')).toHaveCount(0);
   await expect(profile.getByText('UNSAVED OWNER SECRET', { exact: true })).toHaveCount(0);
-  await expect(profile.getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
+  await expect(profile.getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
   await shot('preview-country');
   state.preview = null; await refreshAuthority();
   await expect(page.getByRole('status', { name: 'Role preview' })).toHaveCount(0);
@@ -468,7 +470,7 @@ async function verifyGates(page, state, shot) {
   profile = await openProfile(page, 'supplier');
   await expect(profile.getByRole('tab', { name: /PRIVATE SUPPLIER/ })).toHaveCount(0);
   await expect(button(profile, 'Manage tabs')).toHaveCount(0);
-  await expect(profile.getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
+  await expect(profile.getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
   await shot('test-supplier');
   await closeWorkspace(page); await testToggle.click();
   await expect(testToggle).toHaveAttribute('aria-pressed', 'false');
@@ -476,7 +478,7 @@ async function verifyGates(page, state, shot) {
   await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('NORMAL TRADER');
   profile = await openProfile(page, 'supplier');
-  await expect(profile.getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
+  await expect(profile.getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
   await button(profile, 'Manage tabs').click();
   await expect(manager(page).getByRole('button', { name: /^(?:\+\s*)?PRIVATE TAB$/i })).toBeVisible();
   await expect(manager(page).getByRole('button', { name: 'Add tab', exact: true })).toHaveCount(0);

@@ -13,7 +13,6 @@ export type ModalSpec =
   | { type: "decision"; id: string }
   | { type: "outcome"; id: string; kind: "fixture" | "lost" }
   | { type: "company"; name?: string }
-  | { type: "intelligence-edit"; portId: string }
   | {
       type: "contribute";
       targetType: Contribution["targetType"];

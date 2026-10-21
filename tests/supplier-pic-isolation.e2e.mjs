@@ -77,7 +77,7 @@ for(const[engine,browserType]of[['chromium',chromium],['webkit',webkit]]){
       await page.goto(base);await activateTestWorkspace(page);
       let{workspace,dialog}=await openPic(page);
       await expect(dialog.getByRole('alert')).toContainText('Switch to LIVE to update shared records.');
-      await expect(dialog.getByRole('button',{name:'CONTRIBUTE +1',exact:true})).toBeDisabled();
+      await expect(dialog.getByRole('button',{name:'SAVE',exact:true})).toBeDisabled();
       assert.equal(state.detailReads,0,'TEST must reject before detail GET');assert.equal(state.writes.length,0);
       await page.screenshot({path:`${output}/${engine}-${width}-${theme}-test-blocked.png`,fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
       for(const transition of['mode','preview','account']){
@@ -94,17 +94,17 @@ for(const[engine,browserType]of[['chromium',chromium],['webkit',webkit]]){
       state.user={...otto};state.preview=null;state.holdDetail=false;
       await resetPage();await expect(toggle(page)).toBeEnabled();({dialog}=await openPic(page));
       await dialog.getByLabel('SUPPLIER PIC FOR FIXTURE',{exact:true}).selectOption('PENDING PIC EDIT');
-      state.dropResponse=true;await dialog.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();await expect(dialog.getByRole('alert')).toBeVisible();
+      state.dropResponse=true;await dialog.getByRole('button',{name:'SAVE',exact:true}).click();await expect(dialog.getByRole('alert')).toBeVisible();
       assert.equal(state.writes.length,1);assert.equal(state.commits,1);
       await focus(page);await expect(dialog.getByLabel('SUPPLIER PIC FOR FIXTURE',{exact:true})).toHaveValue('PENDING PIC EDIT');
-      await dialog.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();await expect(dialog).toHaveCount(0);
+      await dialog.getByRole('button',{name:'SAVE',exact:true}).click();await expect(dialog).toHaveCount(0);
       assert.equal(state.writes.length,2);assert.equal(state.commits,1);assert.deepEqual(state.writes[1],state.writes[0],'Retry retains exact payload/request ID');
       assert.equal(state.writes[0].info.supplierTrader,'PENDING PIC EDIT');
       // An already-sent request may finish after account change; its old completion must not update the new view.
       await resetPage();await expect(toggle(page)).toBeEnabled();({dialog}=await openPic(page));
       await dialog.getByLabel('SUPPLIER PIC FOR FIXTURE',{exact:true}).selectOption('PENDING PIC EDIT');
       state.holdUpdate=true;state.releaseUpdate=null;const settled=state.updateSettled;
-      await dialog.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();await expect.poll(()=>Boolean(state.releaseUpdate)).toBe(true);
+      await dialog.getByRole('button',{name:'SAVE',exact:true}).click();await expect.poll(()=>Boolean(state.releaseUpdate)).toBe(true);
       state.user={...other};await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');await expect(dialog).toHaveCount(0);
       state.releaseUpdate();await expect.poll(()=>state.updateSettled).toBe(settled+1);await page.waitForTimeout(100);
       assert.equal(await page.evaluate(()=>window.__supplierEvents),0,'Old completion must not publish refresh events after account change');
@@ -114,18 +114,18 @@ for(const[engine,browserType]of[['chromium',chromium],['webkit',webkit]]){
       await expect(toggle(page)).toBeEnabled();await page.getByRole('combobox',{name:'Search ECO'}).fill('SUPPLIER FIXTURE');
       await page.getByRole('option').filter({hasText:record.legalName}).click();
       workspace=page.getByRole('dialog',{name:'Supplier Profiles',exact:true});
-      await workspace.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();
+      await workspace.getByRole('button',{name:'EDIT',exact:true}).click();
       await workspace.getByLabel('Payment terms',{exact:true}).fill('987');
       const writesBeforeMode=state.writes.length;
       await toggle(page).evaluate(button=>button.click());await expect(toggle(page)).toHaveAttribute('aria-pressed','true');
       await expect(workspace).toHaveCount(0);
       await expect(workspace.getByLabel('Payment terms',{exact:true})).toHaveCount(0);
-      await expect(workspace.getByRole('button',{name:'CONTRIBUTE +1',exact:true})).toHaveCount(0);
+      await expect(workspace.getByRole('button',{name:'EDIT',exact:true})).toHaveCount(0);
       await expect(workspace.getByRole('button',{name:'Manage tabs',exact:true})).toHaveCount(0);
       await toggle(page).evaluate(button=>button.click());await expect(toggle(page)).toHaveAttribute('aria-pressed','false');
       await page.getByRole('combobox',{name:'Search ECO'}).fill('SUPPLIER FIXTURE');
       await page.getByRole('option').filter({hasText:record.legalName}).click();
-      await workspace.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();
+      await workspace.getByRole('button',{name:'EDIT',exact:true}).click();
       await expect(workspace.getByLabel('Payment terms',{exact:true})).toHaveValue('30');
       assert.equal(state.writes.length,writesBeforeMode,'Changing workspace mode clears a profile draft without writing it');
       await page.screenshot({path:`${output}/${engine}-${width}-${theme}-profile-mode-reset.png`,fullPage:true});

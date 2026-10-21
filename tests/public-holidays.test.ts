@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLiveState } from '../src/lib/testWorkspace';
-import { formatHolidayDate, holidayDates, holidayLocalDate, nextPublicHoliday, publicHolidayCalendar, publicHolidayCalendars } from '../src/lib/publicHolidays';
+import { formatHolidayDate, holidayDates, holidayLocalDate, nextHolidayIsComplete, nextPublicHoliday, publicHolidayCalendar, publicHolidayCalendars, todayPublicHoliday } from '../src/lib/publicHolidays';
 
 test('each live jurisdiction has its own official calendar; new names do not get guessed', () => {
   for (const country of createLiveState().locationCountries!) assert.ok(publicHolidayCalendar(country.name), country.name);
@@ -70,4 +70,38 @@ test('every dated entry has a valid explicit official source and safe calendar d
       }
     }
   }
+});
+
+test('today distinguishes confirmed holidays from complete-calendar nonholidays', () => {
+  const sg = publicHolidayCalendar('Singapore')!;
+  assert.deepEqual(todayPublicHoliday(sg, '2026-11-08'), { kind: 'holiday', holidays: sg.years[2026].holidays.filter(day => day.date === '2026-11-08') });
+  assert.equal(todayPublicHoliday(sg, '2026-11-09').kind, 'holiday', 'The observed day is a holiday too');
+  assert.equal(todayPublicHoliday(sg, '2026-10-20').kind, 'nonholiday');
+  assert.equal(todayPublicHoliday(publicHolidayCalendar('Netherlands'), '2026-10-20').kind, 'nonholiday');
+});
+
+test('missing, pending, scheduled and limited calendars never prove a negative', () => {
+  const ae = publicHolidayCalendar('United Arab Emirates')!;
+  assert.equal(todayPublicHoliday(ae, '2027-03-01').kind, 'unconfirmed');
+  assert.equal(todayPublicHoliday(ae, '2026-12-02').kind, 'unconfirmed', 'Scheduled is not confirmed');
+  assert.equal(todayPublicHoliday(ae, '2026-01-01').kind, 'holiday', 'An explicit confirmed row remains usable in a partial calendar');
+  assert.equal(todayPublicHoliday(publicHolidayCalendar('Vietnam'), '2027-03-01').kind, 'unconfirmed');
+  assert.equal(todayPublicHoliday(publicHolidayCalendar('Hong Kong'), '2026-10-25').kind, 'unconfirmed', 'Named dates omit recurring Sundays');
+  assert.equal(todayPublicHoliday(publicHolidayCalendar('Hong Kong'), '2026-10-20').kind, 'nonholiday');
+  for (const date of [null, 'invalid', '2026-02-30', '2028-01-01']) assert.equal(todayPublicHoliday(ae, date).kind, 'unavailable');
+  assert.equal(todayPublicHoliday(undefined, '2026-10-20').kind, 'unavailable');
+});
+
+test('the next-holiday hint skips today and identifies incomplete intervening publication years', () => {
+  const sg = publicHolidayCalendar('Singapore')!;
+  const observed = nextPublicHoliday(sg, '2026-11-08', false)!;
+  assert.equal(observed.date, '2026-11-09');
+  assert.equal(nextHolidayIsComplete(sg, '2026-11-08', observed), true);
+  const rollover = nextPublicHoliday(sg, '2026-12-25', false)!;
+  assert.equal(rollover.date, '2027-01-01');
+  assert.equal(nextHolidayIsComplete(sg, '2026-12-25', rollover), true);
+  const hk = publicHolidayCalendar('Hong Kong')!;
+  assert.equal(nextHolidayIsComplete(hk, '2026-10-20', nextPublicHoliday(hk, '2026-10-20', false)!), false);
+  const gap = { ...sg, years: { 2027: sg.years[2027] } };
+  assert.equal(nextHolidayIsComplete(gap, '2026-12-25', rollover), false, 'A future confirmed date cannot rule out an earlier holiday in a missing year');
 });

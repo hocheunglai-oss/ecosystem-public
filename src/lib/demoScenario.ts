@@ -1,3 +1,4 @@
+import { reportingDate } from './reportingDate';
 import type { DemoState, Enquiry, Outcome } from './model';
 import { refreshBuyerProfiles, enrichCreditRecords, refreshLegacyDemoRecords } from './demoProfiles';
 import { seedScenarioPeers } from './incomingScenarios';
@@ -8,7 +9,7 @@ const DAY = 86_400_000;
 /** Add fictional demonstration history once. Never replace user records or edited fields. */
 export function enrichDemoScenario(state: DemoState, now = new Date()): DemoState {
   if ((state.demoScenarioVersion ?? 0) >= DEMO_SCENARIO_VERSION) return state;
-  const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Hong_Kong',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+  const today = reportingDate.format(now);
   const epoch = Date.parse(`${today}T00:00:00Z`);
   const day = (offset:number) => new Date(epoch + offset*DAY).toISOString().slice(0,10);
   const timestamp = (offset:number) => `${day(offset)}T02:00:00.000Z`;

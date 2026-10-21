@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actors, applyAction, availableCredit, currentMonth, monthlyStats, reportingMonth, parseProductQuantity, activeAccountTraders, enquiryImoHistory, personalResources, resourceHistory, type Company, type Enquiry } from '../src/lib/model';
+import { actors, availableCredit, currentMonth, monthlyStats, reportingMonth, parseProductQuantity, activeAccountTraders, enquiryImoHistory, personalResources, resourceHistory, type Action, type Company, type Enquiry, type DemoState, type Outcome } from '../src/lib/model';
 import { createSeedState, upgradeDemoState } from '../src/lib/seed';
 import { accountingTestState } from './fixtures/accounting';
+import { applyAction, activeSupplierFixtures } from './fixtures/activeSuppliers';
 
 const [trader, credit, admin] = actors;
 const now = `${currentMonth()}-25T12:00:00.000Z`;
@@ -31,6 +32,21 @@ function createTestState() {
   return state;
 }
 
+// Stored historical sales are test input, not a replacement booking implementation.
+function withHistoricalSale(original: DemoState, enquiryId: string, terms: Pick<Outcome, 'quantity' | 'price' | 'margin'> & Partial<Outcome>): DemoState {
+  const state = structuredClone(original), enquiry = state.enquiries.find(item => item.id === enquiryId)!;
+  state.outcomes.unshift({ id: `historical-${enquiryId}`, enquiryId, buyerId: enquiry.buyerId, portId: enquiry.portId,
+    vessel: enquiry.vessel, grade: enquiry.grade, kind: 'fixture', owner: enquiry.owner, bookedAt: now, reason: '', ...terms });
+  enquiry.status = 'fixture';
+  return upgradeDemoState(JSON.parse(JSON.stringify(state)));
+}
+function stem(state: DemoState, id: string): Extract<Action, { type: 'record-stem' }> {
+  const enquiry = state.enquiries.find(item => item.id === id)!;
+  return { type: 'record-stem', id, complianceChecked: true, creditChecked: true, products: [
+    { grade: enquiry.grade, quantityText: String(enquiry.quantity), buyPrice: enquiry.price, supplierId: activeSupplierFixtures[0].id },
+  ] };
+}
+
 test('monthly progress includes only booked fixtures in that month, with margin × quantity profit', () => {
   const state = createTestState();
   assert.deepEqual(monthlyStats(state, trader.id, currentMonth()), { volume: 5200, profit: 89200, fixtures: 4 });
@@ -49,9 +65,6 @@ test('commercial months follow Hong Kong midnight rather than UTC or browser tim
   assert.equal(currentMonth(new Date('2026-09-30T16:01:00.000Z')), '2026-10');
   assert.deepEqual(monthlyStats(state, trader.id, '2026-09'), { volume: 200, profit: 2000, fixtures: 1 });
   assert.deepEqual(monthlyStats(state, trader.id, '2026-10'), { volume: 100, profit: 1200, fixtures: 1 });
-  state.goals = [];
-  assert.doesNotThrow(() => applyAction(state, { type: 'set-goals', owner: trader.id, month: '2026-10', volume: 1000, profit: null }, admin, '2026-09-30T16:01:00.000Z'));
-  assert.throws(() => applyAction(state, { type: 'set-goals', owner: trader.id, month: '2026-09', volume: 1000, profit: null }, admin, '2026-09-30T16:01:00.000Z'), /Hong Kong calendar month/);
 });
 
 test('credit approvals are role controlled, recorded, additive for increases and immutable', () => {
@@ -68,25 +81,26 @@ test('credit approvals are role controlled, recorded, additive for increases and
   assert.throws(() => applyAction(next, action, credit, now), /already has/);
 });
 
-test('insufficient headroom blocks a fixture; an approved increase allows one exposure reservation', () => {
-  let state = createTestState();
-  const action = { type: 'record-outcome' as const, id: 'enquiry-002', kind: 'fixture' as const, complianceChecked: true, creditChecked: true, quantity: 500, price: 610, margin: 16, reason: '' };
-  assert.throws(() => applyAction(state, action, trader, now), /Insufficient credit/);
+test('historical priced sales retain exposure and monthly totals after a credit increase', () => {
+  let state = withHistoricalSale(createTestState(), 'enquiry-002', { quantity: 500, price: 610, margin: 16 });
+  state.companies.find(item => item.id === 'company-bluewater')!.exposure = 1085000;
+  assert.equal(availableCredit(state.companies.find(item => item.id === 'company-bluewater')!), -185000);
   state = applyAction(state, { type: 'decide-credit', id: 'credit-001', approve: true, amount: 350000, terms: '30 days', note: 'Approved after credit review.' }, credit, now);
-  const next = applyAction(state, action, trader, now);
-  const company = next.companies.find(item => item.id === 'company-bluewater')!;
+  const company = state.companies.find(item => item.id === 'company-bluewater')!;
   assert.equal(company.exposure, 1085000);
   assert.equal(availableCredit(company), 165000);
-  assert.equal(next.outcomes.filter(item => item.enquiryId === action.id).length, 1);
-  assert.throws(() => applyAction(next, action, trader, now), /before recording|already/);
-  assert.deepEqual(monthlyStats(next, trader.id, currentMonth()), { volume: 5700, profit: 97200, fixtures: 5 });
+  assert.equal(state.outcomes.filter(item => item.enquiryId === 'enquiry-002').length, 1);
+  assert.deepEqual(monthlyStats(state, trader.id, currentMonth()), { volume: 5700, profit: 97200, fixtures: 5 });
+  const snapshot = structuredClone(state);
+  for (const actor of actors) assert.throws(() => applyAction(state, { type: 'record-outcome', id: 'enquiry-002' } as unknown as Action, actor, now), /not supported/);
+  assert.deepEqual(state, snapshot);
 });
 
 test('lost records require a reason and do not consume credit or advance targets', () => {
   const state = createTestState();
-  const action = { type: 'record-outcome' as const, id: 'enquiry-002', kind: 'lost' as const, quantity: 500, price: 610, margin: 16, reason: '' };
-  assert.throws(() => applyAction(state, action, trader, now), /Lost reason is required/);
-  const next = applyAction(state, { ...action, reason: 'Delivery window — supplier could not meet requested timing.' }, trader, now);
+  const action = { type: 'record-loss' as const, id: 'enquiry-002', reasonId: '' };
+  assert.throws(() => applyAction(state, action, trader, now), /active lost reason/);
+  const next = applyAction(state, { ...action, reasonId: state.lostReasons![0].id, groupNote: 'Supplier could not meet requested timing.' }, trader, now);
   assert.equal(next.companies.find(item => item.id === 'company-bluewater')!.exposure, 780000);
   assert.deepEqual(monthlyStats(next, trader.id, currentMonth()), monthlyStats(state, trader.id, currentMonth()));
 });
@@ -147,43 +161,23 @@ test('trivial and duplicate contributions cannot earn Gold; direct saves cannot 
   assert.throws(() => applyAction(state, action, trader, now), /already been submitted/);
 });
 
-test('legacy monthly goals remain recorded but no longer award resources', () => {
-  let state = createTestState();
-  state.goals = [];
-  state = applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: null, profit: null }, admin, now);
-  assert.equal(state.drops.length, 2);
-  state = applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: 5200, profit: 89200 }, admin, now);
-  assert.equal(state.drops.filter(item => item.key.startsWith('goal:')).length, 0);
-  const repeated = applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: 5200, profit: 89200 }, admin, now);
-  assert.equal(repeated.drops.length, state.drops.length);
-  assert.throws(() => applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: 5100, profit: 89200 }, admin, now), /cannot be lowered/);
-  assert.throws(() => applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: null, profit: 89200 }, admin, now), /cannot be lowered/);
-  assert.throws(() => applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: 6000, profit: 100000 }, trader, now), /role cannot/);
+test('stored legacy goals and their audit survive migration without awarding resources', () => {
+  const state = createTestState();
+  state.goals = [{ owner: trader.id, month: currentMonth(), volume: 5200, profit: 89200 }];
+  state.audit.unshift({ id: 'legacy-goal-audit', at: now, actor: admin.name, role: 'admin', action: 'Monthly goals updated', entity: trader.name, detail: 'Historical target' });
+  const restored = upgradeDemoState(JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(restored.goals, state.goals);
+  assert.deepEqual(restored.audit, state.audit);
+  assert.deepEqual(restored.drops, state.drops);
+  assert.deepEqual(personalResources(restored, trader.id), personalResources(state, trader.id));
+  assert.equal(restored.drops.filter(item => item.key.startsWith('goal:')).length, 0);
 });
 
-test('legacy trader target changes remain audited without new milestone rewards', () => {
-  const state = createTestState();
-  state.goals = [];
-  const action = { type: 'set-goals' as const, owner: trader.id, month: currentMonth(), volume: 5200, profit: 89200 };
-  for (const unauthorized of [trader, credit]) {
-    assert.throws(() => applyAction(state, action, unauthorized, now), /role cannot/);
-  }
-  for (const owner of [undefined, 'missing-person', credit.id, admin.id]) {
-    assert.throws(() => applyAction(state, { ...action, owner }, admin, now), /valid trader/);
-  }
-  const next = applyAction(state, action, admin, now);
-  assert.equal(state.goals.length, 0);
-  assert.deepEqual(next.goals, [{ owner: trader.id, month: currentMonth(), volume: 5200, profit: 89200 }]);
-  const milestoneDrops = next.drops.filter((drop) => drop.key.startsWith('goal:'));
-  assert.equal(milestoneDrops.length, 0);
-  assert.ok(milestoneDrops.every((drop) => drop.owner === trader.id));
-  const change = next.audit.find((entry) => entry.action === 'Monthly goals updated')!;
-  assert.equal(change.actor, admin.name);
-  assert.equal(change.entity, trader.name);
-  assert.equal(change.role, 'admin');
-  const raised = applyAction(next, { ...action, volume: 6000, profit: 100000 }, admin, now);
-  assert.equal(raised.drops.filter((drop) => drop.key.startsWith('goal:')).reduce((sum, drop) => sum + drop.amount, 0), 0);
-  assert.ok(raised.drops.filter((drop) => drop.key.startsWith('goal:')).every((drop) => drop.owner === trader.id));
+test('retired local goal mutations cannot alter historical goals for any role', () => {
+  const state = createTestState(), snapshot = structuredClone(state);
+  const retired = { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: 5200, profit: 89200 } as unknown as Action;
+  for (const actor of actors) assert.throws(() => applyAction(state, retired, actor, now), /not supported/);
+  assert.deepEqual(state, snapshot);
 });
 
 test('country updates validate their country, remain recorded for publication and award the contributor once', () => {
@@ -222,25 +216,23 @@ test('ecosystem feedback persists and earns one immediate Gold', () => {
   assert.throws(()=>applyAction(submitted,action,trader,now),/already/);
 });
 
-test('negative margin is valid, while NaN, Infinity and negative quantities are rejected', () => {
+test('historical negative margins reduce profit; current STEM rejects invalid quantities and prices', () => {
   const state = createTestState();
-  const action = { type: 'record-outcome' as const, id: 'enquiry-004', kind: 'fixture' as const, complianceChecked: true, creditChecked: true, quantity: 350, price: 625, margin: -5, reason: 'Commercial decision recorded.' };
-  const next = applyAction(state, action, trader, now);
-  assert.equal(monthlyStats(next, trader.id, currentMonth()).profit, 87450);
-  for (const quantity of [-1, NaN, Infinity]) assert.throws(() => applyAction(state, { ...action, quantity }, trader, now));
-  assert.throws(() => applyAction(state, { ...action, price: Infinity }, trader, now), /finite/);
-  assert.throws(() => applyAction(state, { ...action, margin: Number.MAX_VALUE }, trader, now), /finite/);
+  const historical = withHistoricalSale(state, 'enquiry-004', { quantity: 350, price: 625, margin: -5 });
+  assert.equal(monthlyStats(historical, trader.id, currentMonth()).profit, 87450);
+  const action = stem(state, 'enquiry-004');
+  for (const quantityText of ['-1', 'NaN', 'Infinity']) assert.throws(() => applyAction(state, { ...action, products: [{ ...action.products[0], quantityText }] }, trader, now));
+  for (const buyPrice of [-1, NaN, Infinity, Number.MAX_VALUE]) assert.throws(() => applyAction(state, { ...action, products: [{ ...action.products[0], buyPrice }] }, trader, now));
 });
 
 test('profit changes no longer generate or retract resources', () => {
   let state = createTestState();
-  state.goals = [];
-  state = applyAction(state, { type: 'set-goals', owner: trader.id, month: currentMonth(), volume: null, profit: 89000 }, admin, now);
+  state.goals = [{ owner: trader.id, month: currentMonth(), volume: null, profit: 89000 }];
   assert.equal(state.drops.reduce((sum, drop) => sum + drop.amount, 0), 70);
-  state = applyAction(state, { type: 'record-outcome', id: 'enquiry-004', kind: 'fixture', complianceChecked: true, creditChecked: true, quantity: 350, price: 625, margin: -5, reason: 'Negative margin recorded.' }, trader, now);
+  state = withHistoricalSale(state, 'enquiry-004', { quantity: 350, price: 625, margin: -5 });
   assert.equal(state.drops.reduce((sum, drop) => sum + drop.amount, 0), 70);
   assert.deepEqual(personalResources(state, trader.id), personalResources(createTestState(), trader.id));
-  state = applyAction(state, { type: 'record-outcome', id: 'enquiry-006', kind: 'fixture', complianceChecked: true, creditChecked: true, quantity: 450, price: 555, margin: 15, reason: 'Next booked fixture.' }, trader, now);
+  state = withHistoricalSale(state, 'enquiry-006', { quantity: 450, price: 555, margin: 15 });
   assert.equal(state.drops.reduce((sum, drop) => sum + drop.amount, 0), 70);
   assert.equal(state.drops.filter(drop => drop.key.startsWith(`goal:otto:${currentMonth()}:profit`)).reduce((sum, drop) => sum + drop.amount, 0), 0);
 });
@@ -274,35 +266,41 @@ test('unpriced multi-grade enquiries and ranges can be sent without assuming a b
   for (const value of ['500-450', '0', '-1', '450 CBM', 'Infinity', '1,00']) assert.equal(parseProductQuantity(value), null, value);
 });
 
-test('multi-grade fixtures use explicit item terms and total exposure, with no collapsed-grade accounting', () => {
+test('historical multi-grade sales retain item terms, weighted summaries and exposure', () => {
+  const state = createTestState(), enquiry = state.enquiries[0];
+  const products = [{ grade: 'VLSFO', quantity: 500, price: 600, margin: 10 }, { grade: 'LSMGO', quantity: 100, price: 800, margin: -5 }];
+  const company = state.companies.find(item => item.id === enquiry.buyerId)!;
+  company.exposure += 380000;
+  const before = monthlyStats(state, trader.id, currentMonth());
+  const booked = withHistoricalSale(state, enquiry.id, { quantity: 600, price: 380000 / 600, margin: 7.5, grade: 'VLSFO + LSMGO', products });
+  assert.deepEqual(booked.outcomes[0].products, products);
+  assert.equal(booked.outcomes[0].grade, 'VLSFO + LSMGO');
+  assert.equal(booked.outcomes[0].margin, 7.5);
+  assert.equal(booked.companies.find(item => item.id === enquiry.buyerId)!.exposure, company.exposure);
+  assert.deepEqual(monthlyStats(booked, trader.id, currentMonth()), { volume: before.volume + 600, profit: before.profit + 4500, fixtures: before.fixtures + 1 });
+  assert.deepEqual(upgradeDemoState(JSON.parse(JSON.stringify(booked))).outcomes, booked.outcomes);
+});
+
+test('current multi-grade STEM requires matching complete valid grades without booking sale exposure', () => {
   let state = createTestState();
-  const enquiry = { ...state.enquiries[0], id: 'multi-grade-fixture', complianceChecked: true, creditChecked: true, creditConfirmations: ['luca'], quantity: 0, price: 0, margin: 0,
+  const enquiry = { ...state.enquiries[0], id: 'multi-grade-fixture', quantity: 0, price: 0, margin: 0,
     products: [{ grade: 'VLSFO' as const, quantityText: '450-500' }, { grade: 'LSMGO' as const, quantityText: '100' }] };
   state = applyAction(state, { type: 'save-enquiry', enquiry }, trader, now);
   state = applyAction(state, { type: 'send-enquiry', id: enquiry.id }, trader, now);
-  const action = { type: 'record-outcome' as const, id: enquiry.id, kind: 'fixture' as const, complianceChecked: true, creditChecked: true, quantity: 600, price: 600, margin: 10, reason: '',
-    products: [{ grade: 'VLSFO', quantity: 500, price: 600, margin: 10 }, { grade: 'LSMGO', quantity: 100, price: 800, margin: -5 }] };
-  assert.throws(() => applyAction(state, { ...action, products: undefined }, trader, now), /each product/);
+  const action = { type: 'record-stem' as const, id: enquiry.id, complianceChecked: true, creditChecked: true,
+    products: [{ grade: 'VLSFO', quantityText: '450-500', buyPrice: 600, supplierId: activeSupplierFixtures[0].id }, { grade: 'LSMGO', quantityText: '100', buyPrice: 800, supplierId: activeSupplierFixtures[0].id }] };
+  assert.throws(() => applyAction(state, { ...action, products: [] }, trader, now), /every requested product/);
   assert.throws(() => applyAction(state, { ...action, products: action.products.slice(0, 1) }, trader, now), /every requested product/);
   assert.throws(() => applyAction(state, { ...action, products: [action.products[0], { ...action.products[1], grade: 'HSFO' }] }, trader, now), /grades must match/);
   assert.throws(() => applyAction(state, { ...action, products: [action.products[0], action.products[0]] }, trader, now), /grades must match/);
-  for (const invalid of [{ quantity: 0 }, { price: 0 }, { margin: NaN }]) {
-    assert.throws(() => applyAction(state, { ...action, products: [{ ...action.products[0], ...invalid }, action.products[1]] }, trader, now));
-  }
-  const company = state.companies.find(item => item.id === enquiry.buyerId)!;
-  const insufficient = structuredClone(state);
-  insufficient.companies.find(item => item.id === enquiry.buyerId)!.limit = company.exposure + 350000;
-  assert.throws(() => applyAction(insufficient, action, trader, now), /380,000 required/);
-  const before = monthlyStats(state, trader.id, currentMonth());
+  for (const invalid of [{ quantityText: '0' }, { buyPrice: 0 }, { buyPrice: NaN }]) assert.throws(() => applyAction(state, { ...action, products: [{ ...action.products[0], ...invalid }, action.products[1]] }, trader, now));
+  const insufficient = structuredClone(state), company = insufficient.companies.find(item => item.id === enquiry.buyerId)!;
+  company.limit = company.exposure + 350000;
+  assert.throws(() => applyAction(insufficient, action, trader, now), /estimated purchase cost USD 380,000/);
   const booked = applyAction(state, action, trader, now);
-  const outcome = booked.outcomes[0];
-  assert.deepEqual(outcome.products, action.products);
-  assert.equal(outcome.grade, 'VLSFO + LSMGO');
-  assert.equal(outcome.quantity, 600);
-  assert.equal(outcome.margin, 7.5);
-  assert.equal(booked.companies.find(item => item.id === enquiry.buyerId)!.exposure, company.exposure + 380000);
-  assert.deepEqual(monthlyStats(booked, trader.id, currentMonth()), { volume: before.volume + 600, profit: before.profit + 4500, fixtures: before.fixtures + 1 });
-  assert.match(booked.audit.find(item => item.action === 'Fixture booked')!.detail, /VLSFO.*LSMGO/);
+  assert.equal(booked.outcomes[0].commercialStatus, 'pending');
+  assert.deepEqual(booked.companies, state.companies);
+  assert.deepEqual(monthlyStats(booked, trader.id, currentMonth()), monthlyStats(state, trader.id, currentMonth()));
   assert.throws(() => applyAction(booked, action, trader, now), /before recording|already/);
 });
 
@@ -312,7 +310,7 @@ test('multi-grade lost enquiries retain requested products without invented volu
     products: [{ grade: 'VLSFO' as const, quantityText: '450-500' }, { grade: 'LSMGO' as const, quantityText: '100' }] };
   state = applyAction(state, { type: 'save-enquiry', enquiry }, trader, now);
   state = applyAction(state, { type: 'send-enquiry', id: enquiry.id }, trader, now);
-  const lost = applyAction(state, { type: 'record-outcome', id: enquiry.id, kind: 'lost', quantity: 0, price: 0, margin: 0, reason: 'Schedule changed.' }, trader, now);
+  const lost = applyAction(state, { type: 'record-loss', id: enquiry.id, reasonId: state.lostReasons![0].id, groupNote: 'Schedule changed.' }, trader, now);
   assert.equal(lost.outcomes[0].quantity, 0);
   assert.deepEqual(lost.enquiries.find(item => item.id === enquiry.id)!.products, enquiry.products);
   assert.deepEqual(lost.companies, state.companies);
@@ -341,8 +339,7 @@ test('STEM requires fresh compliance and credit checks and records who checked a
   // Legacy enquiry flags cannot satisfy the fixture's explicit checks.
   enquiry.complianceChecked = true;
   enquiry.creditChecked = true;
-  const action = { type: 'record-outcome' as const, id: enquiry.id, kind: 'fixture' as const,
-    quantity: 350, price: 625, margin: 21, reason: '' };
+  const action = { ...stem(state, enquiry.id), complianceChecked: false, creditChecked: false };
   for (const checks of [{}, {complianceChecked: true}, {creditChecked: true},
     {complianceChecked: false, creditChecked: true}, {complianceChecked: true, creditChecked: false}]) {
     assert.throws(() => applyAction(state, { ...action, ...checks }, trader, now), /compliance and credit checks before STEM/);
@@ -353,7 +350,7 @@ test('STEM requires fresh compliance and credit checks and records who checked a
   assert.equal(booked.outcomes[0].checkedBy, trader.id);
   assert.equal(booked.outcomes[0].checkedAt, now);
   assert.equal(state.outcomes.some(item => item.enquiryId === enquiry.id), false);
-  const lost = applyAction(state, { ...action, kind: 'lost', reason: 'Schedule changed.' }, trader, now);
+  const lost = applyAction(state, { type: 'record-loss', id: enquiry.id, reasonId: state.lostReasons![0].id, groupNote: 'Schedule changed.' }, trader, now);
   assert.equal(lost.outcomes[0].complianceChecked, undefined);
   assert.equal(lost.outcomes[0].creditChecked, undefined);
   assert.equal(lost.outcomes[0].checkedBy, undefined);
@@ -414,7 +411,7 @@ test('postponing and cancelling do not create losses, credit exposure or target 
   }
   const postponed = applyAction(state, { type: 'postpone-enquiry', id: 'enquiry-002' }, trader, now);
   assert.equal(postponed.enquiries.find(item => item.id === 'enquiry-002')!.status, 'postponed');
-  assert.throws(() => applyAction(postponed, { type: 'record-outcome', id: 'enquiry-002', kind: 'fixture', complianceChecked: true, creditChecked: true, quantity: 1, price: 1, margin: 0, reason: '' }, trader, now), /before recording/);
+  assert.throws(() => applyAction(postponed, stem(postponed, 'enquiry-002'), trader, now), /before recording/);
   const cancelled = applyAction(postponed, { type: 'cancel-enquiry', id: 'enquiry-002' }, trader, now);
   assert.equal(cancelled.enquiries.find(item => item.id === 'enquiry-002')!.status, 'cancelled');
   assert.deepEqual(cancelled.outcomes, state.outcomes);

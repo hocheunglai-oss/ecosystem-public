@@ -1,5 +1,5 @@
 import { uppercaseText } from "./lib/uppercase";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -22,7 +22,7 @@ import { Field, Modal } from "./ui";
 import type { OpenModal } from "./types";
 import type { OpenWorkspace, WorkspaceNavigationContext } from "./workspaceNavigation";
 import "./locations.css";
-const KnowledgeExtractor = lazy(() => import("./KnowledgeExtractor"));
+import KnowledgeExtractor from "./KnowledgeExtractor";
 
 type NewLocation = {
   kind: "country" | "port";
@@ -269,13 +269,11 @@ export default function LocationWorkspace({
             </nav> : undefined}
           />
       ) : null}
-      {extracting && <Suspense fallback={<span role="status">Loading…</span>}>
-        <KnowledgeExtractor current={current} onClose={() => setExtracting(false)} onSaved={key => {
+      {extracting && <KnowledgeExtractor current={current} onClose={() => setExtracting(false)} onSaved={key => {
           setExtracting(false);
           const record = records.find(item => item.key === key);
           if (record) choose(record);
-        }} />
-      </Suspense>}
+        }} />}
       {adding && (
         <AddLocation
           current={current}

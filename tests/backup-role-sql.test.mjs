@@ -34,7 +34,9 @@ test('approved complete-source reader stays dormant and cannot write application
       create schema auth authorization managed_auth_owner;
       create schema storage authorization managed_storage_owner;
       create schema future_provider authorization postgres;
-      set role postgres; create table eco_private.existing(id bigserial);
+      set role postgres;
+      create table eco_private.platform_versions(component text primary key, migration_head text not null, installed_at timestamptz not null default now());
+      create table eco_private.existing(id bigserial);
       insert into eco_private.existing default values;
       alter table eco_private.existing enable row level security;
       alter table eco_private.existing force row level security;
@@ -58,6 +60,7 @@ test('approved complete-source reader stays dormant and cannot write application
     assert.equal(await query("select count(*) from pg_roles where rolname='eco_backup_reader'"), '0');
     await query('revoke execute on function future_provider.mutate() from public');
     await query(migration, 'postgres');
+    assert.equal(await query("select migration_head from eco_private.platform_versions where component='backup-reader'"), '20261021062520');
     assert.equal(await query("select rolcanlogin from pg_roles where rolname='eco_backup_reader'"), 'f');
     await assert.rejects(query('select 1', 'eco_backup_reader'), /not permitted to log in/);
     // Activation here is synthetic only; the migration itself never enables it.

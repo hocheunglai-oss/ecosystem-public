@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { restoreLocal, LocalRestoreError, RESTORE_CHECK } from './restore-local.mjs';
+import { restoreLocal, LocalRestoreError, RESTORE_CHECK, validateRestoreVersions } from './restore-local.mjs';
 
 const BIN = process.env.ECO_NATIVE_PG_BIN || '/usr/lib/postgresql/17/bin';
 const BASE = { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' };
@@ -56,7 +56,8 @@ async function syntheticCapture(root) {
     const tables = await rows(env, `SELECT n.nspname AS schema,c.relname AS name,c.relrowsecurity AS rls,c.relforcerowsecurity AS force_rls FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND n.nspname IN ${schemaCondition} ORDER BY n.nspname,c.relname`);
     for (const table of tables) table.rows = (await rows(env, `SELECT count(*)::text AS rows FROM "${table.schema}"."${table.name}"`))[0].rows;
     const inventory = {
-      schemaVersion: 1, sourceProjectRef: 'synthetic-no-cloud', source: { server_version: '17.11' }, tables,
+      schemaVersion: 1, sourceProjectRef: 'synthetic-no-cloud',
+      source: { server_version: (await rows(env, "SELECT current_setting('server_version') AS version"))[0].version }, tables,
       roles: await rows(env, 'SELECT rolname,rolinherit,rolbypassrls FROM pg_roles ORDER BY rolname'),
       memberships: await rows(env, 'SELECT r.rolname AS role,m.rolname AS member,a.admin_option,a.inherit_option,a.set_option FROM pg_auth_members a JOIN pg_roles r ON r.oid=a.roleid JOIN pg_roles m ON m.oid=a.member ORDER BY r.rolname,m.rolname'),
       extensions: await rows(env, 'SELECT e.extname,e.extversion,n.nspname AS schema FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace ORDER BY e.extname'),
@@ -83,6 +84,27 @@ async function syntheticCapture(root) {
     await rm(fixture, { recursive: true, force: true });
   }
 }
+
+test('restore version check accepts official package labels and maintained same-major patches', () => {
+  for (const banner of ['postgres (PostgreSQL) 17.11',
+    'postgres (PostgreSQL) 17.11 (Ubuntu 17.11-1.pgdg24.04+2)',
+    'postgres (PostgreSQL) 17.11 (Debian 17.11-1.pgdg12+1)'])
+    assert.deepEqual(validateRestoreVersions('17.11', banner), { source: '17.11', local: '17.11' });
+  assert.deepEqual(validateRestoreVersions('17.11 (Ubuntu 17.11-1.pgdg24.04+2)',
+    'postgres (PostgreSQL) 17.12 (Ubuntu 17.12-1.pgdg24.04+1)'), { source: '17.11', local: '17.12' });
+  assert.deepEqual(validateRestoreVersions('17.12', 'postgres (PostgreSQL) 17.12'), { source: '17.12', local: '17.12' });
+});
+
+test('restore version check rejects older local tools, other majors, pre-releases and malformed labels', () => {
+  for (const banner of ['postgres (PostgreSQL) 17.10', 'postgres (PostgreSQL) 18.11',
+    'postgres (PostgreSQL) 16.11', 'postgres (PostgreSQL) 17.11beta1', 'postgres (PostgreSQL) 17.11.1',
+    'postgres (PostgreSQL) 17.011', 'postgres (PostgreSQL) 17.11 (Ubuntu) trailing',
+    'postgres (PostgreSQL) 17.11 (Ubuntu\n17.11)', 'psql (PostgreSQL) 17.11', null])
+    assert.throws(() => validateRestoreVersions('17.11', banner), { code: 'LOCAL_VERSION_UNSUPPORTED' });
+  assert.throws(() => validateRestoreVersions('17.12', 'postgres (PostgreSQL) 17.11'), { code: 'LOCAL_VERSION_UNSUPPORTED' });
+  for (const source of ['17.10', '18.11', '16.11', '17.11beta1', '17.11.1', '17.11\n', undefined])
+    assert.throws(() => validateRestoreVersions(source, 'postgres (PostgreSQL) 17.11'), { code: 'SOURCE_VERSION_UNSUPPORTED' });
+});
 
 test('native local restore verifies data and documents without retaining a cluster', async t => {
   // Unix-domain sockets have a small path limit; some OS temporary roots are very long.

@@ -22,6 +22,24 @@ const fail = code => { throw new LocalRestoreError(code); };
 const check = (condition, code) => { if (!condition) fail(code); };
 const validName = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 63 && !/[\u0000-\u001f\u007f]/u.test(value);
 
+function postgresVersion(value, code) {
+  // Official distro binaries append a package label, e.g. "(Ubuntu ...PGDG...)".
+  // Compare the numeric upstream release, never the packaging label. Pre-release
+  // strings, unreviewed majors and versions below the verified baseline fail.
+  const match = typeof value === 'string' && value.match(/^(\d{1,2})\.(0|[1-9]\d{0,3})(?: \([A-Za-z0-9][A-Za-z0-9 .+~:_-]{0,159}\))?$/u);
+  check(match && Number(match[1]) === 17 && Number(match[2]) >= 11, code);
+  return { version: `${Number(match[1])}.${Number(match[2])}`, patch: Number(match[2]) };
+}
+
+export function validateRestoreVersions(sourceVersion, localBanner) {
+  const source = postgresVersion(sourceVersion, 'SOURCE_VERSION_UNSUPPORTED');
+  const prefix = 'postgres (PostgreSQL) ';
+  check(typeof localBanner === 'string' && localBanner.startsWith(prefix), 'LOCAL_VERSION_UNSUPPORTED');
+  const local = postgresVersion(localBanner.slice(prefix.length), 'LOCAL_VERSION_UNSUPPORTED');
+  check(local.patch >= source.patch, 'LOCAL_VERSION_UNSUPPORTED');
+  return { source: source.version, local: local.version };
+}
+
 async function privateRegular(path) {
   const info = await lstat(path);
   check(info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && !(info.mode & 0o077), 'UNSAFE_CAPTURE_FILE');
@@ -108,7 +126,7 @@ function validateInventory(value) {
   check(value && value.schemaVersion === 1 && Array.isArray(value.tables) && Array.isArray(value.roles)
     && Array.isArray(value.extensions) && Array.isArray(value.functions) && Array.isArray(value.triggers)
     && Array.isArray(value.policies) && Array.isArray(value.memberships), 'INVALID_CAPTURE_INVENTORY');
-  check(value.source && /^17\.11(?:\D|$)/u.test(value.source.server_version), 'SOURCE_VERSION_UNSUPPORTED');
+  postgresVersion(value.source?.server_version, 'SOURCE_VERSION_UNSUPPORTED');
   check(value.roles.every(role => validName(role.rolname) && role.rolname !== ADMIN), 'INVALID_ROLE_INVENTORY');
   const roleNames = value.roles.map(role => role.rolname);
   check(new Set(roleNames).size === roleNames.length && roleNames.includes('postgres'), 'INVALID_ROLE_INVENTORY');
@@ -238,8 +256,8 @@ export async function restoreLocal({ captureDir, bin, workParent }) {
     finally { await magic.close(); }
     Object.assign(receipt, await verifyStorage(capture, inventory));
     const version = (await run(bin, 'postgres', ['--version'])).trim();
-    check(/^postgres \(PostgreSQL\) 17\.11$/u.test(version), 'LOCAL_VERSION_UNSUPPORTED');
-    receipt.databaseVersion = '17.11';
+    const versions = validateRestoreVersions(inventory.source.server_version, version);
+    receipt.databaseVersion = versions.local;
     root = await mkdtemp(join(parent, '.eco-restore-')); await chmod(root, 0o700);
     const data = join(root, 'data'), socket = join(root, 's'); await mkdir(socket, { mode: 0o700 });
     check(Buffer.byteLength(join(socket, '.s.PGSQL.5432')) < 100, 'UNIX_SOCKET_PATH_TOO_LONG');

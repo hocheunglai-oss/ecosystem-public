@@ -67,3 +67,5 @@ begin
   end if;
 end $$;
 comment on role eco_backup_reader is 'Approved complete-source read principal including authentication/catalog metadata; dormant NOLOGIN until private cloud-runner activation';
+insert into eco_private.platform_versions(component,migration_head)
+values('backup-reader','20261021062520');

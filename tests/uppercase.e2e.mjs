@@ -80,7 +80,7 @@ async function credentialCases(page) {
     const value = name.includes('email') ? 'Desk.Case@Example.com' : name === 'link' ? 'https://Example.com/PortData?Key=AbC' : 'MiXeD-Test-Only';
     await input.fill(value);
     await expect(input).toHaveValue(value);
-    assert.equal(await input.evaluate(el => getComputedStyle(el).textTransform), name === 'link' ? 'uppercase' : 'none', `${name} has the expected presentation`);
+    assert.equal(await input.evaluate(el => getComputedStyle(el).textTransform), 'none', `${name} has the expected presentation`);
   }
   await page.locator('#uppercase-test-credentials').evaluate(el => el.remove());
 }

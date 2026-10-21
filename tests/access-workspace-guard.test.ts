@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { accessRequest } from '../src/auth';
 import { setWorkspaceDataMode } from '../src/lib/testWorkspaceGuard';
-import { setPreviewReadOnly } from '../src/lib/previewGuard';
+import { setPreviewReadOnly, setSessionUnavailable, assertPreviewWritable, isPreviewReadOnly } from '../src/lib/previewGuard';
 
 async function withFetch(work: (calls: { url: string; method: string }[]) => Promise<void>) {
   const original = globalThis.fetch;
@@ -12,8 +12,26 @@ async function withFetch(work: (calls: { url: string; method: string }[]) => Pro
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   };
   try { await work(calls); }
-  finally { globalThis.fetch = original; setWorkspaceDataMode('live'); setPreviewReadOnly(false); }
+  finally { globalThis.fetch = original; setWorkspaceDataMode('live'); setPreviewReadOnly(false); setSessionUnavailable(false); }
 }
+
+test('unverified session freezes local and API writes while session checks and logout remain available', async () => {
+  await withFetch(async calls => {
+    setSessionUnavailable(true);
+    assert.equal(isPreviewReadOnly(), true);
+    assert.throws(assertPreviewWritable, /SESSION TO RECONNECT/);
+    for (const path of ['password', 'phone-requests', 'users']) await assert.rejects(accessRequest(path, {}), /SESSION TO RECONNECT/);
+    assert.deepEqual(calls, []);
+    await accessRequest('session'); await accessRequest('logout', {});
+    assert.equal(calls.length, 2);
+    setSessionUnavailable(false);
+    assert.equal(isPreviewReadOnly(), false);
+    await accessRequest('phone-requests', {});
+    assert.equal(calls.length, 3);
+    setPreviewReadOnly(true); setSessionUnavailable(true); setSessionUnavailable(false);
+    assert.throws(assertPreviewWritable, /PREVIEW IS READ ONLY/, 'reconnection cannot end a real VIEW AS session');
+  });
+});
 
 test('TEST blocks real user administration and phone changes before fetch with a definite rejection', async () => {
   await withFetch(async calls => {

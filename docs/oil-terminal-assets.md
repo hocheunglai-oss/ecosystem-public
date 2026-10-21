@@ -1,6 +1,6 @@
 # Oil terminal background
 
-Current background: `public/marine/destination-oil-terminal-clean-v5.jpg`; see [current scene assets](harbour-clean-v6-assets.md). A localized hillside repair from v6 removes the old billboard, and the original company flag forms a solid sign; see [logo source and verification](cosulich-flag-source.md). The generated COSULICH-letter variant below is retained as historical artwork, not loaded by the application.
+Current background: `public/marine/destination-oil-terminal-clean-v7.jpg`, with `destination-oil-terminal-night-v2.jpg` for dark mode; see [LNG reflection cleanup](cosulich-lng-barge-assets.md). The user-selected [3D flag sculpture](flag-3d-pattern-assets.md) uses the [original company flag](cosulich-flag-source.md) as its pattern reference. The earlier billboard, direct-vector and COSULICH-letter variants below remain historical provenance, not the current sign composition.
 
 Created on 30 September 2026 with the built-in `image_gen` tool, editing the original `public/marine/destination-harbour.jpg`. The original image and approved oil-terminal version `public/marine/destination-oil-terminal-v1.jpg` remain in the repository. Oil-terminal PNG: `[original retained in the private asset archive]`. The selected images were converted to JPEG at quality 90 using macOS `sips` for delivery, with no cropping or compositing.
 

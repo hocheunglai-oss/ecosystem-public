@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Download, ExternalLink, File, FileText, Folder, FolderPlus, Home, Image, LayoutGrid, Link, List, Paperclip, Pencil, Search, Trash2, Upload, X } from 'lucide-react';
 import { useDemo } from './store';
 import { useIntelligence } from './Intelligence';
@@ -6,6 +6,9 @@ import { actors, uid } from './lib/model';
 import { activeAttachmentCatalog, attachmentFolderId, attachmentLink, attachmentName, buildAttachmentFolders, folderAncestors, insideFolder, legacyAttachmentItems, type AttachmentFolder, type AttachmentItem, type AttachmentScope } from './lib/attachments';
 import { addAttachmentItems, attachmentBlob, deleteAttachmentItem, saveAttachmentFolder, updateAttachmentItem, useAttachmentCatalog } from './lib/attachmentStorage';
 import { date, Modal } from './ui';
+import { isPdfAttachment } from './lib/pdfPreview';
+
+const PdfAttachmentPreview = lazy(() => import('./PdfAttachmentPreview'));
 
 const sizeText = (size: number) => size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.ceil(size / 1024))} KB`;
 const fileKind = (item: AttachmentItem) => item.type === 'link' ? 'Link' : item.name.includes('.') ? item.name.split('.').pop()!.toUpperCase() : 'File';
@@ -145,7 +148,9 @@ export default function AttachmentBrowser({ scope, onClose }: { scope: Attachmen
 }
 
 function AttachmentPreview({ item }: { item: AttachmentItem }) {
-  const [resource, setResource] = useState<{ url: string; text?: string }>(), [error, setError] = useState('');
+  const pdf = item.type === 'file' && isPdfAttachment(item.mime, item.name);
+  const [opened, setOpened] = useState(pdf);
+  const [resource, setResource] = useState<{ url: string; blob: Blob; text?: string }>(), [error, setError] = useState('');
   useEffect(() => {
     if (item.type === 'link') return;
     let active = true, objectUrl: string | undefined;
@@ -157,14 +162,14 @@ function AttachmentPreview({ item }: { item: AttachmentItem }) {
         if (!active) return;
         objectUrl = URL.createObjectURL(blob);
         const text = /^(text\/(plain|csv)|application\/json)$/.test(item.mime) && blob.size <= 1024 * 1024 ? await blob.text() : undefined;
-        if (active) setResource({ url: objectUrl, text });
+        if (active) setResource({ url: objectUrl, blob, text });
       } catch (error) { if (active) setError(error instanceof Error ? error.message : 'The original file could not be opened.'); }
     })();
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.id, item.type, item.mime, item.legacy, item.url]);
   if (item.type === 'link') return <div className="attachment-link-preview"><Link size={28} /><p data-preserve-case>{item.url}</p><a className="button secondary small" href={item.url} target="_blank" rel="noopener noreferrer">Open link<ExternalLink size={13} /></a></div>;
   return <div className="attachment-preview">{error ? <p role="alert">{error}</p> : !resource ? <p role="status">Loading file…</p> : <>
-    {/^image\/(png|jpeg|gif|webp|avif)$/.test(item.mime) ? <img src={resource.url} alt={item.name} /> : /^(audio|video)\//.test(item.mime) ? item.mime.startsWith('audio/') ? <audio controls src={resource.url} /> : <video controls src={resource.url} /> : resource.text !== undefined ? <pre data-preserve-case>{resource.text}</pre> : <div className="attachment-no-preview"><ItemIcon item={item} /><p>Preview unavailable. Download to open.</p></div>}
+    {pdf ? <><button type="button" className="button secondary" onClick={() => setOpened(true)}><FileText size={16} />OPEN PREVIEW</button>{opened && <Suspense fallback={<p role="status">LOADING PREVIEW…</p>}><PdfAttachmentPreview blob={resource.blob} name={item.name} onClose={() => setOpened(false)} /></Suspense>}</> : /^image\/(png|jpeg|gif|webp|avif)$/.test(item.mime) ? <img src={resource.url} alt={item.name} /> : /^(audio|video)\//.test(item.mime) ? item.mime.startsWith('audio/') ? <audio controls src={resource.url} /> : <video controls src={resource.url} /> : resource.text !== undefined ? <pre data-preserve-case>{resource.text}</pre> : <div className="attachment-no-preview"><ItemIcon item={item} /><p>Preview unavailable. Download to open.</p></div>}
     <a className="button secondary small" href={resource.url} download={item.name}><Download size={14} />Download</a>
   </>}</div>;
 }

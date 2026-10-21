@@ -1,61 +1,41 @@
-# Buyers and Credit
+# Buyers and credit
 
-## Navigation and layout
+## Current access and storage boundary
 
-BUYERS AND CREDIT contains BUYER PROFILES and CREDIT REQUESTS. Credit History is a standalone section in each selected buyer's Overview. The portfolio searches standard name, customer ID, group and person in charge, filters by office or My portfolio, and pages 25 rows. Selecting a buyer opens the same profile used in Enquiries. Buyer links in Credit Requests open the associated profile.
+Buyer/credit work remains administrator-only development for ECO 2.0. Non-administrators, including a non-admin VIEW AS preview, see UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0 at every entry point. CREDIT is an office grouping and does not itself grant approval authority. Do not treat the prototype's historical Credit/Admin workflow labels as a new live permission grant.
 
-The compact profile header contains the selected buyer's standard name, customer ID, group, credit manager and status. Person in charge, office and country remain in Company Information. Button tabs sit directly below: Overview, Stem Records, Credit Requests and Company Information. Overview uses narrow columns: credit information; Competition above Performance and trends; Credit History and Remarks. It keeps its editors mounted during tab switches.
+ECO uses independent authenticated accounts. The buyer/credit model, requests, legacy remarks and request attachments retain browser-local persistence; they do not write to CUP or constitute an authoritative invoice ledger. Authenticated owner-private profile tabs use the separate server API. Browser-local private remarks are not equivalent to that API-backed owner boundary. No demo identity selector may bypass authentication, and fictional examples belong only to the owner-authorized TEST mode.
 
-Credit usage shares a labeled used/available amount display, solid two-color bar and percentage legend with the enquiry sidebar. Temporary facilities remain separate from the permanent limit. The credit panel omits duplicate Credit Status and Risk Category. Risk Rating highlights its recorded position on a five-step scale, labeled lower to higher risk; missing/invalid ratings remain unknown. Volume labels in the trend chart include MT.
+## Profiles and editing
 
-## Credit and requests
+BUYERS AND CREDIT contains BUYER PROFILES and CREDIT REQUESTS. Buyer links from Enquiries and Credit Requests open the same profile. Portfolio search covers standard name, customer ID, group and PIC; office/My portfolio filters apply before pagination.
 
-Workflow reference: [CMP2 User Manual](https://docs.google.com/document/d/1_qtk5offW-pub8keINOqaLEA1IP2I2MawkizsTxwACI/edit?usp=sharing), URGENT pp. 3–8, P1 pp. 12–13, leads pp. 9 and 18, appendix pp. 21–22. The demo uses its field and workflow structure with browser-local persistence.
+The profile keeps identity, credit, performance, competition, remarks and history organized in compact reading columns. Shared profile tabs and private tabs use the common strip, manager and inline text/table editor. Private tabs appear first. Ordinary controls use the shared design system, retain draft state through resizing and use the main strip's dirty-navigation guard. Keep company information, document text and links readable on phones; URLs retain original case.
 
-Company and group limits are explicitly stored. Group available is the explicit group limit minus the recorded exposures of its members; member limits are never added to manufacture group credit. Current credit values are a demo account snapshot, not an invoice ledger reconstructed from historical stems.
+Credit usage displays recorded used/available amounts with a labelled bar and percentage legend. Temporary facilities remain separate from permanent limits. Missing or invalid risk/financial values remain unknown. Do not turn a range or absent record into an invented exact figure.
 
-New requests use two explicit workflows:
+## Prototype credit semantics to preserve
 
-- URGENT requests an additional one-off overage, with vessel, seven-digit IMO, port, ETA, expiry and reason. Approval creates a separate temporary facility and leaves the permanent limit unchanged. Effective credit includes only currently active facilities.
-- P1 requests the expected total permanent credit limit, including initial credit for a lead. Approving USD 800,000 sets the permanent limit to USD 800,000; it does not add USD 800,000 to the existing limit.
+Company and group limits are explicit. Group available credit is the recorded group limit minus recorded member exposures; adding member limits must not manufacture a group facility.
 
-Legacy requests keep their original semantics: an increase adds to the permanent limit, initial approval sets the limit, and a temporary approval creates a separate facility. A legacy P1 priority label alone does not change an additive request into a total-limit request.
+- URGENT requests an additional one-off overage with vessel, IMO, port, ETA, expiry and reason. Approval creates a separate temporary facility, leaving the permanent limit unchanged. Only currently active facilities affect effective credit.
+- P1 requests the expected total permanent limit, including initial credit for a lead. Approval sets that total rather than adding it to the current limit.
+- Legacy initial, additive-increase and temporary requests retain their original semantics. A historical P1 priority label alone must not convert an additive request into a total-limit request.
 
-Credit/Admin can acknowledge and decide requests; traders can request but cannot approve. A requester who is not the buyer's person in charge must confirm before submission. Request, acknowledgement, closure and decision metadata remain available together. Credit History separates effective date from recorded date and links decisions to their requests.
+Retain requester, acknowledgement, decision and recipient snapshots, effective dates and recorded dates. Opening notifications affects only the current actor's read state. Similar buyer names require separate-entity review; exact normalized names/aliases are blocked as duplicates without merging records. A non-PIC requester must confirm before submitting.
 
-New companies start as leads, with a standard customer ID, person in charge and office. Exact normalized names or aliases are blocked as duplicates; similar legal names require confirmation that this is a separate legal entity. No records are merged. Credit approval changes the lead to a buyer.
+STEM rejects unapproved, suspended, on-hold or closed accounts. A priced fixture checks its selling exposure. An unpriced STEM uses maximum requested quantity times buy price as known conservative cost; it does not invent a selling price or receivable. Existing manual checks remain until an authoritative credit integration replaces them through a reviewed release.
 
-New requests snapshot the requester, requester office, buyer PIC office and Credit/Admin recipients, deduplicated by actor. The browser-local notification ledger records submission, acknowledgement and decision events. Credit/Admin attention counts open requests; trader attention counts requests with their own unread notifications. Expanding request details marks only that actor's notifications read.
+## Performance, remarks and files
 
-Supporting files are saved with the request in this browser: PDF, PNG, JPG, TXT, CSV, DOCX or XLSX, up to five files, 512 KB each and 1.5 MB total. File format and size validation runs before saving; preview/download controls retain the original file data.
+Performance defaults to the last 12 months using Hong Kong reporting dates. Count one stem per converted enquiry in the period. Average payment uses paid stems with both invoice and payment dates; average delay uses nonnegative days past due for those paid stems. Missing payment records stay unknown. Hit rate uses the same confirmed-enquiry cohort, and volume-weighted margin uses known actual values. Pending ranges do not become exact volume or margin.
 
-STEM rejects unapproved, suspended, on-hold or closed accounts. A priced fixture checks its selling exposure. An unpriced STEM checks the maximum requested quantity times buy price as a conservative known cost; it does not invent a selling price or book an invented receivable. Existing manual compliance/credit confirmations remain required.
+Shared Team Remarks and Competition apply to the selected buyer. Preserve unchanged-entry attribution and immutable history; reject blank, duplicate, stale and unchanged revisions. Eligible real shared publications use contribution rules, never a spendable Gold reward. Private remarks and credit decisions retain their distinct rules. Making a historical credit remark active must not rewrite authorship, dates or financial values.
 
-## Performance and records
+Request attachments retain original bytes, format/size validation and the existing storage scope. Provide accessible previews for supported formats and download fallback for unsupported or failed previews. A local preview is not evidence that documents are in shared cloud storage.
 
-Performance defaults to the last 12 months, inclusive of today, using Hong Kong reporting dates. This year and All records are also available. Overview shows performance metrics and trends without a STEM preview. The Stem Records tab searches and pages all records, 25 at a time. Credit history and request tables mount 15 rows per page.
+## Verification and future integration
 
-- Number of stem counts one fixture per enquiry booked in the period, including a commercial STEM awaiting actual volume.
-- Stem delayed counts late-paid stems and unpaid stems already past due among known payment records. Missing records remain unknown.
-- Average Payment day is invoice-to-payment days for paid stems with both dates.
-- Average Delay is nonnegative days past due for paid stems; early/on-time payments count as zero. Unpaid invoices are excluded from both averages.
-- Hit Rate compares converted enquiries against confirmed enquiries in the same reporting cohort. Drafts and older enquiry cohorts do not inflate conversion.
-- Trends show the latest six calendar months: known volume and volume-weighted margin in USD/MT. Pending ranges never become invented exact volume or margin.
+Keep tests for credit lifecycle/expiry, P1 versus legacy semantics, immutable decisions, duplicate leads, role gates, recipient/read isolation, attachment validation and active remarks. Browser checks must cover both profile entry points, private/shared separation, unsaved work, desktop/phone layouts and both themes.
 
-## Remarks
-
-The standalone Credit History section shows recent shared credit events and its current credit text is editable by Credit/Admin. Overview shows the latest three credit events. All History opens the restored Credit History tab with the searchable, filtered history table. Saving creates an immutable Credit History entry and makes it active. Credit/Admin can select an earlier remark as active without rewriting its author, dates, history or financial values. Existing legacy remarks are imported once; their author and effective date remain unknown, and the recorded date identifies the import. The Remarks section in Overview contains Team Remarks and Private Remarks. Team Remarks are staff-shared notes about the selected buyer, not remarks belonging to the buyer’s customer group. The old customer-group label is removed. Legacy group notes remain visible until that buyer’s Team Remarks list is first saved, and subsequent edits affect only the selected buyer; users can add, revise or remove entries. Each real list revision publishes immediately and awards one Gold without changing financial approval. Previous publications remain intact; stale and unchanged drafts cannot publish. Private Remarks use the same list editor and dated entries, scoped to one demo actor and buyer. Existing single notes migrate on first edit; private revisions never enter shared contributions, audit text or Gold rewards. Editors open only when their buttons are selected.
-
-## Competition
-
-Competition appears above Performance in Overview. Traders and managers use Update to edit the current list, add competitors or remove obsolete entries. Existing approved contributions populate the first edit without rewriting their authors or dates. Unchanged entries retain attribution; edited entries show their latest editor and date. Each real list revision awards one Gold, regardless of the number of edited rows. Blank/duplicate entries, cosmetic-only retries and stale drafts are rejected. Current lists page 25 entries at a time and survive reload. Group membership does not broaden Competition to other buyers.
-
-All reward-eligible update controls use the shared green Gold Update button, including profile/section updates, Key Info, information editors, tab saves, extraction publication, feedback and shared buyer lists. Private/credit remarks retain their existing reward rules.
-
-## Demo boundary and verification
-
-The app persists records in browser localStorage with selectable demo identities. Data, private notes, requests, approvals, notifications and request attachments are local to the browser. These flows do not write to CUP or send email. Production use requires authenticated shared storage and server-side permissions. No live CUP or Qlik records were imported. Their rendered field labels informed the design.
-
-Unit tests cover cohort/payment calculations, credit lifecycle and expiry, P1 total versus legacy additive approval, immutable decisions, role checks, lead duplicates, attachment validation, recipient/read isolation and active remarks. Isolated browser tests cover the portfolio, both profile entry points, all tabs, request workflows, remarks persistence, temporary credit expiry, requests/history and mobile/desktop themes.
-
-Buyer text uses the same 13px body and bold section-label standard as knowledge profiles. Working windows share opaque, stronger border tokens in both themes. Competition keeps name and attribution on one row where space permits.
+The [roadmap](development-roadmap.md) requires authoritative credit sources, visible freshness and shared exposure/reservation rules before live credit claims. Public fixtures remain synthetic; original private workflow references and operational evidence stay outside this repository.

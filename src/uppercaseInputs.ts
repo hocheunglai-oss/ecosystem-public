@@ -1,4 +1,4 @@
-import { uppercaseSelectionOffset, uppercaseText } from './lib/uppercase'
+import { hasCaseSensitiveText, uppercaseSelectionOffset, uppercaseText } from './lib/uppercase'
 
 type TextControl = HTMLInputElement | HTMLTextAreaElement
 
@@ -20,6 +20,7 @@ export function installUppercaseInputs(root: Document = document): () => void {
 
   const normalize = (control: TextControl): boolean => {
     const original = control.value
+    control.toggleAttribute('data-case-sensitive-value', hasCaseSensitiveText(original))
     const next = uppercaseText(original)
     if (next === original) return false
     const start = control.selectionStart
@@ -43,6 +44,24 @@ export function installUppercaseInputs(root: Document = document): () => void {
     control.scrollLeft = scrollLeft
     return true
   }
+
+  const markPresentation = (target: EventTarget | null) => {
+    const control = controlFor(target)
+    if (control) control.toggleAttribute('data-case-sensitive-value', hasCaseSensitiveText(control.value))
+  }
+  const markTree = (node: Node) => {
+    if (!(node instanceof view.Element)) return
+    markPresentation(node)
+    node.querySelectorAll('input, textarea').forEach(markPresentation)
+  }
+  // React writes control values as properties. Inspect newly mounted controls
+  // and focused controls without rewriting their stored or controlled values.
+  root.querySelectorAll('input, textarea').forEach(markPresentation)
+  const observer = new view.MutationObserver(records => {
+    for (const record of records) for (const node of record.addedNodes) markTree(node)
+  })
+  observer.observe(root, { childList: true, subtree: true })
+  const onFocus = (event: Event) => markPresentation(event.target)
 
   const onInput = (event: Event) => {
     const control = controlFor(event.target)
@@ -69,8 +88,11 @@ export function installUppercaseInputs(root: Document = document): () => void {
   root.addEventListener('change', onInput, true)
   root.addEventListener('compositionstart', onCompositionStart, true)
   root.addEventListener('compositionend', onCompositionEnd, true)
+  root.addEventListener('focusin', onFocus, true)
   return () => {
     active = false
+    observer.disconnect()
+    root.removeEventListener('focusin', onFocus, true)
     root.removeEventListener('input', onInput, true)
     root.removeEventListener('change', onInput, true)
     root.removeEventListener('compositionstart', onCompositionStart, true)

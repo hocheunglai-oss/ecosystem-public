@@ -4,9 +4,11 @@
   text-transform: uppercase !important;
 }
 
-/* Addresses and credentials keep their original case, including revealed passwords. */
+/* Links, addresses and credentials keep their original case. */
 #root :is(
   input[type="email" i],
+  input[type="url" i],
+  [inputmode="url" i],
   input[type="password" i],
   [inputmode="email" i],
   [autocomplete~="email" i],
@@ -15,7 +17,9 @@
   [autocomplete~="one-time-code" i],
   [data-preserve-case],
   [data-email-value],
-  a[href^="mailto:" i]
+  [data-case-sensitive-value],
+  a,
+  a *
 ),
 #root [data-preserve-case] * {
   text-transform: none !important;

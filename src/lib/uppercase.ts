@@ -27,6 +27,10 @@ export function uppercaseText(text: string): string {
   return parts(text).map(part => part.preserve ? part.text : part.text.toUpperCase()).join('')
 }
 
+export function hasCaseSensitiveText(text: string): boolean {
+  return parts(text).some(part => part.preserve);
+}
+
 // Selection offsets use UTF-16 code units, as do browser input selections.
 // Calculate against the complete text so a caret within an email or URL does
 // not mistakenly cause a partial address to be treated as ordinary prose.

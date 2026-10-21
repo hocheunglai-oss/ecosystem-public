@@ -8,7 +8,7 @@ import { ecoConnections } from '../config/ecoConnections.ts';
 
 const exec = promisify(execFile);
 const sourceRoots = ['src', 'server', 'api', 'shared', 'config', 'public', 'supabase/migrations', 'supabase/baseline'];
-const sourceFiles = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.config.ts', 'tsconfig.json', 'tsconfig.server.json', 'vercel.json', 'scripts/generate-system-information.mjs'];
+const sourceFiles = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.config.ts', 'tsconfig.json', 'tsconfig.server.json', 'vercel.json', 'scripts/generate-system-information.mjs', 'scripts/pdf-preview-assets.mjs'];
 const generatedPath = 'server/generated/system-information.ts';
 const hash = value => createHash('sha256').update(value).digest('hex');
 

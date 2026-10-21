@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AccessUser, AccessSession, PreviewInput, RolePreview } from '../shared/access';
 import { projectPreviewUser } from '../shared/rolePreview';
-import { assertPreviewWritable, setPreviewReadOnly } from './lib/previewGuard';
+import { assertPreviewWritable, setPreviewReadOnly, setSessionUnavailable } from './lib/previewGuard';
 import { assertLiveDataWritable } from './lib/testWorkspaceGuard';
 
 export async function accessRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
@@ -35,6 +35,9 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const generation = useRef(0);
   const mutating = useRef(false);
   const refreshAfterMutation = useRef(false);
+  const refreshing = useRef<{ promise: Promise<void>; controller: AbortController } | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const retryCount = useRef(0);
   const sessionRef = useRef(session);
   const channel = useRef<BroadcastChannel | null>(null);
   function acceptSession(result: { user: AccessUser; preview?: RolePreview | null }) {
@@ -42,34 +45,65 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     const next = { realUser: result.user, user: projectPreviewUser(result.user, preview), preview };
     const previous = sessionRef.current.preview;
     const viewChanged = previous?.role !== preview?.role || previous?.officeId !== preview?.officeId;
-    setPreviewReadOnly(Boolean(preview)); sessionRef.current = next; setSession(next);
+    setSessionUnavailable(false); setPreviewReadOnly(Boolean(preview)); sessionRef.current = next; setSession(next);
     if (viewChanged) requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
   }
   function clearSession() {
     const next = { user: null, realUser: null, preview: null };
-    setPreviewReadOnly(false); sessionRef.current = next; setSession(next);
+    setSessionUnavailable(false); setPreviewReadOnly(false); sessionRef.current = next; setSession(next);
   }
-  const refresh = useCallback(async () => {
-    if (mutating.current) return;
+  function stopRefresh() {
+    clearTimeout(retryTimer.current);
+    refreshing.current?.controller.abort();
+    refreshing.current = null;
+  }
+  const refresh = useCallback((): Promise<void> => {
+    if (mutating.current) return Promise.resolve();
+    if (refreshing.current) return refreshing.current.promise;
+    clearTimeout(retryTimer.current);
     const current = ++generation.current;
+    const controller = new AbortController();
+    const operation = (async () => {
     try {
-      const result = await accessRequest<AccessSession>('session');
-      if (current === generation.current) { acceptSession(result); setError(''); }
+      const result = await accessRequest<AccessSession>('session', undefined, controller.signal);
+      if (current === generation.current) { acceptSession(result); setError(''); retryCount.current = 0; }
     } catch (failure) {
       if (current === generation.current) {
-        clearSession();
-        setError((failure as { status?: number }).status === 401 ? '' : 'Sign-in is not available yet.');
+        if ((failure as { status?: number }).status === 401) {
+          clearSession(); setError(''); retryCount.current = 0;
+        } else {
+          // Keep the already verified in-memory view during a transient outage.
+          // Freeze local writes until live authority is checked again. Every API
+          // still verifies its session; no identity is restored from storage.
+          setSessionUnavailable(true);
+          setError('Connection unavailable. Reconnecting…');
+          const delay = Math.min(30_000, 2_000 * 2 ** Math.min(retryCount.current++, 4));
+          retryTimer.current = setTimeout(() => { void refresh(); }, delay);
+        }
       }
-    } finally { if (current === generation.current) setLoading(false); }
+    } finally {
+      if (refreshing.current?.controller === controller) refreshing.current = null;
+      if (current === generation.current) setLoading(false);
+    }
+    })();
+    refreshing.current = { promise: operation, controller };
+    return operation;
   }, []);
   useEffect(() => {
     // Browser-local demo identity is never accepted as authentication.
     try { sessionStorage.removeItem('ecosystem.session.v1'); } catch { /* storage is optional */ }
     void refresh();
     const focus = () => { void refresh(); };
+    const visible = () => { if (!document.hidden) void refresh(); };
     window.addEventListener('focus', focus);
+    window.addEventListener('online', focus);
+    document.addEventListener('visibilitychange', visible);
     const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 30_000);
-    return () => { generation.current++; window.removeEventListener('focus', focus); window.clearInterval(timer); };
+    return () => {
+      generation.current++; stopRefresh();
+      window.removeEventListener('focus', focus); window.removeEventListener('online', focus);
+      document.removeEventListener('visibilitychange', visible); window.clearInterval(timer);
+    };
   }, [refresh]);
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -80,6 +114,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       // authenticated server response can restore access after invalidation.
       setPreviewReadOnly(true);
       generation.current++;
+      stopRefresh();
       if (mutating.current) refreshAfterMutation.current = true;
       else void refresh();
     };
@@ -89,6 +124,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     if (mutating.current) throw new Error('Wait for the current request to finish.');
     mutating.current = true;
     const current = ++generation.current;
+    stopRefresh();
     try {
       const result = await accessRequest<{ user: AccessUser; preview?: RolePreview | null }>(path, body);
       if (current === generation.current) { acceptSession(result); setError(''); setLoading(false); }
@@ -103,6 +139,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     if (mutating.current) throw new Error('Wait for the current request to finish.');
     mutating.current = true; generation.current++;
+    stopRefresh();
     try { await accessRequest('logout', {}); generation.current++; clearSession(); setError(''); channel.current?.postMessage('refresh-needed'); }
     finally {
       mutating.current = false;

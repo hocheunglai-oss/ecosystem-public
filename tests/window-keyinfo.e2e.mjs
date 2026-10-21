@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 
+// Historical scenario: demo identity/storage setup needs migration before this
+// full suite can run against authenticated ECO. Current window coverage lives in
+// editing-usability.e2e.mjs and profile-tabs-unified.e2e.mjs.
 const BASE = process.env.ECO_DEMO_URL || 'http://127.0.0.1:4181';
 const OUT = new URL('../artifacts/window-keyinfo/', import.meta.url);
 const layouts = [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 390, height: 844 }, { width: 320, height: 844 }]
@@ -31,7 +34,13 @@ async function expanded(dialog, viewport) {
   assert.ok(box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1);
   return box;
 }
-async function toggle(dialog, viewport, draft) {
+async function toggle(dialog, viewport, draft, initial = 'expanded') {
+  await expect(dialog).toHaveAttribute('data-window-size', initial);
+  if (initial === 'compact') {
+    await expect(button(dialog, 'Expand window')).toBeVisible();
+    if (draft) await draft();
+    await button(dialog, 'Expand window').click();
+  }
   const full = await expanded(dialog, viewport);
   await button(dialog, 'Shrink window').click();
   await expect(dialog).toHaveAttribute('data-window-size', 'compact');
@@ -144,7 +153,7 @@ try {
       await toggle(modal, viewport, async () => {
         await expect(modal.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('WINDOW TEST DRAFT');
         await expect(modal.getByRole('textbox', { name: 'Details', exact: true })).toHaveValue('UNSAVED FEEDBACK MUST SURVIVE BOTH WINDOW SIZES.');
-      });
+      }, 'compact');
       await button(modal, 'Cancel').click();
 
       await profile.locator('.knowledge-facts').getByRole('button', { name: 'Update', exact: true }).click();
@@ -155,7 +164,7 @@ try {
         await expect(field).toHaveAttribute('maxlength', '1000');
         await field.fill(values[index]);
       }
-      await toggle(modal, viewport, async () => { for (let index = 0; index < labels.length; index++) await expect(modal.getByRole('textbox', { name: labels[index], exact: true })).toHaveValue(values[index]); });
+      await toggle(modal, viewport, async () => { for (let index = 0; index < labels.length; index++) await expect(modal.getByRole('textbox', { name: labels[index], exact: true })).toHaveValue(values[index]); }, 'compact');
       await page.screenshot({ path: new URL(`key-info-${viewport.width}.png`, OUT).pathname });
       await button(modal, 'Update').click();
       await expect(modal).toHaveCount(0);
@@ -176,7 +185,7 @@ try {
       modal = page.getByRole('dialog', { name: 'Manage Tabs', exact: true });
       await modal.getByLabel('Tab 1 name', { exact: true }).fill('UNSAVED OPERATIONS');
       for (let index = 0; index < 12; index++) await button(modal, 'Add Tab').click();
-      await toggle(modal, viewport, () => expect(modal.getByLabel('Tab 1 name', { exact: true })).toHaveValue('UNSAVED OPERATIONS'));
+      await toggle(modal, viewport, () => expect(modal.getByLabel('Tab 1 name', { exact: true })).toHaveValue('UNSAVED OPERATIONS'), 'compact');
       await fixedHeader(modal, '.modal-head', '.knowledge-manage-list');
       await button(modal, 'Cancel').click();
       await expect(profile.getByRole('tab', { name: 'Port Information', exact: true })).toBeVisible();

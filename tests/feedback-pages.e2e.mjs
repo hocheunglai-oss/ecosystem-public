@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
+// Historical demo-storage scenario. Authenticated feedback now uses the shared
+// API; migrate those fixtures before running this complete legacy flow.
 const base = process.env.ECO_DEMO_URL || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
 await mkdir('artifacts/feedback-pages', { recursive: true });
@@ -30,9 +32,12 @@ try {
       await selector.selectOption('suppliers');
       await modal.getByRole('textbox', { name: 'Title', exact: true }).fill('SUPPLIER FEEDBACK CHECK');
       await modal.getByRole('textbox', { name: 'Details', exact: true }).fill('KEEP THIS FEEDBACK WITH ITS SELECTED SUPPLIER PAGE AFTER RELOADING.');
-      await modal.getByRole('button', { name: 'Shrink window', exact: true }).click();
-      await expect(selector).toHaveValue('suppliers');
+      await expect(modal).toHaveAttribute('data-window-size', 'compact');
       await modal.getByRole('button', { name: 'Expand window', exact: true }).click();
+      await expect(modal).toHaveAttribute('data-window-size', 'expanded');
+      await expect(selector).toHaveValue('suppliers');
+      await modal.getByRole('button', { name: 'Shrink window', exact: true }).click();
+      await expect(modal).toHaveAttribute('data-window-size', 'compact');
       await expect(modal.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('SUPPLIER FEEDBACK CHECK');
       await page.screenshot({ path: `artifacts/feedback-pages/form-${width}.png` });
       await modal.getByRole('button', { name: 'Update', exact: true }).click();

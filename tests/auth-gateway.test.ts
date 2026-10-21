@@ -117,6 +117,52 @@ for (const scenario of ['success','wrong-current-password','wrong-identity','mem
   });
 }
 
+for (const scenario of ['user-503', 'user-network', 'refresh-429', 'refresh-503', 'refresh-invalid', 'user-revoked'] as const) {
+  test(`session checks distinguish retryable provider failures from revoked credentials: ${scenario}`, async () => {
+    const config: AuthConfig = { origin: 'https://eco.example.test', supabaseUrl: 'https://fixture.supabase.co', publishableKey: 'fixture-publishable', secretKey: 'fixture-server-key', rateLimitSecret: 'fixture-limit-key-at-least-32-characters', secureCookies: true };
+    const id = '11111111-1111-4111-8111-111111111111', sid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const providerUser = { id, email: 'person@example.test', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+    const member = { id, email: providerUser.email, displayName: 'Person', officeId: 'hk', officeName: 'Hong Kong', isAdmin: false, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+    const now = Math.floor(Date.now() / 1000), expired = scenario.startsWith('refresh');
+    const makeSession = (expiry: number) => ({ access_token: [{ alg: 'HS256', typ: 'JWT' }, { sub: id, aud: 'authenticated', role: 'authenticated', iat: expiry - 900, exp: expiry, session_id: sid }, 'synthetic-signature'].map(value => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url')).join('.'), refresh_token: 'synthetic-persistent-refresh', expires_in: 900, expires_at: expiry, token_type: 'bearer', user: providerUser });
+    const cookie = 'eco-auth=base64-' + Buffer.from(JSON.stringify(makeSession(expired ? now - 3600 : now + 900))).toString('base64url');
+    const request = () => new Request(config.origin + '/api/access/session', { headers: { cookie } });
+    const original = globalThis.fetch;
+    let recovering = false, membershipReads = 0;
+    try {
+      globalThis.fetch = async input => {
+        const url = String(input);
+        if (url.endsWith('/rest/v1/rpc/eco_preview_state')) return Response.json({ preview: null, sessionId: sid });
+        if (url.endsWith('/rest/v1/rpc/eco_current_user')) { membershipReads++; return Response.json(member); }
+        if (url.includes('/token?grant_type=refresh_token')) {
+          if (recovering) return Response.json(makeSession(now + 900));
+          return Response.json({ code: scenario === 'refresh-invalid' ? 'refresh_token_not_found' : 'over_request_rate_limit', msg: 'Fixture provider response' }, { status: scenario === 'refresh-invalid' ? 400 : scenario === 'refresh-503' ? 503 : 429, headers: { 'x-supabase-api-version': '2024-01-01' } });
+        }
+        if (url.endsWith('/auth/v1/user')) {
+          if (recovering) return Response.json(providerUser);
+          if (scenario === 'user-network') throw new TypeError('Synthetic network failure');
+          return Response.json({ code: scenario === 'user-revoked' ? 'session_not_found' : 'unexpected_failure', msg: 'Fixture provider response' }, { status: scenario === 'user-revoked' ? 401 : 503 });
+        }
+        throw new Error('Unexpected fixture URL');
+      };
+      const gateway = createAuthGateway(request(), config);
+      const response = await handleAuth(request(), config, gateway);
+      const definitive = scenario === 'refresh-invalid' || scenario === 'user-revoked';
+      assert.equal(response.status, definitive ? 401 : 503);
+      assert.equal(membershipReads, 0, 'failed provider authentication cannot fall back to cached member identity');
+      if (!definitive) {
+        assert.equal(response.headers.getSetCookie().length, 0, 'temporary failure must not erase the persistent refresh credential');
+        recovering = true;
+        const recovered = await handleAuth(request(), config, createAuthGateway(request(), config));
+        assert.equal(recovered.status, 200);
+        assert.equal((await recovered.json()).user.id, id);
+        assert.equal(membershipReads, 1);
+      }
+      assert.doesNotMatch(await response.text(), /synthetic-persistent-refresh|access_token|refresh_token/);
+    } finally { globalThis.fetch = original; }
+  });
+}
+
 test('persistent cookies reopen, refresh for 400 days, and still honor logout and revocation', async () => {
   const config: AuthConfig={origin:'https://eco.example.test',supabaseUrl:'https://fixture.supabase.co',publishableKey:'fixture-publishable',secretKey:'fixture-server-key',rateLimitSecret:'fixture-limit-key-at-least-32-characters',secureCookies:true};
   const id='11111111-1111-4111-8111-111111111111',sid='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

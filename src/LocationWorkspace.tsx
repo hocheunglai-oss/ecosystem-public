@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
+  ClipboardPaste,
   Plus,
   Search,
   X,
@@ -77,6 +78,7 @@ export default function LocationWorkspace({
   const [index, setIndex] = useState<"country" | "port" | undefined>();
   const [recent, setRecent] = useState(() => recentKeys(actor.id));
   const [adding, setAdding] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [created, setCreated] = useState<NewLocation>();
   const profileDirty = useRef(false);
   function leaveProfile() {
@@ -183,6 +185,9 @@ export default function LocationWorkspace({
           )}
         </label>
         <div className="location-toolbar-actions">
+          <button className="button secondary" onClick={() => { if (leaveProfile()) setExtracting(true); }}>
+            <ClipboardPaste size={14} /> Information extractor
+          </button>
           <button
             className="button secondary location-add"
             onClick={() => { if (leaveProfile()) setAdding(true); }}
@@ -224,21 +229,6 @@ export default function LocationWorkspace({
                 : [];
             })}
           </section>
-          <section
-            className="location-extractor"
-            aria-labelledby="information-extractor-title"
-          >
-            <h2 id="information-extractor-title">Information extractor</h2>
-            <Suspense fallback={<span role="status">Loading…</span>}>
-              <KnowledgeExtractor
-                embedded
-                onSaved={(key) => {
-                  const record = records.find((r) => r.key === key);
-                  if (record) choose(record);
-                }}
-              />
-            </Suspense>
-          </section>
         </div>
       ) : directory ? (
         <div className="location-body">
@@ -279,6 +269,13 @@ export default function LocationWorkspace({
             </nav> : undefined}
           />
       ) : null}
+      {extracting && <Suspense fallback={<span role="status">Loading…</span>}>
+        <KnowledgeExtractor current={current} onClose={() => setExtracting(false)} onSaved={key => {
+          setExtracting(false);
+          const record = records.find(item => item.key === key);
+          if (record) choose(record);
+        }} />
+      </Suspense>}
       {adding && (
         <AddLocation
           current={current}
@@ -384,6 +381,7 @@ function AddLocation({
   return (
     <Modal title="Add location" onClose={onClose}>
       <form
+        className="location-create"
         onSubmit={(e) => {
           e.preventDefault();
           const value = {
@@ -401,6 +399,9 @@ function AddLocation({
           </p>
         )}
         <div className="form-grid">
+          <Field label="Name">
+            <input autoFocus required maxLength={150} value={name} onChange={e => setName(e.target.value)} />
+          </Field>
           <Field label="Type">
             <select
               aria-label="Type"
@@ -410,15 +411,6 @@ function AddLocation({
               <option value="country">Country</option>
               <option value="port">Port</option>
             </select>
-          </Field>
-          <Field label="Name">
-            <input
-              autoFocus
-              required
-              maxLength={150}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
           </Field>
           {kind !== "country" && (
             <Field label="Country">

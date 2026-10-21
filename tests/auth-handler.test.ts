@@ -39,6 +39,26 @@ function request(path: string, body?: unknown, extra: Record<string,string> = {}
   });
 }
 
+test('account privacy guidance requires a live member and is readable by traders and read-only previews', async () => {
+  const anonymous = await handleAuth(request('privacy'), config, fixture(null).gateway);
+  assert.equal(anonymous.status, 401);
+  assert.doesNotMatch(await anonymous.text(), /Information and access|Private profile tabs/);
+  for (const preview of [false, true]) {
+    const f = fixture(preview ? { ...user, isAdmin: true } : user);
+    if (preview) f.gateway.getPreview = async () => ({ role: 'trader', officeId: 'hk', officeName: 'Hong Kong', readOnly: true });
+    const response = await handleAuth(request('privacy'), config, f.gateway);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control')!, /private, no-store/);
+    const result = await response.json() as { sections: unknown[] };
+    assert.equal(result.sections.length, 4);
+    assert.doesNotMatch(JSON.stringify(result), /Vercel|Supabase|fingerprint|route assignment|project.?id|service.?key/i);
+    assert.deepEqual(f.calls, []);
+  }
+  const unavailable = fixture();
+  unavailable.gateway.currentUser = async () => { throw new ApiError(503, 'Session check unavailable.'); };
+  assert.equal((await handleAuth(request('privacy'), config, unavailable.gateway)).status, 503);
+});
+
 test('an unconfigured installation fails closed rather than selecting another project', () => {
   assert.throws(() => authConfig({ NODE_ENV: 'production' }), /AUTH_NOT_CONFIGURED/);
 });

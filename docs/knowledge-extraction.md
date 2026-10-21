@@ -1,30 +1,23 @@
 # Country and port information extraction
 
-Open **Intelligence → Country and Port Data → Paste information**. Paste an email or notes, optionally select a location and record the source/date, then select **Extract**. Review destinations, text, tables, Key Info and source excerpts. Items with a warning or unresolved destination start unselected. **Update** publishes selected changes together and awards one Gold; the mobile business interface omits the reward decoration.
+## Interaction
 
-Existing information is retained unless the user explicitly chooses a block under **Replace**. Extraction does not change records or earn a reward. Closing/cancelling discards the draft. Stale records, duplicate information and replayed batches fail without partial saves or rewards. Sources and previous versions remain in record history.
+Open INFORMATION EXTRACTOR from the country/port toolbar when needed. Paste an email or notes, optionally choose the location and record its source/date, then extract. Review destinations, text, tables, Key Info and source excerpts. Warnings and unresolved destinations start unselected. Opening or running extraction creates a draft; only an explicit CONTRIBUTE +1 publication applies eligible selected changes.
 
-Key Info uses multiline text fields in both its editor and extraction review, with a shared limit of 1,000 characters per field. Values are not restricted to a fixed list or administrator options. Existing values and line breaks remain intact; clearing a field saves an unknown value. Extraction proposals still require a nonblank value and source excerpt. Saves retain per-field authorship, unchanged-field timestamps, and concurrent-edit protection. The old dropdown values are retained only as private compatibility data for recognizing historical extraction source blocks.
+Existing information stays unless the user explicitly chooses a block to replace. Closing/cancelling discards the extraction draft. Stale records, duplicates and replayed batches fail without partial publication or duplicate contributions. Keep retained sources and previous versions. Preserve URL/link values in their original case.
 
-## API and sign-in
+Key Info uses multiline fields with a 1,000-character limit per field. Existing values and line breaks remain intact; clearing a field saves an unknown value. Extraction proposals require a nonblank value and an excerpt present in the pasted text. Saves retain per-field authorship, unchanged-field timestamps and concurrent-edit protection. Historical dropdown values remain compatibility data only.
 
-- Endpoint: `https://spc.fcuno.com/api/ecosystem/knowledge-extract`.
-- Server implementation lives in FCUNO's `app/api/ecosystem/knowledge-extract/route.ts` and `lib/ecosystemKnowledgeExtraction.ts`.
-- Reuses FCUNO's server-side `OPENAI_API_KEY`; no key is shipped to ECO.
-- Model: `OPENAI_KNOWLEDGE_MODEL`, default `gpt-6-luna`, low reasoning effort, strict Structured Outputs, no external tools.
-- Requires an existing authenticated FC UNO or SPC session with no password reset pending. The ECO demo profile is not API authentication. The user can sign in at `https://spc.fcuno.com/`, then retry without losing pasted text.
-- Credentialed CORS accepts only `https://eco.fcuno.com`. Localhost and preview extraction calls are intentionally not allowed; browser tests mock the endpoint.
-- Input: 30,000 characters, at most 1,000 location references. Up to 40 proposals, 30 columns/200 rows per table. Source excerpts must occur in the pasted text.
-- Failures are bounded and retryable; there is no automatic fallback model or retry that incurs additional API charges.
-- Usage accounting uses `ecosystem-country-port` / `knowledge-extraction` and records token/cost metadata, never pasted text or extracted contents.
+## Current service boundary
 
-## Current storage boundary
+The current client in `src/lib/knowledgeExtractionApi.ts` calls `https://spc.fcuno.com/api/ecosystem/knowledge-extract`. This is a retained FCUNO/SPC service dependency, separate from ECO's independent password authentication. An authenticated ECO account does not establish a session with that service. Keep provider credentials on its server and never copy authentication material between applications. VIEW AS and TEST must not call the live extraction service.
 
-ECO remains a browser-local demo. Confirmed information, history and rewards use its existing local storage. The extraction endpoint only returns a draft and does not write to the FC UNO/SPC database. Shared, multi-user knowledge persistence will need a separate authenticated storage integration.
+The client sends bounded text and location references and validates returned proposals against the shared extraction contract. Source excerpts must match the input. The service returns a draft; it does not publish country/port knowledge or modify FCUNO/SPC business records. Preserve pasted input on a retryable service/sign-in failure. Do not add automatic paid retries or an unreviewed fallback model.
 
-## Verification
+Local and staged browser verification uses intercepted responses. Provider configuration, allowed production origins, usage accounting and live authentication are owned by the service and must be checked separately before a live integration claim. The future parser/API strategy remains explicit in [the roadmap](development-roadmap.md).
 
-- `pnpm test` includes atomic multi-location updates, duplicate/replay/stale guards, provenance and rewards.
-- `node tests/knowledge-extraction.e2e.mjs` checks the browser flow with controlled API responses in isolated contexts.
-- FCUNO's `tests/ecosystem-knowledge-extraction.test.ts` checks authentication, origin checks, schema/evidence validation, timeouts and provider failures.
-- A signed-in live API check is separate from mocked browser/provider tests.
+## Persistence and verification
+
+Confirmed country/port knowledge and its history retain their current browser persistence. API-backed supplier data and owner-private profile tabs have separate storage contracts. Extraction does not make local knowledge a shared multi-user database.
+
+`pnpm test` covers atomic multi-location publication, duplicate/replay/stale protection, evidence and contribution eligibility. The isolated extraction browser harness checks review and publication with controlled API responses. A mocked browser pass does not establish a working live provider session or successful paid extraction.

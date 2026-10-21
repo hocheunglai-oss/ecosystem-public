@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, isAuthSessionMissingError } from '@supabase/supabase-js';
 import type { AccessOffice, AccessUser, UserAccessUpdate, UserAccessCreate, UserPasswordReset, UserAccessDelete, RolePreview, PreviewInput, PhoneChangeRequest, PhoneChangeInput, PhoneChangeReview } from '../../shared/access.ts';
 import type { AuthConfig } from './config.ts';
 import { ApiError, password } from './validation.ts';
@@ -198,7 +198,19 @@ export function createAuthGateway(request: Request, config: AuthConfig): AuthGat
     setPreview: input => rpc('eco_set_preview', {p_role: input?.role ?? null, p_office_id: input?.officeId ?? null}),
     async currentUser() {
       const { data, error } = await client.auth.getUser();
-      if (error || !data.user) return null;
+      if (error) {
+        // A provider outage is not a revoked session. Returning null here would
+        // turn a temporary network/refresh failure into an application 401.
+        const invalidSession = isAuthSessionMissingError(error) || [401, 403].includes(error.status ?? 0)
+          || ['bad_jwt', 'session_not_found', 'session_expired', 'refresh_token_not_found', 'refresh_token_already_used', 'user_not_found', 'user_banned'].includes(error.code ?? '');
+        if (invalidSession) return null;
+        // The SDK can discard a cookie after a non-retryable refresh response
+        // such as rate limiting. Keep the browser's refresh credential for a
+        // later attempt unless the provider actually rejected the session.
+        if (cookies.every(cookie => /(?:^|;\s*)Max-Age=0(?:;|$)/i.test(cookie))) cookies.length = 0;
+        throw new ApiError(503, 'Session check unavailable. Try again.');
+      }
+      if (!data.user) return null;
       // This RPC additionally checks the live provider session, active membership and revocations.
       try { return await rpc<AccessUser>('eco_current_user'); }
       catch (error) { if (error instanceof ApiError && error.status === 401) return null; throw error; }

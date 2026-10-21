@@ -16,6 +16,7 @@ import LostReasonSettings from "./LostReasonSettings";
 import UsersAccess from './UsersAccess';
 import Administration, { FeedbackWorkspace } from './Administration';
 import { PasswordSettings } from './PasswordSettings';
+import PrivacyDetails from './PrivacyDetails';
 import { PersonalDetails } from './ProfileMenu';
 import { useAccess } from './auth';
 import {
@@ -263,7 +264,7 @@ function ContributionRecords({
 function SettingsWorkspace({ open, onAdminOperationPending }: { open: OpenModal; onAdminOperationPending?: (reference: string | null) => void }) {
   const { user, preview } = useAccess();
   const [tab, setTab] = useState<
-    "users" | "management" | "administration" | "lost-reasons" | "password"
+    "users" | "management" | "administration" | "lost-reasons" | "password" | "privacy"
   >(user?.isAdmin ? "users" : "password");
   const [pendingReference, setPendingReference] = useState<string | null>(null);
   const onPendingChange = useCallback((reference: string | null) => {
@@ -275,6 +276,7 @@ function SettingsWorkspace({ open, onAdminOperationPending }: { open: OpenModal;
       <div className="module-settings-toolbar">
         <div className="tabs" aria-label="Settings">
           <button disabled={Boolean(pendingReference)} className={tab === "password" ? "active" : ""} onClick={() => setTab("password")}>Personal details</button>
+          <button disabled={Boolean(pendingReference)} className={tab === 'privacy' ? 'active' : ''} onClick={() => setTab('privacy')}>Privacy</button>
           {user.isAdmin && !preview && <>
           <button disabled={Boolean(pendingReference)} className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users &amp; Access</button>
           <button
@@ -301,7 +303,7 @@ function SettingsWorkspace({ open, onAdminOperationPending }: { open: OpenModal;
           </>}
         </div>
       </div>
-      {tab === 'password' ? <div className="personal-settings"><PersonalDetails /><section className="personal-password" aria-label="Change password"><h2>Change password</h2><PasswordSettings /></section></div> : !user.isAdmin || preview ? null : tab === 'users' ? <UsersAccess onPendingChange={onPendingChange} /> : tab === "management" ? (
+      {tab === 'password' ? <div className="personal-settings"><PersonalDetails /><section className="personal-password" aria-label="Change password"><h2>Change password</h2><PasswordSettings /></section></div> : tab === 'privacy' ? <PrivacyDetails /> : !user.isAdmin || preview ? null : tab === 'users' ? <UsersAccess onPendingChange={onPendingChange} /> : tab === "management" ? (
         <ManagementPage open={open} />
       ) : tab === "lost-reasons" ? (
         <LostReasonSettings />

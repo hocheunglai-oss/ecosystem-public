@@ -175,7 +175,7 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(wide);
   const id = useId();
   useLayoutEffect(() => {
     const d = ref.current;

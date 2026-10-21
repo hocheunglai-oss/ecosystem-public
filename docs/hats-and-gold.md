@@ -4,7 +4,7 @@ This document keeps its historical filename so existing references remain valid.
 
 ## Hats
 
-ECO sign-in uses authenticated accounts. Contribution and Hat records still use browser-local prototype storage, separated by signed-in user ID. A signed-in account is not evidence that its activity ledger is shared: awards and publications are not synchronized between different users or browsers. Shared reporting requires authenticated shared storage and a unique constraint on reader + canonical entry identity.
+ECO sign-in uses authenticated accounts. Hats and local knowledge activity retain browser-local storage separated by signed-in user ID. Supplier and feedback publications also have authenticated shared contribution records; the account total combines available local activity with the server summary. These are different sources: do not describe all activity as local or imply that a shared contribution total makes the Hats ranking company-wide. Shared Hats would require a separately implemented ledger with a unique reader plus canonical-entry identity.
 
 `set-hat` records a reader, stable entry target, recipient, publication timestamp, award timestamp and (for knowledge blocks) document version. The target is a port Key Info field, a knowledge block or a table row. Country/port aliases resolve to the same entry identity.
 
@@ -34,13 +34,13 @@ Only actual published contributions count. Repeated edits by the same person to 
 
 Unchanged content, duplicates, empty scaffolds, formatting/layout-only edits, tab organisation, private remarks, pending/declined records and future timestamps do not count. New valid contributions publish immediately; no additional approval step is introduced. Historical records with explicit contribution evidence count once each. Existing Gold amounts and synthetic grants are never converted into activity, and there is no spendable balance or reward promise. Legacy Gold storage/helpers remain only for saved-state compatibility.
 
-Hats remain a separate appreciation signal. The main Hats count/ranking is all time. The browser-local prototype storage limitation applies to both metrics; this is not yet a shared company-wide ranking.
+Hats remain a separate appreciation signal with an all-time count/ranking. Their browser-local limitation remains. Shared contribution totals do not establish a shared company-wide Hats ranking; local charts/history must remain labelled separately from the authenticated shared count.
 
 ### Identity and administrator reporting
 
 Contribution history recognizes legacy demo actor IDs, IDs present in the current state's authenticated profile records, and an explicit trusted directory supplied by the caller. The administrator view can supply IDs from the authenticated user roster. An unfamiliar author is not accepted merely because its ID has the shape of a UUID. Original author IDs and publication records remain intact; selecting a reporting period does not rewrite ownership or activity dates. These reporting rules do not grant access or replace authentication and authorization.
 
-Administrator reporting must distinguish a known zero from missing records. The authenticated roster supplies account identity and office, but it does not supply a shared contribution ledger. Other users with no available records must be shown as unavailable, not assigned zero contributions or MAKE A CONTRIBUTION. Recorded counts and history describe only the records available to the current browser; they are not a complete company-wide performance record. Personal history remains limited to its signed-in owner, and administrator reporting remains restricted to administrators. A central publication and Hat ledger is required before this screen can be used for complete cross-user monitoring.
+Administrator reporting must distinguish a known zero from missing records. A roster establishes identity and office, not complete activity. Shared contribution counts come from the authenticated service; a pending or failed response must remain CHECKING or UNAVAILABLE rather than an invented zero. Local charts/history cover only their available records. Personal history remains limited to its signed-in owner, and administrator reporting remains restricted to administrators. Do not describe either view as complete company-wide performance without verified coverage of its publication sources and the separate Hat ledger.
 
 Oil, total-volume reward indicators, transported volume, GP/MR/Aframax purchases, escalating prices, dispatch, transport history and annual transport rewards are retired. The saved-state upgrade preserves historical contribution evidence, Hats and operational business records while removing retired transport state. Fixture quantities and actual traded volumes retain their commercial meaning and do not create game currency.
 
@@ -48,9 +48,9 @@ Stationary Fratelli Cosulich bunker barges are decorative harbour artwork. They 
 
 ## Shared knowledge UI
 
-The profile-header search covers all tabs in the current country, area, port or supplier profile, including inherited country information and generated price/fixture data. Fixture searching uses the existing actor-filtered index. Results are grouped by source tab; selecting a group opens that tab, and clearing search retains the earlier selected tab. It does not search other location or supplier profiles.
+The profile-header search covers all tabs in the current country, port or supplier profile, including inherited country information and generated price/fixture data. Fixture searching uses the existing actor-filtered index. Results are grouped by source tab; selecting a group opens that tab, and clearing search retains the earlier selected tab. It does not search other location or supplier profiles.
 
-Compact coloured title rows distinguish the profile and information sections. Key Info has a transparent body with bold facts. All knowledge UPDATE actions use the same small font size, with green section actions in both themes.
+Compact coloured title rows distinguish the profile and information sections. Key Info has a transparent body with bold facts. Eligible shared knowledge actions use CONTRIBUTE +1 with the shared compact control style in both themes. Private saves do not promise contributions.
 
 Every knowledge block requires a nonblank title. Existing untitled content receives a section-based title, preserving IDs, contents, attribution, Hats, sources and immutable history. This migration does not create a revision or reward. Drafts opened before the migration retain compatible fallback titles, while new entries and edits cannot save blank titles. AI extraction uses the same fallback for untitled text or tables.
 

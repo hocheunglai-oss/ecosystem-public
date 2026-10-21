@@ -6,7 +6,7 @@ Read `docs/development-roadmap.md` before planning or building ECO features. It 
 
 ## Interface wording
 
-Present interface text in CAPS sitewide. Preserve the case of email addresses and credential values, including revealed passwords. Apply exceptions to the values, never to an entire form or panel.
+Present interface labels in CAPS sitewide. Preserve the original case of email addresses, URLs, link values and credential values, including revealed passwords. Never uppercase a URL path/query or rewrite its destination. Apply exceptions to the values, never to an entire form or panel.
 
 ## Desktop and mobile verification
 
@@ -22,7 +22,7 @@ Use the user's supplied wording for visible interface text. Do not invent slogan
 
 Use `src/design-system.css` and `docs/ui-design-system.md` for every new or changed ECO interface. The existing Feedback for Ecosystem button is the reference for ordinary action shape and colour. Reuse the shared primary, secondary, destructive and icon-button variants, radius, spacing, focus/disabled states and desktop/mobile target sizes. Do not invent one-off lime blocks, pill shapes, shadows or button sizes.
 
-Use the documented font families, weights and finite title/section/body/label/metadata scale. Preserve email and credential case. Forms and multi-column screens need deliberate reading widths and balanced space; do not stretch one directory column across an ultrawide screen while compressing the editor. Custom artwork, charts and record rows may retain their purposeful geometry, but their ordinary actions use the shared controls. Verify broader affected screens when changing shared tokens.
+Use the documented font families, weights and finite title/section/body/label/metadata scale. Forms and reading content use compact, deliberate widths sitewide, with related fields grouped together. Enlarging a window must not stretch ordinary fields or prose across its full width. Dense comparison tables may use the space their columns need. Long company names and URLs must wrap without hiding actions on phones. Custom artwork, charts and record rows may retain their purposeful geometry, but their ordinary actions use the shared controls. Verify broader affected screens when changing shared tokens.
 
 ## Shared knowledge interface
 
@@ -34,7 +34,7 @@ Use a dedicated headless browser and isolated context for verification. For requ
 
 ## Window sizing
 
-Application dialogs and workspace windows open enlarged by default. Every window has a visible shrink/expand control, including Update Information. Resizing preserves the current form, selection and unsaved work.
+Small standard dialogs open compact and fit their content. Wide editors, full workspace windows and document previews retain their enlarged default. This latest space-saving direction supersedes the earlier all-dialogs-enlarged rule for small forms. Keep a visible shrink/expand control, compact working widths within enlarged shells, and preserve the current form, selection and unsaved work when resizing.
 
 ## Drag and drop
 
@@ -54,9 +54,9 @@ Always show a clear insertion indicator before an item is dropped. Its exact pos
 - The account contribution tier uses today plus the previous six Hong Kong calendar days: INACTIVE at 0, ACTIVE at 1–10, OUTSTANDING at 11+. Hats do not affect it. Hide it for the effective CREDIT office. Contribution and Hats appearance previews belong only to the privately configured, real active owner administrator; keep them labelled, temporary and unable to change records. Other administrators must not see them.
 - Use HATS OFF for the account panel. Always show the Hats ranking, explain earning Hats through useful contributions when the user has none, and show the five most recent valid givers when Hats have been received. Do not restore Achievements or Office Performance entry points without a new request.
 - Do not restore Reset Demo controls, entry points or browser reset operations; the owner will request operator maintenance if needed.
-- Never restore the demo profile selector or browser-stored identity as an authentication bypass. On 14 October 2026 the owner explicitly requested one initial password for administrators and another for other users, with an optional first-login password change. Apply that exception only through a verified operator action; never commit the credentials, ship them to the browser, or reset passwords automatically when roles change. Keep password changes available to every signed-in user.
+- Never restore the demo profile selector or browser-stored identity as an authentication bypass. The later 14 October owner decision gives all new users the same server-configured initial password, superseding the earlier administrator/non-administrator split. First-login password change remains optional; keep password changes available to every signed-in user. Never reset passwords automatically when roles change.
 - The owner approved an eight-character minimum with uppercase letters, lowercase letters and numbers, and no ECO two-factor requirement. Record authentication exceptions honestly in the internal security assessment. Do not disable existing security on cloud-provider, source-control or email accounts.
-- Keep users signed in as long as their browser retains its persistent cookies: no fixed or inactivity session timeout. Preserve explicit logout, password-change and administrator revocation. Keep short-lived access tokens and rotation; never implement persistent login by accepting stale browser identity.
+- Keep users signed in as long as their browser retains its persistent cookies, until manual logout: no fixed or inactivity session timeout. Preserve password-change and administrator revocation. Keep short-lived access tokens and rotation; never implement persistent login by accepting stale browser identity. Treat transient network/provider failures as retryable availability failures, not proof of logout. Definitive invalid or revoked sessions must still clear access, and a late refresh must never undo logout.
 - `config/ecoConnections.ts` owns ECO's non-secret target identities. Verify these exact targets before external operations. ECO's Singapore project was provisioned on 13 October 2026; never substitute FCUNO or FCOS projects.
 - Account cleanup is limited to ECO. Do not delete or change SPC/FCUNO/FCOS users when working on this migration. Exclude test identities only when explicitly identified; SECURITY is retained.
 
@@ -67,6 +67,8 @@ The owner will supply named WhatsApp groups for operator-maintained configuratio
 ## Internal security baseline
 
 Maintain evidence for the internal security baseline; do not present it as certification. Prioritize speed, reliability and overall performance. Prefer automated checks and background controls over extra steps in routine trading. Distinguish implemented controls, untested plans, external provider evidence and owner-approved exceptions. Keep assigned operational ownership in private records.
+
+Detailed privacy and security information belongs inside authenticated Settings. Do not expose sensitive operational details on the signed-out screen or in public frontend assets. Hiding a button is not an access boundary: the detailed response must require a valid server session. Supabase remains the live database and protected document store. Independent encrypted Google Drive backups are planned; do not describe them as operational or restore-tested until evidence exists, and keep backup destinations and recovery details private.
 
 ## Source and production releases
 
@@ -81,6 +83,8 @@ Maintain evidence for the internal security baseline; do not present it as certi
 Supplier Profiles opens a centered name-only table with aligned search and pagination. The owner's latest 15 October direction replaces the Singapore-only toggle with SPC VIEW: a compact Singapore comparison using short names, header PIC/grade filters, quick PIC contribution, aligned coloured grades, and BDN/contact/barge/fixture quick views. Dim empty information actions; preserve their empty-state access. Display supplier company names without periods. Preserve the operational fields and the existing permission, private-tab, source and country/port rules below.
 
 Follow the profile rules in `docs/ui-design-system.md` for every supplier, buyer, country and port screen. Supplier headings show the full legal name once and the SPC short name separately. Use KEY INFO, including BDN, and simple SALES/OPERATION contact rows. MPA and Infospectrum addresses/contacts must not be imported. Preserve source provenance internally without showing the retired SPC database as a source.
+
+Information Extractor opens on demand from the country/port toolbar rather than occupying the landing page. Keep extraction review explicit and preserve its separate service/authentication boundary. Provide accessible document previews with keyboard controls, readable content, a download fallback and the existing file permissions; previewing must not publish private files.
 
 Only real administrators and SPC traders may add, edit or remove Singapore supplier information. Enforce this in the API and database, and keep VIEW AS read-only. Private tabs belong exclusively to their authenticated owner, including against other administrators; do not leak their titles/content into shared history, search, exports or contribution counts. Active location navigation uses countries and ports only.
 

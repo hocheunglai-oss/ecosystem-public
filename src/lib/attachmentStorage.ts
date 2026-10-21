@@ -2,6 +2,8 @@ import { assertLiveDataWritable, isTestWorkspace } from './testWorkspaceGuard';
 import { useTestWorkspace } from '../TestWorkspace';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { AttachmentCatalog, AttachmentFolder, AttachmentItem, AttachmentScope } from './attachments';
+import { decodeAttachmentBytes, encodeAttachmentBytes } from './attachmentBytes';
+import { assertPreviewWritable } from './previewGuard';
 
 function requireLocalAttachmentScope(scope?: AttachmentScope): void {
   if (scope?.target.kind === 'supplier') throw new Error('Supplier attachments require shared storage. Browser-only uploads are disabled.');
@@ -49,8 +51,10 @@ export function useAttachmentCatalog(): Snapshot {
   return dataMode === 'test' ? emptyTestCatalog : current;
 }
 async function write(stores: string[], action: (transaction: IDBTransaction) => void): Promise<void> {
+  assertPreviewWritable();
   assertLiveDataWritable();
   const db = await database();
+  assertPreviewWritable();
   assertLiveDataWritable();
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(stores, 'readwrite');
@@ -62,8 +66,11 @@ async function write(stores: string[], action: (transaction: IDBTransaction) => 
   channel?.postMessage('changed');
 }
 export async function addAttachmentItems(entries: { item: AttachmentItem; blob?: Blob }[]): Promise<void> {
+  assertPreviewWritable();
+  assertLiveDataWritable();
   entries.forEach(({ item }) => requireLocalAttachmentScope(item.scope));
-  await write(['items', 'blobs'], transaction => { for (const { item, blob } of entries) { transaction.objectStore('items').add(item); if (blob) transaction.objectStore('blobs').add({ id: item.id, blob }); } });
+  const encoded = await Promise.all(entries.map(async ({ item, blob }) => ({ item, data: blob ? await encodeAttachmentBytes(blob) : undefined })));
+  await write(['items', 'blobs'], transaction => { for (const { item, data } of encoded) { transaction.objectStore('items').add(item); if (data) transaction.objectStore('blobs').add({ id: item.id, ...data }); } });
 }
 export async function saveAttachmentFolder(folder: AttachmentFolder): Promise<void> {
   requireLocalAttachmentScope(folder.scope);
@@ -82,7 +89,7 @@ export async function attachmentBlob(id: string): Promise<Blob> {
   assertLiveDataWritable();
   return new Promise((resolve, reject) => {
     const request = db.transaction('blobs', 'readonly').objectStore('blobs').get(id);
-    request.onsuccess = () => request.result?.blob ? resolve(request.result.blob) : reject(new Error('The original file is unavailable in this browser.'));
+    request.onsuccess = () => { const blob = decodeAttachmentBytes(request.result); if (blob) resolve(blob); else reject(new Error('The original file is unavailable in this browser.')); };
     request.onerror = () => reject(new Error('The original file could not be opened.'));
   });
 }

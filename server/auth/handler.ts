@@ -2,6 +2,7 @@ import { projectPreviewUser, previewRoles } from '../../shared/rolePreview.ts';
 import type { PreviewRole } from '../../shared/access.ts';
 import type { AuthConfig } from './config.ts';
 import type { AuthGateway } from './gateway.ts';
+import { accountPrivacyNotice } from './privacy.ts';
 import { ApiError, email, password, update, createUser, resetPassword, deleteUser, phoneChange, phoneChangeReview } from './validation.ts';
 
 export async function handleAuth(request: Request, config: AuthConfig, gateway: AuthGateway): Promise<Response> {
@@ -55,6 +56,7 @@ export async function handleAuth(request: Request, config: AuthConfig, gateway: 
       await gateway.signOut(); return response({ user: null });
     }
     if (!user) throw new ApiError(401, 'Sign in required.');
+    if (path === '/api/access/privacy' && request.method === 'GET') return response(accountPrivacyNotice);
     if (path === '/api/access/preview/end' && request.method === 'POST') {
       await gateway.setPreview(null);
       return response({user, effectiveUser:user, preview:null});

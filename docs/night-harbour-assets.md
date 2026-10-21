@@ -1,6 +1,8 @@
 # Light and dark harbour modes
 
-- Night scene: `public/marine/destination-oil-terminal-night-v1.jpg`, 1671 × 941, JPEG quality 94.
+The current night plate is `public/marine/destination-oil-terminal-night-v2.jpg`; [LNG reflection cleanup](cosulich-lng-barge-assets.md) records its later water correction. The v1 generation below remains its source provenance. `src/marine/harbourAssets.ts` pins the current day, night and flag assets.
+
+- Earlier night scene: `public/marine/destination-oil-terminal-night-v1.jpg`, 1671 × 941, JPEG quality 94.
 - Tool: built-in `image_gen.imagegen`, edit mode (`lighting-weather`).
 - Edit target: `artifacts/approved-light-scene-source.png`, an isolated screenshot of the approved light harbour and flag without UI, vessels, water animation or birds.
 - Generated original: `[original retained in the private asset archive]` (retained).
@@ -13,7 +15,7 @@ Three code-rendered lighthouse beams rotate independently above the existing lan
 
 The [stationary Cosulich barge](cosulich-barge-assets.md) uses the same illustration and harbour coordinates in both themes. Night styling lowers its ambient exposure. It has no voyage animation, separate transport lamps or dispatch controls.
 
-The mode control is available in the homepage footer. `ecosystem.theme.v1` persists the selected theme separately from business records, Gold, Hats and session. Default is Light mode. Dark workspace styles use navy panels, pale text, subdued borders and lime actions. Both target artwork layers decode before a requested mode is committed; the water texture initializes synchronously in that same layout commit. A single native View Transition crossfades the complete scene for 420ms. Unsupported/reduced-motion browsers switch atomically after readiness. Rapid reversals use a latest-request guard, and failed loads keep the current mode and data.
+The mode control is available in the homepage footer. `ecosystem.theme.v1` persists the selected theme separately from business records, activity, Hats and session. Default is Light mode. Dark workspace styles use navy panels, pale text, subdued borders and lime actions. Both target artwork layers decode before a requested mode is committed; the water texture initializes synchronously in that same layout commit. A single native View Transition crossfades the complete scene for 420ms. Unsupported/reduced-motion browsers switch atomically after readiness. Rapid reversals use a latest-request guard, and failed loads keep the current mode and data.
 
 ## Prompt
 

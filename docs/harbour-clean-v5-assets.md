@@ -1,6 +1,8 @@
 # Integrated hillside sign and clean harbour water
 
-- Current plate: `public/marine/destination-oil-terminal-clean-v5.jpg` (1670 × 942).
+This records an earlier billboard composition. The later [3D flag sculpture](flag-3d-pattern-assets.md) replaced that sign, and the [LNG reflection cleanup](cosulich-lng-barge-assets.md) produced the current v7 daylight plate. Preserve the prompts below as provenance, not current placement instructions.
+
+- Earlier plate: `public/marine/destination-oil-terminal-clean-v5.jpg` (1670 × 942).
 - Generated using the built-in `image_gen.imagegen` tool in edit mode; saved as JPEG quality 94. Existing plates remain available.
 - Source: `public/marine/destination-oil-terminal-v1.jpg`.
 - First edit: `[original retained in the private asset archive]`.

@@ -1,3 +1,5 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -12,7 +14,7 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 const base = process.env.ECO_ACTIONS_ORIGIN || 'http://127.0.0.1:4399';
 const out = resolve(process.env.ECO_ACTIONS_OUTPUT || '/private/tmp/eco-contribution-actions');
 const user = { id:'10000000-0000-4000-8000-000000000001',email:'owner@example.test',displayName:'FIXTURE ADMIN',phone:'',officeId:'HONG KONG',officeName:'HONG KONG',isAdmin:true,isSpcTrader:true,isManager:false,isActive:true,activated:true,passwordChangeSuggested:false,revision:1,capabilities:{testWorkspace:true,appearancePreview:true} };
-const key = `ecosystem.live.v1:${user.id}:state`;
+const key = `ecosystem.live.v1:${user.id}:state:v2`;
 const button = (scope,name) => scope.getByRole('button',{name,exact:true});
 const saved = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
 const results = [];
@@ -22,6 +24,8 @@ async function fixture(context) {
   const state={user:structuredClone(user),preview:null,feedback:[],unexpected:[]};
   await context.route('**/api/**',route=>{state.unexpected.push(new URL(route.request().url()).pathname);return route.fulfill({status:404,json:{message:'Unconfigured isolated fixture endpoint.'}});});
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context,{user:()=>state.user,preview:()=>state.preview});
+  await installSharedAttachments(context,{user:()=>state.user,preview:()=>state.preview});
   await context.route('**/api/enquiries/records*',route=>route.fulfill({json:{items:[],nextCursor:null,unreadCount:0}}));
   await installIntelligence(context, syntheticIntelligence());
   await installProfileTabMocks(context,{ownerId:()=>state.user?.id,preview:()=>Boolean(state.preview)});

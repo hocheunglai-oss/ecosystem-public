@@ -94,7 +94,7 @@ test('location persistence permissions, revisions and retry receipts on isolated
    await commit(0,review,snapshot(),'mutate',null,1,{history:[],contributions:[approved],publications:[{...pub,status:'approved',reviewer:ids[0],reviewedAt:approved.reviewedAt}]});
    assert.equal(await query('select count(*) from eco_private.location_contribution_revisions'),'2');assert.equal(await query('select bool_and(historical) from eco_private.location_contribution_revisions'),'t');
    const duplicate={requestId:randomUUID(),revision:2,dataMode:'live',action:{type:'submit-contribution',targetType:'country',targetId:'Synthetic Country',title:'Duplicate',body:'text'}};assert.equal((await prepare(1,duplicate)).contributions.length,1);
-   const facts=await as(1,'select public.eco_location_knowledge_publications(0,2)').then(JSON.parse);assert.equal(facts.items.length,1);assert.equal(facts.items[0].body,'');assert.equal(facts.items[0].historicalImport,true);assert.ok(facts.directoryIds.includes(ids[1]));
+   const facts=await as(1,'select public.eco_location_knowledge_publications(0,2)').then(JSON.parse);assert.equal(facts.items.length,0);assert.ok(facts.directoryIds.includes(ids[1]));
    await assert.rejects(as(1,'select public.eco_location_knowledge_publications(0,1)'),/Activity changed/);
    await assert.rejects(as(1,"select public.eco_location_knowledge_contribution('missing')"),/Not found/);
    const pending=await as(1,'select public.eco_location_knowledge_pending()').then(JSON.parse);assert.equal(pending.items.length,0);assert.equal(pending.total,0);

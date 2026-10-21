@@ -34,6 +34,8 @@ create table eco_private.location_knowledge_contributions (
 );
 create index location_contribution_duplicate on eco_private.location_knowledge_contributions
  ((record->>'targetType'),(record->>'targetId'),(md5(normalized_body))) where record->>'status'='approved';
+create index location_publication_sequence on eco_private.location_knowledge_contributions(sequence)
+ where not historical and publication#>>'{locationPublication,eligible}'='true';
 create table eco_private.location_contribution_revisions (
  sequence bigint generated always as identity primary key, contribution_id text not null, revision integer not null,
  record jsonb not null, historical boolean not null, imported_by uuid, created_at timestamptz not null default now()
@@ -221,7 +223,7 @@ language plpgsql security definer set search_path='' as $$
 declare item jsonb;
 begin perform eco_private.current_member();if coalesce(length(p_id),0) not between 1 and 160 then raise exception 'Invalid id' using errcode='22023';end if;
  select record into item from eco_private.location_knowledge_contributions where id=p_id;
- if not found then raise exception 'Not found' using errcode='P0002';end if;return jsonb_build_object('item',item);end;$$;
+ if not found then raise exception 'Not found' using errcode='PT404';end if;return jsonb_build_object('item',item);end;$$;
 create function public.eco_location_knowledge_pending(p_cursor text default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare r record;items jsonb:='[]';last_id text;total bigint;bytes integer:=0;more boolean:=false;
@@ -235,10 +237,10 @@ begin perform eco_private.current_member();if p_cursor is not null and length(p_
 create function public.eco_location_knowledge_publications(p_after bigint default 0,p_revision integer default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare rev integer;r record;items jsonb:='[]';last_sequence bigint;bytes integer:=0;more boolean:=false;
-begin perform eco_private.current_member();if p_after<0 then raise exception 'Invalid cursor' using errcode='22023';end if;
+begin perform eco_private.current_member();perform pg_catalog.pg_advisory_xact_lock_shared(1857,2026);if p_after<0 then raise exception 'Invalid cursor' using errcode='22023';end if;
  select revision into rev from eco_private.location_knowledge_state where singleton;
  if p_revision is not null and p_revision<>rev then raise exception 'Activity changed' using errcode='PT409';end if;
- for r in select sequence,publication from eco_private.location_knowledge_contributions where sequence>p_after order by sequence limit 501 loop
+ for r in select sequence,publication from eco_private.location_knowledge_contributions where sequence>p_after and not historical and publication#>>'{locationPublication,eligible}'='true' order by sequence limit 501 loop
   if jsonb_array_length(items)>=500 or bytes+octet_length(r.publication::text)>1000000 then more:=true;exit;end if;
   items:=items||jsonb_build_array(r.publication);bytes:=bytes+octet_length(r.publication::text);last_sequence:=r.sequence;
  end loop;

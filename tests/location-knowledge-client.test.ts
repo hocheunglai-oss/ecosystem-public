@@ -29,3 +29,31 @@ test('conflicting source records remain a review conflict, while absent sources 
   const review = locationImportAssessment(shared, local); assert.equal(review.error, ''); assert.equal(review.conflicts[0].reason, 'RECORD_CONFLICT');
   assert.deepEqual(locationImportAssessment(shared, null), { conflicts: [], error: '' });
 });
+
+test('a save is acknowledged only by the matching committed request within the returned revision', async () => {
+  const { locationKnowledgeApi } = await import('../src/lib/locationKnowledgeApi.ts');
+  const original = globalThis.fetch;
+  const input = { requestId: '10000000-0000-4000-8000-000000000001', revision: 1, dataMode: 'live' as const,
+    action: { type: 'add-location' as const, kind: 'country' as const, name: 'Fixture' } };
+  const payload = { revision: 3, snapshot: initialLocationSnapshot(), importedSources: [] };
+  try {
+    for (const ack of [undefined, { requestId: 'other', committedRevision: 2 }, { requestId: input.requestId, committedRevision: -1 }, { requestId: input.requestId, committedRevision: 4 }]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ ...payload, ack }), { status: 200 });
+      await assert.rejects(locationKnowledgeApi.write(input), /could not be confirmed/);
+    }
+    globalThis.fetch = async () => new Response(JSON.stringify({ ...payload, ack: { requestId: input.requestId, committedRevision: 2 } }), { status: 200 });
+    const result = await locationKnowledgeApi.write(input);
+    assert.equal(result.revision, 3); assert.equal(result.ack?.committedRevision, 2);
+  } finally { globalThis.fetch = original; }
+});
+
+test('malformed successful history and activity responses remain unavailable instead of rendering false totals', async () => {
+  const { locationKnowledgeApi } = await import('../src/lib/locationKnowledgeApi.ts');
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ summary: { total: 'unknown' }, activeDates: [], nextCursor: null }), { status: 200 });
+    await assert.rejects(locationKnowledgeApi.activity(['10000000-0000-4000-8000-000000000001'], '7d'), /unavailable/);
+    globalThis.fetch = async () => new Response(JSON.stringify({ items: [{ before: {}, after: {} }], total: 1, nextCursor: null }), { status: 200 });
+    await assert.rejects(locationKnowledgeApi.history([{ kind: 'port', id: 'port-singapore' }]));
+  } finally { globalThis.fetch = original; }
+});

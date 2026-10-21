@@ -22,7 +22,7 @@ export function locationHistoryPage(history, { targets, cursor = null }) {
 
 /** Isolated authenticated server fixture, never a production/browser fallback.
  * All reads/writes run through the same pure location domain used by the API. */
-export async function installSharedLocations(context, { user, preview = () => null } = {}) {
+export async function installSharedLocations(context, { user, preview = () => null, now } = {}) {
   if (typeof user !== 'function' || typeof preview !== 'function') throw new Error('Provide the fixture session explicitly.');
   let envelope = { revision: 0, snapshot: domain.initialLocationSnapshot(), importedSources: [] };
   let archive = { history: [], contributions: [], historicalContributionIds: [], publications: [] }, pendingProjection = Promise.resolve();
@@ -110,7 +110,7 @@ export async function installSharedLocations(context, { user, preview = () => nu
         return { ...fixture.envelope(), ack: { requestId: body.requestId, committedRevision: envelope.revision } };
       },
     };
-    const response = await domain.handleLocationKnowledge(new Request(request.url(), { method: request.method(), headers: request.headers(), ...(input ? { body: JSON.stringify(input) } : {}) }), { origin: url.origin }, gateway, store);
+    const response = await domain.handleLocationKnowledge(new Request(request.url(), { method: request.method(), headers: request.headers(), ...(input ? { body: JSON.stringify(input) } : {}) }), { origin: url.origin }, gateway, store, now);
     return route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: await response.text() });
   });
   return fixture;

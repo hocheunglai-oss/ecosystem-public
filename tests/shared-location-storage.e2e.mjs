@@ -90,7 +90,7 @@ async function fixture(context,db,theme,initialUser=admin,legacy) {
 async function openProfile(page) {
   await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();
   const nav=page.getByRole('navigation',{name:'Workspace navigation'});
-  await button(nav,'Ports & Suppliers').click();await button(nav,'Countries & Ports').click();
+  if(!await button(nav,'Countries & Ports').isVisible())await button(nav,'Ports & Suppliers').click();await button(nav,'Countries & Ports').click();
   const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});
   await expect(workspace.getByText('LOADING SHARED DATA…',{exact:true})).toHaveCount(0);
   await button(workspace,'Port Index').click();await workspace.getByLabel('Country or port',{exact:true}).fill('Singapore');

@@ -1,9 +1,12 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { resolve, sep } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
+import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 
 // Isolated browser fixtures: no contributions, identities or preview counts are
 // written to a hosted service. Real backend permissions are verified separately.
@@ -11,7 +14,7 @@ const base = process.env.ECO_DEMO_URL || 'http://127.0.0.1:4266';
 const output = process.env.ECO_TEST_OUTPUT ? pathToFileURL(resolve(process.env.ECO_TEST_OUTPUT) + sep) : new URL('../output/contribution-tiers/', import.meta.url);
 await mkdir(output, { recursive: true });
 const id = '10000000-0000-4000-8000-000000000001';
-const key = `ecosystem.prototype.v2:${id}`;
+const key = `ecosystem.live.v1:${id}:state:v2`;
 const administrator = { id, email: 'owner@example.test', displayName: 'OWNER FIXTURE', phone: '+6591815902', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1, capabilities: { appearancePreview: true, testWorkspace: true } };
 const now = new Date('2026-10-14T03:00:00Z');
 const reports = [];
@@ -37,6 +40,10 @@ for (const engine of ['chromium', 'webkit']) {
       const context = await browser.newContext({viewport:{width,height},isMobile:width<850,hasTouch:width<850,reducedMotion:'reduce'});
       await installStagingCookies(context, base);
       let user = {...administrator}, preview = null, writes = [];
+      await installEmptyLiveInbox(context);
+      await installSharedLocations(context,{user:()=>user,preview:()=>preview,now:()=>now.toISOString()});
+      await installSharedAttachments(context,{user:()=>user,preview:()=>preview});
+      await context.route('**/api/admin/**',route=>{if(route.request().method()!=='GET')writes.push(route.request().url());return route.fulfill({json:{count:0,previousCount:0,items:[],periodStart:'2026-10-07T16:00:00Z',periodEnd:'2026-10-14T16:00:00Z',source:'shared-feedback',timeZone:'Asia/Hong_Kong'}});});
       await context.route('**/api/access/**', route => {
         const path = new URL(route.request().url()).pathname.replace('/api/access/','');
         const reply = (json,status=200) => route.fulfill({json,status});
@@ -131,18 +138,21 @@ for (const engine of ['chromium', 'webkit']) {
         await page.keyboard.press('Escape');
         await expect(page.locator('#hud-contribution-activity')).toHaveCount(0);
         await expect(page.locator('.hud-resource-activity')).toBeFocused();
-        // Encouragement actions lead to the actual editor and feedback form without publishing.
+        // The brief encouragement stays informational; opening the actual database and feedback flows does not publish.
         await page.locator('.hud-resource-activity').click();
         const actionPanel=page.locator('#hud-contribution-activity');
-        await actionPanel.getByRole('button',{name:'DATABASE UPDATE',exact:true}).click();
+        await expect(actionPanel.getByRole('button',{name:/^(DATABASE UPDATE|FEEDBACK)$/i})).toHaveCount(0);
+        await page.getByRole('button',{name:'Close contribution activity',exact:true}).click();
+        const nav=page.getByRole('navigation',{name:'Workspace navigation'});
+        await nav.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();
+        await nav.getByRole('button',{name:'Countries & Ports',exact:true}).click();
         await expect(page.getByRole('dialog',{name:'Countries & Ports',exact:true})).toBeVisible();
         await expect(page.locator('#hud-contribution-activity')).toHaveCount(0);
         await page.getByRole('button',{name:'Close workspace',exact:true}).click();
-        await page.locator('.hud-resource-activity').click();
-        await actionPanel.getByRole('button',{name:'FEEDBACK',exact:true}).click();
+        await page.locator('.home-display-controls').getByRole('button',{name:'Feedback for ecosystem',exact:true}).click();
         const feedback=page.getByRole('dialog',{name:'Feedback for ecosystem',exact:true});
         await expect(feedback).toBeVisible();
-        await feedback.getByRole('button',{name:'Cancel',exact:true}).click();
+        await feedback.getByRole('button',{name:'Close dialog',exact:true}).click();
         assert.equal(await page.evaluate(key=>localStorage.getItem(key),key),before,'Opening contribution actions never publishes a record');
         // Appearance checking requires the session capability, not an email or admin role.
         user={...administrator,email:'Other.Admin@example.com',displayName:'OTHER ADMIN',capabilities:{appearancePreview:false,testWorkspace:false}};

@@ -1,3 +1,4 @@
+import { hostedMigrationHistory, assertHostedMigrationHistory } from './hosted-migration-history.mjs';
 /**
  * Explicit operator verification against an exact staged ECO production build.
  * Creates only marked synthetic accounts/records; never invokes a dispatch provider.
@@ -6,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, webkit, expect as playwrightExpect } from '@playwright/test';
@@ -65,6 +66,15 @@ async function openEnquiries(page) {
   await expect(panel).toBeVisible();
   return panel;
 }
+export function matchesDraftSave(response, expected) {
+  try {
+    const request = response.request();
+    if (request.method() !== 'POST' || response.url() !== expected.base + '/api/enquiries/records') return false;
+    const body = request.postDataJSON();
+    return body?.dataMode === 'live' && body.action === 'save' &&
+      body.source?.rawText === expected.rawText && body.reviewed?.vessel === expected.vessel;
+  } catch { return false; }
+}
 async function browserWorkflow(identity, password, engine, width, theme, label) {
   const ctx = await context(identity, password, engine, {
     viewport: { width, height: 1000 }, isMobile: width < 760, hasTouch: width < 760,
@@ -80,11 +90,23 @@ async function browserWorkflow(identity, password, engine, width, theme, label) 
     let panel = await openEnquiries(page);
     await panel.getByLabel('Raw enquiry', { exact: true }).fill(draft.source.rawText);
     await expect(panel.getByRole('button', { name: 'Send to SPC', exact: true })).toBeEnabled();
-    await panel.getByRole('button', { name: 'Save draft', exact: true }).click();
-    await expect(panel.getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true })).toBeVisible();
+    // Unsaved local drafts already expose the same Open <vessel> button. Wait
+    // for this exact save's response before testing durable server state.
+    const [response] = await Promise.all([
+      page.waitForResponse(response => matchesDraftSave(response, {
+        base: manifest.base, rawText: draft.source.rawText, vessel: draft.reviewed.vessel,
+      })),
+      panel.getByRole('button', { name: 'Save draft', exact: true }).click(),
+    ]);
+    const receipt = await result(response);
+    assert.equal(receipt.item.id, response.request().postDataJSON().id);
+    assert.equal(receipt.item.ownerId, identity.id);
+    assert.equal(receipt.item.vessel, draft.reviewed.vessel);
+    assert.equal(receipt.item.status, 'draft');
+    await expect(panel.locator(`[data-commercial-id="${receipt.item.id}"]`).getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true })).toBeVisible();
     const list = await result(await get(ctx));
-    const saved = list.items.find(item => item.vessel === draft.reviewed.vessel);
-    assert.ok(saved); assert.equal(saved.status, 'draft');
+    const saved = list.items.find(item => item.id === receipt.item.id);
+    assert.ok(saved); assert.equal(saved.vessel, draft.reviewed.vessel); assert.equal(saved.status, 'draft');
     await page.reload({ waitUntil: 'domcontentloaded' }); panel = await openEnquiries(page);
     await panel.getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true }).click();
     await expect(panel.getByLabel('Raw enquiry', { exact: true })).toHaveValue(draft.source.rawText);
@@ -195,8 +217,8 @@ async function verify() {
   const compact = JSON.parse(vc(['inspect', manifest.base, '--json', '--scope', target.vercel.teamId]));
   const raw = JSON.parse(vc(['api', `/v13/deployments/${manifest.deploymentId}?teamId=${target.vercel.teamId}`, '--scope', target.vercel.teamId]));
   manifest.deployment = deploymentIdentity(mergeDeploymentMetadata(compact, raw, manifest), manifest); save();
-  const expectedHeads = readdirSync(join(root, 'supabase/migrations')).filter(name => /^\d{14}_.+\.sql$/.test(name)).map(name => name.slice(0, 14)).sort();
-  assert.deepEqual(rows('select version from supabase_migrations.schema_migrations order by version').map(item => String(item.version)), expectedHeads);
+  const expectedHistory = await hostedMigrationHistory(root);
+  assertHostedMigrationHistory(rows('select version from supabase_migrations.schema_migrations order by version').map(item => item.version), expectedHistory);
   assert.equal(rows(`select id from auth.users where id in (${ids()}) or email in (${manifest.identities.map(item => quote(item.email)).join(',')})`).length, 0);
   try {
     browser = await chromium.launch({ headless: true });

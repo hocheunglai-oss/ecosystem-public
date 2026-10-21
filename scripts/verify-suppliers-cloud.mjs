@@ -1,10 +1,11 @@
+import { hostedMigrationHistory, assertHostedMigrationHistory } from './hosted-migration-history.mjs';
 /** Explicit operator verification: synthetic identities/supplier only, ownership-checked cleanup in finally. */
 import {chromium,expect as baseExpect} from '@playwright/test';
 // Live provider requests can outlast Playwright's 5-second mock-test default.
 const expect=baseExpect.configure({timeout:30000});
 import {createClient} from '@supabase/supabase-js';
 import {randomBytes,randomUUID,createHash} from 'node:crypto';
-import {readFileSync,writeFileSync,mkdirSync,chmodSync,readdirSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,chmodSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
@@ -53,7 +54,7 @@ async function verify(){
  assert.equal(deployment.readyState,'READY');assert.equal(deployment.name,target.vercel.projectName);assert.ok(deployment.builds?.some(b=>b.output?.some(o=>o.digest?.startsWith(target.vercel.projectId+'/'))));
  if(process.env.ECO_VERIFY_DEPLOYMENT_ID)assert.equal(deployment.id,process.env.ECO_VERIFY_DEPLOYMENT_ID);
  mkdirSync(output,{recursive:true,mode:0o700});save();
- const heads=rows('select version from supabase_migrations.schema_migrations').map(x=>x.version);const requiredHeads=readdirSync(root+'supabase/migrations').filter(name=>name.endsWith('.sql')).map(name=>name.split('_')[0]);assert.ok(requiredHeads.every(head=>heads.includes(head)),'All bundled migrations must be applied before fixture verification.');
+ const expectedHistory=await hostedMigrationHistory(root);assertHostedMigrationHistory(rows('select version from supabase_migrations.schema_migrations order by version').map(row=>row.version),expectedHistory);
  const privilege=rows("select has_function_privilege('authenticated','public.eco_import_suppliers(jsonb)','EXECUTE') as import_allowed,has_function_privilege('authenticated','public.eco_enrich_supplier(jsonb)','EXECUTE') as enrich_allowed,has_function_privilege('anon','public.eco_list_suppliers(jsonb)','EXECUTE') as anonymous_allowed")[0];assert.equal(privilege.import_allowed,false);assert.equal(privilege.enrich_allowed,false);assert.equal(privilege.anonymous_allowed,false);
  const keys=JSON.parse(readFileSync(root+'output/access/eco-api-keys.private.json','utf8'));
  service=createClient(`https://${target.supabaseProjectRef}.supabase.co`,keys.find(k=>k.type==='secret').api_key,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(20000)})}});

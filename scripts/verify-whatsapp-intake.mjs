@@ -1,3 +1,4 @@
+import { hostedMigrationHistory, assertHostedMigrationHistory, hostedMigrationVersion } from './hosted-migration-history.mjs';
 /**
  * Operator-only signed synthetic webhook verification. Never sends to Meta or staff.
  * Run only on the exact staged artifact after its migration and pinned source exist:
@@ -15,7 +16,7 @@ import { chromium, webkit, expect as baseExpect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, resolve, dirname, isAbsolute } from 'node:path';
 import { ecoConnections as target } from '../config/ecoConnections.ts';
@@ -314,9 +315,9 @@ async function verify() {
   }
   if (cleanupPath) { service = loadServiceClient(); await cleanup(); console.log(JSON.stringify({ cleanupComplete: manifest.cleanupComplete, recovery })); return; }
   mark('migration-and-source-preflight');
-  const required = readdirSync(join(root, 'supabase/migrations')).filter(name => /^\d{14}_.+\.sql$/.test(name)).map(name => name.slice(0, 14)).sort();
-  assert.deepEqual(rows('select version from supabase_migrations.schema_migrations order by version').map(row => String(row.version)).sort(), required);
-  const head = readdirSync(join(root, 'supabase/migrations')).find(name => /^\d{14}_eco_whatsapp_intake\.sql$/.test(name))?.slice(0, 14); assert.ok(head);
+  const expectedHistory = await hostedMigrationHistory(root);
+  assertHostedMigrationHistory(rows('select version from supabase_migrations.schema_migrations order by version').map(row => row.version), expectedHistory);
+  const head = hostedMigrationVersion(expectedHistory, 'eco_whatsapp_intake');
   assert.equal(rows("select migration_head from eco_private.platform_versions where component='whatsapp-intake'")[0]?.migration_head, head);
   const sourceBefore = sourceMetadata(); verifySource(sourceBefore, !disabledPreflight);
   if (disabledPreflight) { await verifyDisabled(sourceBefore); return; }

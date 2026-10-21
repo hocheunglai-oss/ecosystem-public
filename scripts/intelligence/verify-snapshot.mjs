@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { hostedMigrationHistory, assertHostedMigrationHistory } from '../hosted-migration-history.mjs';
 /**
  * Exact-stage intelligence verification. No import, owner grant, outbound message or AI call.
  * Default is read-only target/anonymous preflight. Full checks require --allow-cloud-mutations.
@@ -13,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -228,10 +229,9 @@ export async function verify(args = process.argv.slice(2)) {
     const importBefore = rows(`select s.id,s.source_hash,s.receipt from eco_private.intelligence_active_snapshot a join eco_private.intelligence_snapshots s on s.id=a.snapshot_id where a.singleton`);
     assert.equal(importBefore.length, 1); assert.equal(importBefore[0].id, saved.input.requestId); assert.equal(importBefore[0].source_hash, saved.input.sourceHash);
     const migrations = await migrationFingerprint(root), source = await sourceFingerprint(root);
-    const newVersions = readdirSync(join(root, 'supabase/migrations')).filter(name => /^\d{14}_.*\.sql$/.test(name)).map(name => name.slice(0, 14)).sort();
+    const expectedHistory = await hostedMigrationHistory(root);
     assert.ok(migrations.baseline?.head, 'Public baseline metadata required.');
-    assert.equal(rows(`select version from supabase_migrations.schema_migrations where version=${quote(migrations.baseline.head)}`).length, 1, 'Legacy production head required.');
-    assert.deepEqual(rows(`select version from supabase_migrations.schema_migrations where version>${quote(migrations.baseline.head)} order by version`).map(row => String(row.version)), newVersions);
+    assertHostedMigrationHistory(rows('select version from supabase_migrations.schema_migrations order by version').map(row => row.version), expectedHistory);
     assert.equal(rows(`select id from auth.users where id in (${ownedIds()}) or email in (${manifest.identities.map(i => quote(i.email)).join(',')})`).length, 0);
     checks.push('private-import-receipt', 'owner-grant-private-authority');
     mark('create-owned-fixtures'); manifest.mutationStarted = true; save();

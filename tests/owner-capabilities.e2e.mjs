@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -31,7 +32,6 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   const contribution=page.getByRole('combobox',{name:'Contribution appearance preview',exact:true});
   const hats=page.getByRole('combobox',{name:'Hats appearance preview',exact:true});
   const testControl=page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true});
-  const focus=()=>page.evaluate(()=>dispatchEvent(new Event('focus')));
   async function shot(name,panel) {
    await expect(page.locator('[data-artwork-ready="true"]')).toBeVisible();
    await page.screenshot({path:`${out}/${engine}-${width}-${theme}-${name}.png`,fullPage:true});
@@ -53,7 +53,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    for(const state of ['none','received']){await hats.selectOption(state);await expect(page.locator('.hats-off-total strong')).toHaveText(state==='received'?'5':'0');}
    await shot('hats-owner',page.locator('#hud-hats-off'));
    assert.equal(await readState(),before,'Appearance previews never change stored records');
-   user={...owner,capabilities:{appearancePreview:false,testWorkspace:false}};await focus();
+   user={...owner,capabilities:{appearancePreview:false,testWorkspace:false}};await invalidateFixtureAuthority(page,{user,preview});
    await expect(hats).toHaveCount(0);await expect(testControl).toHaveCount(0);await expect(page.locator('.hats-off-total strong')).toHaveText('0');
    await page.locator('.hud-resource-activity').click();await expect(contribution).toHaveCount(0);
    await shot('revoked',page.locator('#hud-contribution-activity'));
@@ -62,7 +62,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    await page.reload();await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');
    await page.locator('.hud-resource-activity').click();await expect(contribution).toHaveCount(0);await expect(testControl).toHaveCount(0);
    await page.locator('.hud-resource-hats').click();await expect(hats).toHaveCount(0);await shot('other-admin',page.locator('#hud-hats-off'));
-   user=null;preview=null;await focus();await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
+   user=null;preview=null;await invalidateFixtureAuthority(page,{user,preview});await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
    await expect(testControl).toHaveCount(0);await expect(contribution).toHaveCount(0);await expect(hats).toHaveCount(0);await shot('signed-out');
    assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: owner capabilities, revocation, other admin, read-only preview and signed out`);
   }catch(error){await page.screenshot({path:`${out}/${engine}-${width}-${theme}-failure.png`,fullPage:true});throw error;}finally{await context.close();}

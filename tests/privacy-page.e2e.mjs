@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -75,7 +76,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const ending = article.locator('p').last();
       await ending.scrollIntoViewIfNeeded(); await expect(ending).toBeInViewport();
       await shot(page, 'settings-privacy-end');
-      signedIn = false; await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      signedIn = false; await invalidateFixtureAuthority(page, { user: null, preview: null });
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
       await expect(page.getByRole('article', { name: 'Privacy', exact: true })).toHaveCount(0);
       assert.deepEqual(writes, []); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);

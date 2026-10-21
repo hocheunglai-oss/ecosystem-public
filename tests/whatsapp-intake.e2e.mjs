@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -130,11 +131,11 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await shot('preview-isolation');
       await page.getByRole('button', { name: 'Back to SAMPLE TRADER', exact: true }).first().click();
       await expect(page.getByRole('status', { name: 'Role preview' })).toHaveCount(0);
-      session.items.push(makeReceipt(2, other)); session.user = structuredClone(other); await focus(page);
+      session.items.push(makeReceipt(2, other)); session.user = structuredClone(other); await invalidateFixtureAuthority(page, { user: session.user, preview: session.preview });
       await expect(page.locator('.hud-identity')).toContainText('OTHER TRADER'); await openInbox(page);
       await expect(inbox).toContainText('OTHER OWNER'); await expect(inbox).not.toContainText('WHATSAPP SYNTHETIC');
       await shot('other-owner');
-      session.user = null; await focus(page); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+      session.user = null; await invalidateFixtureAuthority(page, { user: null, preview: session.preview }); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
       const callsSignedOut = session.calls.length; await focus(page);
       await expect(page.locator('.inbox-count')).toHaveCount(0); assert.equal(session.calls.length, callsSignedOut);
       await shot('signed-out'); assert.deepEqual(errors, []);

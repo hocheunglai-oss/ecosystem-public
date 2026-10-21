@@ -4,6 +4,10 @@ import { ecoConnections } from '../../config/ecoConnections.ts';
 const ISSUER = 'https://token.actions.githubusercontent.com';
 const JWKS_URL = `${ISSUER}/.well-known/jwks`;
 const MAX_TOKEN_BYTES = 16_384;
+// GitHub documents nbf ten minutes before iat. This bound does not extend the
+// independent issuance-age, token-lifetime or expiry checks below.
+// https://docs.github.com/en/actions/concepts/security/openid-connect#understanding-the-oidc-token
+const MAX_NBF_BACKDATE_SECONDS = 600;
 type RecordValue = Record<string, unknown>;
 export class BackupAuthError extends Error {
   constructor() { super('Backup authentication failed.'); }
@@ -48,7 +52,8 @@ export function checkBackupClaims(value: unknown, nowSeconds = Math.floor(Date.n
   for (const field of ['exp', 'iat', 'nbf']) if (!Number.isSafeInteger(c[field])) deny();
   const exp = c.exp as number, iat = c.iat as number, nbf = c.nbf as number;
   if (exp <= nowSeconds || iat > nowSeconds + 30 || nbf > nowSeconds + 30
-    || iat < nowSeconds - 600 || exp <= iat || exp - iat > 600 || nbf < iat - 30 || nbf > exp) deny();
+    || iat < nowSeconds - 600 || exp <= iat || exp - iat > 600
+    || nbf < iat - MAX_NBF_BACKDATE_SECONDS || nbf > exp) deny();
 }
 
 /** Only the fixed GitHub JWKS endpoint is trusted; JWT headers cannot select a URL. */

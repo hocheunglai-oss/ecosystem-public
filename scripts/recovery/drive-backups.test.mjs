@@ -24,7 +24,7 @@ function fileRecord(id, night, bytes, overrides = {}) {
   return { meta: value, bytes: Buffer.from(bytes) };
 }
 class FakeDrive {
-  files = new Map(); sessions = new Map(); calls = []; writes = []; generated = 0; started = 0;
+  files = new Map(); sessions = new Map(); calls = []; writes = []; generated = 0; started = 0; metadataReads = 0;
   aboutEmail = EMAIL; quota = '999999999'; pageSize = 1000; permissionExtra = null;
   folder = { id: FOLDER, mimeType: 'application/vnd.google-apps.folder', owners: [{ emailAddress: EMAIL }],
     ownedByMe: true, shared: false, trashed: false, capabilities: { canAddChildren: true, canListChildren: true } };
@@ -93,6 +93,13 @@ class FakeDrive {
       record.meta = { ...record.meta, ...body, version: String(Number(record.meta.version) + 1) };
       if (body.appProperties) record.meta.appProperties = this.cleanProps(body.appProperties);
     }
+    if (method === 'GET') {
+      this.metadataReads++;
+      this.onMetadataRead?.(record.meta, this.metadataReads);
+      if (this.reorderMetadata && this.metadataReads % 2 === 0) {
+        return json({ ...record.meta, appProperties: Object.fromEntries(Object.entries(record.meta.appProperties).reverse()) });
+      }
+    }
     return json(record.meta);
   }
 }
@@ -116,6 +123,43 @@ test('resumable upload completes only after private target and full downloaded S
   assert.ok(drive.calls.some(call => new URL(call.url).searchParams.get('alt') === 'media'));
   assert.ok(drive.calls.filter(call => new URL(call.url).pathname === '/drive/v3/about').length >= 3);
   assert.equal(drive.writes.some(write => write.kind === 'trash'), false);
+});
+test('reordered Google property maps preserve successful readback, same-night recovery and retention', async t => {
+  const input = await fixture(t), drive = new FakeDrive(); drive.reorderMetadata = true;
+  const api = client(drive), uploaded = await api.uploadAndVerify(input);
+  assert.equal(uploaded.verified, true); assert.equal(uploaded.sha256, input.expectedSha256);
+  const chunks = drive.writes.filter(write => write.kind === 'chunk').length;
+  const recovered = await api.findVerifiedNight({ snapshotAt: input.snapshotAt });
+  assert.equal(recovered.fileId, uploaded.fileId); assert.equal(recovered.verified, true);
+  assert.equal(drive.writes.filter(write => write.kind === 'chunk').length, chunks);
+  const retained = await api.retainLatestNights({ currentReceipt: recovered });
+  assert.deepEqual(retained.retainedNights, ['2026-10-21']); assert.deepEqual(retained.trashed, []);
+});
+test('reordering does not hide real metadata, content hash, ownership or folder changes during readback', async t => {
+  const input = await fixture(t);
+  const changes = [
+    [meta => { meta.version = String(Number(meta.version) + 1); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [meta => { meta.size = String(Number(meta.size) + 1); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [meta => { meta.sha256Checksum = 'b'.repeat(64); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [meta => { meta.appProperties.ecoBackupSha256 = 'b'.repeat(64); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [meta => { meta.appProperties.additionalMetadata = 'changed'; }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [meta => { meta.parents = ['other_folder']; }, 'FILE_SCOPE_MISMATCH'],
+    [meta => { meta.shared = true; }, 'OWNER_OR_SHARING_MISMATCH'],
+    [meta => { meta.owners = [{ emailAddress: 'other@example.invalid' }]; }, 'OWNER_OR_SHARING_MISMATCH'],
+  ];
+  for (const [change, code] of changes) {
+    const drive = new FakeDrive(); drive.reorderMetadata = true;
+    drive.onMetadataRead = (meta, count) => { if (count === 2) change(meta); };
+    await assert.rejects(client(drive).uploadAndVerify(input), { code });
+    assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
+    assert.equal(drive.files.get('generated_1').meta.appProperties.ecoBackupStatus, 'pending');
+  }
+});
+test('a property value change after readback still blocks marking the archive verified', async t => {
+  const input = await fixture(t), drive = new FakeDrive(); drive.reorderMetadata = true;
+  drive.onMetadataRead = (meta, count) => { if (count === 3) meta.appProperties.additionalMetadata = 'changed-after-readback'; };
+  await assert.rejects(client(drive).uploadAndVerify(input), { code: 'REMOTE_CHANGED_BEFORE_COMPLETION' });
+  assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
 });
 test('account or folder sharing mismatch blocks every write', async t => {
   const input = await fixture(t);

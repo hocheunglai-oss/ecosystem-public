@@ -198,7 +198,10 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     return { fileId: file.id, night, sha256, size: Number(sizeText), status };
   }
   function fingerprint(file) {
-    return JSON.stringify([file.id, file.name, file.parents, file.size, file.version, file.sha256Checksum, file.appProperties]);
+    // Google returns appProperties as an unordered JSON map. Compare every key
+    // and value in a stable order; a response's serialization order is not a change.
+    const properties = Object.keys(file.appProperties).sort().map(name => [name, file.appProperties[name]]);
+    return JSON.stringify([file.id, file.name, file.parents, file.size, file.version, file.sha256Checksum, properties]);
   }
   async function verifyBytes(file, pending = false) {
     const value = descriptor(file, { pending }); await verifyPrivate(file);

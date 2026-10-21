@@ -15,7 +15,8 @@ const workflow = `${ecoConnections.githubRepository}/${ecoConnections.backup.git
 
 /** Pure preparation: no network, subprocess, credential logging or filesystem access. */
 export function prepareGitHubBackup(env) {
-  check(env.ECO_NIGHTLY_BACKUP_ENABLED === 'true');
+  // An authorized manual dispatch verifies the first backup before the schedule is enabled.
+  check(env.ECO_NIGHTLY_BACKUP_ENABLED === 'true' || env.GITHUB_EVENT_NAME === 'workflow_dispatch');
   check(env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted'
     && env.RUNNER_OS === 'Linux' && env.RUNNER_ARCH === 'X64'
     && env.GITHUB_REPOSITORY === ecoConnections.githubRepository

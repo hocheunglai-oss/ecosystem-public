@@ -15,7 +15,7 @@ concurrency:
 jobs:
   backup:
     if: >-
-      vars.ECO_NIGHTLY_BACKUP_ENABLED == 'true' &&
+      (vars.ECO_NIGHTLY_BACKUP_ENABLED == 'true' || github.event_name == 'workflow_dispatch') &&
       github.repository == 'hocheunglai-oss/ecosystem-public' &&
       github.repository_id == '1427776183' && github.repository_owner_id == '265701760' &&
       github.ref == 'refs/heads/main' && github.ref_protected &&

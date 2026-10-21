@@ -57,6 +57,16 @@ test('unapproved activation, forks, wrong immutable IDs, unprotected refs and un
     assert.throws(() => prepareGitHubBackup({ ...environment(), [key]: value }), /Invalid backup startup configuration/, key);
 });
 
+test('manual verification can run with scheduling off but retains every protected-source restriction', () => {
+  const manual = { ...environment(), GITHUB_EVENT_NAME: 'workflow_dispatch', ECO_NIGHTLY_BACKUP_ENABLED: '' };
+  assert.equal(prepareGitHubBackup(manual).config.drive.keepNights, 5);
+  assert.throws(() => prepareGitHubBackup({ ...manual, GITHUB_EVENT_NAME: 'schedule' }));
+  for (const changes of [{ GITHUB_REF_PROTECTED: 'false' }, { GITHUB_REF: 'refs/heads/codex/test' },
+    { GITHUB_REPOSITORY_ID: '1427776184' }, { GITHUB_WORKFLOW_REF: 'other/workflow@refs/heads/main' },
+    { RUNNER_ENVIRONMENT: 'self-hosted' }, { ECO_BACKUP_DB_PASSWORD: '' }])
+    assert.throws(() => prepareGitHubBackup({ ...manual, ...changes }));
+});
+
 test('debug, recovery identities, injected executable configuration and alternative credential files are rejected', () => {
   for (const [key, value] of Object.entries({ RUNNER_DEBUG: '1', ACTIONS_STEP_DEBUG: 'true', ACTIONS_RUNNER_DEBUG: 'true',
     NODE_OPTIONS: '--import=other.mjs', NODE_PATH: '/tmp/modules', NODE_EXTRA_CA_CERTS: '/tmp/ca', NODE_TLS_REJECT_UNAUTHORIZED: '0',

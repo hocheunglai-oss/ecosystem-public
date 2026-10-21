@@ -96,4 +96,6 @@ The runner suite covers workflow gates, target/TLS/role pins, secret-file permis
 
 ## Activation prerequisites
 
+An authorized operator can dispatch one manual run from protected main while `ECO_NIGHTLY_BACKUP_ENABLED` is absent or false. This does not enable scheduled runs and retains every repository, workflow, environment and credential restriction. Set the variable to `true` only after that first run is verified; clearing it pauses future scheduled runs while preserving explicit manual recovery checks.
+
 Provision and verify the dedicated role using the reviewed migration and separate protected credential activation. Verify the exact Google account, private app-accessible folder, OAuth grant, deployed OIDC endpoint, protected main branch, environment secrets and concurrency configuration. Keep the schedule disabled until a first unattended encrypted upload and full readback succeeds. Verify the administrator health result against that first run, review GitHub failure-notification settings, record the missing-run push-alert limitation and arrange independent recovery-key custody. Retain a private activation receipt. Source files and synthetic tests alone are not evidence that any live integration or schedule is active.

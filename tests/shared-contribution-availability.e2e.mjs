@@ -267,6 +267,7 @@ for (const [engine, type] of [
           );
           await shot("combined");
           assert.deepEqual(writes, []);
+          assert.deepEqual(sharedLocations(page).requests, [], 'Status checks never write shared location records');
           assert.deepEqual(errors, []);
           reports.push({ engine, width, theme, passed: true });
           console.log(`PASS ${engine} ${width} ${theme}`);

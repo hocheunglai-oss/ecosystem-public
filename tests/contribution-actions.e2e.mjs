@@ -165,7 +165,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       state.preview=null;await invalidateFixtureAuthority(page,{user:state.user,preview:null});await expect(page.getByRole('status',{name:'Role preview'})).toHaveCount(0);view=await profile(page);await expect(view.locator('.buyer-overview-grid').getByRole('button',{name:'EDIT',exact:true})).toHaveCount(1);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No page horizontal overflow');
       state.user=null;await invalidateFixtureAuthority(page,{user:null,preview:null});await expect(page.getByRole('button',{name:'Feedback for ecosystem',exact:true})).toHaveCount(0);
-      assert.deepEqual(state.unexpected,[]);assert.deepEqual(errors,[]);
+      assert.deepEqual(state.unexpected,[]);assert.deepEqual(sharedLocations(page).requests,[],'Buyer/private actions leave shared location records unchanged');assert.deepEqual(errors,[]);
       results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: neutral supplier/parser/admin/password actions, stable in-button contribution text, one Overview EDIT, independent drafts/saves, private tabs, VIEW AS/signout`);
     } catch(error) {await shot('failure');throw error;} finally {await context.close();}
   }}finally{await browser.close();await writeFile(resolve(out,'results.json'),JSON.stringify({base,results},null,2));}

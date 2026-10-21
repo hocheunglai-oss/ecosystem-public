@@ -177,7 +177,7 @@ for (const engine of ['chromium', 'webkit']) {
         await expect(page.locator('[data-trader-hud]')).toBeVisible();
         await expect(page.locator('.hud-resource-activity')).toHaveCount(0);
         await shot('credit');
-        assert.deepEqual(errors,[]); assert.deepEqual(writes,[]);
+        assert.deepEqual(errors,[]); assert.deepEqual(writes,[]);assert.deepEqual(sharedLocations(page).requests,[],'Tier appearance and navigation never publish shared location records');
         reports.push({engine,width,height,theme,passed:true});
         console.log(`PASS ${engine} ${width} ${theme}: thresholds, seven days, appearance preview, normal user, CREDIT`);
       } catch(error) { await shot('failure').catch(()=>{}); throw error; }

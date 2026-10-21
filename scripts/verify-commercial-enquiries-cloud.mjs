@@ -1,3 +1,4 @@
+import { hostedMigrationHistory, assertHostedMigrationHistory } from './hosted-migration-history.mjs';
 /**
  * Explicit operator verification against an exact staged ECO production build.
  * Creates only marked synthetic accounts/records; never invokes a dispatch provider.
@@ -6,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, webkit, expect as playwrightExpect } from '@playwright/test';
@@ -195,8 +196,8 @@ async function verify() {
   const compact = JSON.parse(vc(['inspect', manifest.base, '--json', '--scope', target.vercel.teamId]));
   const raw = JSON.parse(vc(['api', `/v13/deployments/${manifest.deploymentId}?teamId=${target.vercel.teamId}`, '--scope', target.vercel.teamId]));
   manifest.deployment = deploymentIdentity(mergeDeploymentMetadata(compact, raw, manifest), manifest); save();
-  const expectedHeads = readdirSync(join(root, 'supabase/migrations')).filter(name => /^\d{14}_.+\.sql$/.test(name)).map(name => name.slice(0, 14)).sort();
-  assert.deepEqual(rows('select version from supabase_migrations.schema_migrations order by version').map(item => String(item.version)), expectedHeads);
+  const expectedHistory = await hostedMigrationHistory(root);
+  assertHostedMigrationHistory(rows('select version from supabase_migrations.schema_migrations order by version').map(item => item.version), expectedHistory);
   assert.equal(rows(`select id from auth.users where id in (${ids()}) or email in (${manifest.identities.map(item => quote(item.email)).join(',')})`).length, 0);
   try {
     browser = await chromium.launch({ headless: true });

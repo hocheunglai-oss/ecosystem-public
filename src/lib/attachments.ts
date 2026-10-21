@@ -5,12 +5,14 @@ import { retiredSupplierIds, retiredSupplierTarget } from './supplierRetirement'
 
 export type AttachmentTarget = KnowledgeTarget | { kind: 'credit'; id: string };
 export interface AttachmentScope { target: AttachmentTarget; section?: { id: string; name: string } }
-export interface AttachmentFolder { id: string; parentId: string | null; name: string; scope?: AttachmentScope; custom?: boolean }
+export interface AttachmentFolder { id: string; parentId: string | null; name: string; scope?: AttachmentScope; custom?: boolean; revision?: number; localOnly?: boolean }
 export interface AttachmentItem {
   id: string; folderId: string; scope: AttachmentScope; name: string; type: 'file' | 'link';
   mime: string; size: number; createdAt: string; createdBy: string; url?: string;
   /** Existing request documents stay owned by the credit workflow. */
   legacy?: boolean;
+  revision?: number;
+  localOnly?: boolean;
 }
 export interface AttachmentCatalog { items: AttachmentItem[]; folders: AttachmentFolder[] }
 export const attachmentFolderId = (scope: AttachmentScope) => `${scope.target.kind}:${encodeURIComponent(scope.target.id)}${scope.section ? `:section:${encodeURIComponent(scope.section.id)}` : ''}`;

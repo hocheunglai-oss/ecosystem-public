@@ -91,7 +91,17 @@ export interface Outcome {
   imo?: string;
   complianceChecked?: boolean; creditChecked?: boolean; checkedBy?: string; checkedAt?: string;
 }
+/** Server-authored compact facts. Full source/proposal bodies are fetched by ID. */
+export interface LocationPublication {
+  version: 1; eligible: boolean; kind: string;
+  keys: string[]; records: string[]; fingerprint: string;
+  keyInfoTransitions: { key: string; fingerprint: string }[];
+  batchId?: string;
+}
 export interface Contribution {
+  locationPublication?: LocationPublication;
+  /** Retained browser history, imported without creating a new award. */
+  historicalImport?: true;
   feedbackPage?: FeedbackPage;
   id: string; targetType: 'port' | 'country' | 'area' | 'company' | 'case-study' | 'feedback' | 'buyer-group' | 'buyer-team' | 'buyer-competition' | 'supplier'; targetId: string;
   title: string; body: string; author: string; createdAt: string;

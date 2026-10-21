@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import assert from 'node:assert/strict';
@@ -23,6 +24,7 @@ async function mock(context, mode = 'admin') {
   const state = {items:structuredClone(seed),updates:0,requests:[],receipts:new Map(),dropResponse:false,actor:activeUser,createGate:null};
   await installProfileTabMocks(context,{ownerId:()=>user.id,preview:()=>Boolean(preview),canManageShared:()=>activeUser.isAdmin||activeUser.isSpcTrader});
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => mode === 'signed-out' ? null : state.actor, preview: () => preview });
   await context.route('**/api/access/**', route => {
     if (mode==='signed-out') return route.fulfill({status:401,json:{message:'Sign in required.'}});
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];

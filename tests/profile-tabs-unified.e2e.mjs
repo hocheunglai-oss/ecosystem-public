@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -23,7 +24,6 @@ const privateTitle = kind => `PRIVATE ${kind.toUpperCase()} NOTE`;
 const privateText = kind => `OWNER ONLY ${kind.toUpperCase()} LEGACY TEXT`;
 const secondTitle = kind => `PRIVATE ${kind.toUpperCase()} REFERENCE`;
 const sharedTitles = ['SHARED OPERATIONS', 'SHARED REFERENCE'];
-const liveKey = id => `ecosystem.live.v1:${id}:state`;
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
 const focus = page => page.evaluate(() => window.dispatchEvent(new Event('focus')));
 const results = [];
@@ -46,6 +46,7 @@ async function fixture(context) {
     return route.fulfill({ status: 404, json: { message: 'Unconfigured isolated fixture endpoint.' } });
   });
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: true, generation: '10000000-0000-4000-8000-000000000010' } }));
   await context.route('**/api/access/**', route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
@@ -176,7 +177,7 @@ async function assertNoPrivateLeak(page, state) {
 // This catches presentation parity without bypassing their independent stores.
 async function verifyProfile(page, state, kind, width, shot) {
   let profile = await openProfile(page, kind);
-  const sharedBefore = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), liveKey(user.id));
+  const sharedBefore = await sharedLocations(page).browserState(page, user.id);
   await assertPrivateFirst(profile, kind);
   await (await tab(profile, privateTitle(kind))).click();
   await expect(profile.locator('.profile-tab-content')).toContainText(privateText(kind));
@@ -229,7 +230,7 @@ async function verifyProfile(page, state, kind, width, shot) {
   await verifyRetryAndCancel(page, state, profile, kind);
   await verifyEditorTabSwitch(page, profile, kind);
   await verifyManageOrder(page, profile, kind, newName, width, shot);
-  const sharedAfter = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), liveKey(user.id));
+  const sharedAfter = await sharedLocations(page).browserState(page, user.id);
   for (const key of ['knowledgeRecords', 'knowledgeHistory', 'contributions', 'hats', 'outcomes']) {
     assert.deepEqual(sharedAfter[key], sharedBefore[key], `${kind}: private edits do not change shared ${key}`);
   }
@@ -335,7 +336,7 @@ async function verifySharedEditing(page, state, width, shot) {
     const profile = await openProfile(page, kind);
     await (await tab(profile, sharedTitles[0])).click();
     await expect(profile.locator('.knowledge-header').getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
-    const before = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), liveKey(user.id));
+    const before = await sharedLocations(page).browserState(page, user.id);
     await button(profile.locator('.knowledge-content-toolbar'), 'EDIT').click();
     const editor = profile.locator('.knowledge-editor');
     await expect(editor).toBeVisible();
@@ -347,7 +348,7 @@ async function verifySharedEditing(page, state, width, shot) {
     await shot(`${kind}-shared-inline`);
     await button(editor, /^SAVE$/i).click();
     await expect(editor).toHaveCount(0);
-    const after = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), liveKey(user.id));
+    const after = await sharedLocations(page).browserState(page, user.id);
     const key = kind === 'country' ? 'country:Japan' : 'port:port-chiba';
     assert.equal(after.knowledgeRecords[key].sections[0].blocks[0].text, `EDITED ${kind.toUpperCase()} ONLY`);
     assert.deepEqual(after.knowledgeRecords[key].sections[0].blocks[1], before.knowledgeRecords[key].sections[0].blocks[1], 'Unedited table and row identities are unchanged');
@@ -396,7 +397,7 @@ async function verifyNavigationDiscard(page, state, shot) {
   for (const visibility of ['shared', 'private']) {
     const profile = await openProfile(page, 'country');
     await (await tab(profile, visibility === 'private' ? privateTitle('country') : sharedTitles[0])).click();
-    const before = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).knowledgeRecords, liveKey(user.id));
+    const before = sharedLocations(page).snapshot().knowledgeRecords;
     const requests = state.requests.length;
     if (visibility === 'private') await button(profile.locator('.profile-tab-content'), 'EDIT').click();
     else await button(profile.locator('.knowledge-content-toolbar'), 'EDIT').click();
@@ -412,7 +413,7 @@ async function verifyNavigationDiscard(page, state, shot) {
     await index.click();
     await expect(editor).toHaveCount(0);
     await expect(page.locator(narrow ? '.location-recents' : '.location-table')).toBeVisible();
-    assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).knowledgeRecords, liveKey(user.id)), before);
+    assert.deepEqual(sharedLocations(page).snapshot().knowledgeRecords, before);
     assert.equal(state.requests.length, requests, 'Discarding navigation draft sends no private save');
   }
 }
@@ -513,11 +514,9 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         await page.goto(base);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
         await createLiveFixtureBuyer(page, 'UNIFIED TAB TEST BUYER');
-        await page.evaluate(({ key, country, port }) => {
-          const state = JSON.parse(localStorage.getItem(key));
+        sharedLocations(page).seed((state, { country, port }) => {
           state.knowledgeRecords = { ...state.knowledgeRecords, 'country:Japan': country, 'port:port-chiba': port };
-          localStorage.setItem(key, JSON.stringify(state));
-        }, { key: liveKey(user.id), country: knowledgeDocument('country'), port: knowledgeDocument('port') });
+        }, { country: knowledgeDocument('country'), port: knowledgeDocument('port') });
         await page.reload();
         for (const kind of kinds) await verifyProfile(page, state, kind, width, shot);
         await verifySharedEditing(page, state, width, shot);

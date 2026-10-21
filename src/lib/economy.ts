@@ -44,7 +44,7 @@ const sumAmounts = (values: number[]): number => resourceAmount(values.reduce((s
 function recordedResourceHistory(state: DemoState, actorId: string): ResourceEntry[] {
   const entries = new Map<string, ResourceEntry>();
   for (const contribution of state.contributions) {
-    if (contribution.author !== actorId || contribution.status !== 'approved') continue;
+    if (contribution.historicalImport || contribution.author !== actorId || contribution.status !== 'approved') continue;
     const key = `gold:contribution:${contribution.id}`;
     if (!entries.has(key)) entries.set(key, { id: key, key, at: contribution.publishedAt ?? contribution.reviewedAt ?? contribution.createdAt,
       owner: actorId, resource: 'gold', amount: 1, reason: contribution.title });

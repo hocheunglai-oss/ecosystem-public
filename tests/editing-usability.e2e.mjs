@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -16,6 +17,7 @@ await mkdir(output, { recursive: true });
 async function mock(context) {
   await context.route('**/api/**', route => route.fulfill({ status: 404, json: { message: 'Unconfigured test endpoint.' } }));
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => user });
   await installProfileTabMocks(context, { ownerId: () => user.id, preview: () => false });
   await context.route('**/api/access/session', route => route.fulfill({ json: { user, preview: null } }));
   await context.route('**/api/admin/**', route => route.fulfill({ json: { count: 0, items: [], hats: [], timeZone: 'Asia/Hong_Kong' } }));
@@ -50,16 +52,12 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       try {
         await page.goto(base);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-        const key = `ecosystem.live.v1:${user.id}:state`;
-        await expect.poll(() => page.evaluate(key => Boolean(localStorage.getItem(key)), key)).toBe(true);
-        await page.evaluate(({ key, link }) => {
-          const state = JSON.parse(localStorage.getItem(key));
+        sharedLocations(page).seed((state, { link }) => {
           state.knowledgeRecords['country:Japan'] = { version: 7, layoutVersion: 2, sections: [{ id: 'links', title: 'LINK FIXTURE', blocks: [
             { id: 'prose', type: 'text', title: 'WEB REFERENCE', text: `READ (${link}).` },
             { id: 'table', type: 'table', title: 'WEB TABLE', columns: [{ id: 'url', name: 'SOURCE', width: 200 }], rows: [{ id: 'row', cells: [link] }] },
           ] }] };
-          localStorage.setItem(key, JSON.stringify(state));
-        }, { key, link });
+        }, { link });
         await page.reload();
         const workspace = await open(page, 'Countries & Ports');
         await expect(workspace.locator('.knowledge-extractor')).toHaveCount(0);

@@ -216,7 +216,7 @@ export async function runNightly({ target, config, secrets, runDirectory, proven
       const sourceDir = join(runDirectory, 'capture');
       enter('DATABASE_CAPTURE');
       const inventory = await deps.capture({ bin: config.pgBin, connection, expectedProjectRef: target.supabaseProjectRef,
-        expectedSourceRole: config.expectedSourceRole, supplierReportsBucket: target.supplierReportsBucket,
+        expectedSourceRole: config.expectedSourceRole, supplierReportsBucket: target.supplierReportsBucket, profileAttachmentsBucket: target.profileAttachmentsBucket,
         outputDir: sourceDir, captureObjects: async (...args) => {
           enter('STORAGE');
           const result = await deps.captureObjects(...args);

@@ -1,3 +1,4 @@
+import { useLocationContribution } from './lib/useLocationContribution';
 import { supplierName } from './lib/supplierPresentation';
 import { ReleaseNotice, useBuyerCreditAvailable } from './ReleaseGate';
 import { isBuyerCreditModal } from '../shared/ecoRelease';
@@ -310,7 +311,8 @@ function ContributionForm({
   spec: Extract<ModalSpec, { type: "contribute" }>;
   close: Close;
 }) {
-  const { state, run } = useDemo();
+  const { state, runKnowledge } = useDemo();
+  const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [source, setSource] = useState("");
@@ -327,10 +329,15 @@ function ContributionForm({
         <span>{target}</span>
       </div>
       <form
-        onSubmit={(e) => {
+        aria-busy={saving}
+        inert={saving}
+        onSubmit={async (e) => {
           e.preventDefault();
+          if (saving) return;
+          setSaving(true);
+          try {
           if (
-            run(
+            await runKnowledge(
               {
                 type: "submit-contribution",
                 targetType: spec.targetType,
@@ -342,6 +349,7 @@ function ContributionForm({
             )
           )
             close();
+          } finally { setSaving(false); }
         }}
       >
         <Field label="Title">
@@ -375,8 +383,8 @@ function ContributionForm({
   );
 }
 function ContributionReview({id,close}:{id:string;close:Close}) {
- const {state}=useDemo();const c=state.contributions.find(item=>item.id===id);
- if(!c)return null;
+ const {state}=useDemo();const {item:c,error,refresh}=useLocationContribution(id,state.contributions.find(item=>item.id===id));
+ if(!c)return <Frame title="Update details" close={close}>{error ? <p role="alert">{error} <button className="button secondary small" onClick={refresh}>Retry</button></p> : <p role="status">Loading update…</p>}</Frame>;
  return <Frame title="Update details" kicker={c.publication==='direct'?'UPDATED':c.status==='pending'?'PREVIOUS SUBMISSION':c.status.toUpperCase()} close={close}>
  <div className="request-summary"><strong>{c.title}</strong>{c.feedbackPage&&<p>Page: {c.feedbackPage.label}</p>}<p className="preserve">{c.body}</p>{c.source&&<p>Source: {c.source}</p>}<small>{actors.find(a=>a.id===c.author)?.name} · {time(c.publishedAt??c.createdAt)}</small></div>
  {c.knowledgeChange&&<KnowledgeComparison before={c.knowledgeChange.baseDocument} after={c.knowledgeChange.document}/>}

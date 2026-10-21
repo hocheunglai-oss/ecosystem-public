@@ -1,6 +1,9 @@
+import { locationKnowledgeApi } from './lib/locationKnowledgeApi';
+import { useLocationActivity } from './lib/useLocationActivity';
+import { useLocationContribution } from './lib/useLocationContribution';
 import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useSharedFeedback, type SharedFeedbackStatus } from './lib/useSharedFeedback';
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { contributionActivity, contributionPreviewCounts, contributionStatus, contributionStatusRules, type ContributionActivityEntry, type ContributionPeriod, type ContributionStatusKey } from "./lib/contributionActivity";
 import type { Contribution } from "./lib/model";
 import type { KnowledgeChange } from "./lib/knowledge";
@@ -168,15 +171,17 @@ export function ResourceWallet({ compact = false, onContribute, initialGuideOpen
   const visiblePreview = canPreview ? statusPreview : null;
   const [period, setPeriod] = useState<ContributionPeriod>("7d");
   const now = useActivityNow();
-  const localActivity = contributionActivity(state, actor.id, compact ? "7d" : period, now);
-  const { summary: sharedFeedback, error: feedbackError, status: sharedStatus } = useSharedFeedback(compact ? '7d' : period);
+  const sharedLocations = useLocationActivity(actor.id, compact ? "7d" : period, now);
+  const localActivity = sharedLocations.activity;
+  const { summary: sharedFeedback, error: feedbackError, status: feedbackStatus } = useSharedFeedback(compact ? '7d' : period);
+  const sharedStatus = feedbackStatus === 'unavailable' || sharedLocations.status === 'unavailable' ? 'unavailable' : feedbackStatus === 'loading' || sharedLocations.status === 'loading' ? 'loading' : 'ready';
   const activity = { ...localActivity, total: localActivity.total + (sharedFeedback?.count ?? 0), previousTotal: localActivity.previousTotal + (sharedFeedback?.previousCount ?? 0),
     delta: period === 'all' && !compact ? 0 : localActivity.delta + (sharedFeedback?.count ?? 0) - (sharedFeedback?.previousCount ?? 0) };
   const displayedTotal = compact && visiblePreview ? contributionPreviewCounts[visiblePreview] : activity.total;
   const status = contributionStatus(displayedTotal);
-  const incomplete = !visiblePreview && sharedStatus !== 'ready';
+  const incomplete = !visiblePreview && (sharedStatus !== 'ready' || sharedLocations.status !== 'ready');
   const statusLabel = incomplete ? sharedStatus === 'loading' ? 'CHECKING' : 'UNAVAILABLE' : status.label;
-  const availabilityMessage = sharedStatus === 'loading' ? 'CHECKING SHARED FEEDBACK. LOCAL CONTRIBUTIONS SHOWN.' : 'SHARED FEEDBACK COUNT UNAVAILABLE. LOCAL CONTRIBUTIONS SHOWN.';
+  const availabilityMessage = sharedStatus === 'loading' ? 'CHECKING SHARED CONTRIBUTIONS.' : 'SHARED CONTRIBUTION COUNT UNAVAILABLE.';
   if (compact) return <section className="resource-wallet contribution-activity contribution-activity--compact" aria-label="Contribution activity">
     <div className="activity-tier-summary" data-activity-status={incomplete ? sharedStatus : status.key} data-appearance-preview={Boolean(visiblePreview)}>
       <div className="activity-tier-hero">
@@ -244,18 +249,19 @@ export function ResourceWallet({ compact = false, onContribute, initialGuideOpen
       <ActivityStatus activity={activity} onContribute={onContribute} initialGuideOpen={initialGuideOpen} sharedStatus={sharedStatus} />
       <ActivitySummary activity={activity} period={period} incomplete={incomplete} />
       <ActivityWeeks activity={localActivity} period={period} />
-      {sharedFeedback && <p>{sharedFeedback.count} SHARED CONTRIBUTIONS INCLUDED. THE CHART AND HISTORY BELOW SHOW LOCAL DATABASE UPDATES.</p>}
+      {sharedFeedback && <p>{sharedFeedback.count} SHARED CONTRIBUTIONS INCLUDED. THE CHART AND HISTORY BELOW SHOW DATABASE UPDATES.</p>}
       {incomplete && <p role="status">{feedbackError || availabilityMessage}</p>}
       <header className="activity-section-heading"><h3>CONTRIBUTION HISTORY</h3></header>
-      <ActivityHistory key={period} entries={activity.entries} publications={state.contributions} pageSize={compact ? 10 : 30} />
+      <ActivityHistory key={period} period={period} entries={activity.entries} publications={state.contributions} pageSize={compact ? 10 : 30} hasMore={sharedLocations.hasMore} loading={sharedLocations.loading} onLoadMore={sharedLocations.loadMore} />
+      {sharedLocations.error && <p role="alert">{sharedLocations.error} <button className="button secondary small" onClick={sharedLocations.refresh}>RETRY</button></p>}
     </section>
   );
 }
 
-export function ActivityHistory({ entries, publications, pageSize = 30 }: {
+export function ActivityHistory({ entries, publications, pageSize = 30, hasMore = false, loading = false, onLoadMore, period = 'all' }: {
   entries: ContributionActivityEntry[];
   publications: Contribution[];
-  pageSize?: number;
+  pageSize?: number; period?: ContributionPeriod; hasMore?: boolean; loading?: boolean; onLoadMore?: () => Promise<void>;
 }) {
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const publicationsById = new Map(publications.map(item => [item.id, item]));
@@ -274,13 +280,13 @@ export function ActivityHistory({ entries, publications, pageSize = 30 }: {
               <span>{activityKind(entry.kind)}</span>
               {entry.recordCount > 1 && <span className="activity-record-count">{number(entry.recordCount)} RECORDS</span>}
             </span>
-            {originals.length > 0 && <ActivityEntryDetails publications={originals} />}
+            {entry.contributionIds.length > 0 && <ActivityEntryDetails entry={entry} period={period} publications={originals} />}
           </div>
         </li>;
       })}
     </ol>
-    {entries.length > visibleCount && <button className="button secondary small resource-load-more"
-      onClick={() => setVisibleCount(count => count + pageSize)}>LOAD MORE</button>}
+    {(entries.length > visibleCount || hasMore) && <button className="button secondary small resource-load-more" disabled={loading}
+      onClick={() => { setVisibleCount(count => count + pageSize); if (entries.length <= visibleCount) void onLoadMore?.(); }}>LOAD MORE</button>}
     {entries.length === 0 && <p className="activity-empty">NO CONTRIBUTIONS IN THIS PERIOD</p>}
   </>;
 }
@@ -289,12 +295,38 @@ function activityKind(kind: string) {
   return ({ "ai-import": "AI import", "case-study": "Case study", "buyer-group": "Buyer group", "buyer-team": "Buyer team", "buyer-competition": "Buyer competition", company: "Buyer", "key-info": "Key info", legacy: "Contribution" } as Record<string, string>)[kind] ?? kind;
 }
 
-function ActivityEntryDetails({ publications }: { publications: Contribution[] }) {
+function ActivityEntryDetails({ entry, period, publications }: { entry: ContributionActivityEntry; period: ContributionPeriod; publications: Contribution[] }) {
   const [expanded, setExpanded] = useState(false);
+  const [visible, setVisible] = useState(5);
+  const [ids, setIds] = useState(entry.contributionIds);
+  const [cursor, setCursor] = useState(entry.contributionIdsNextCursor);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
+  async function more() {
+    if (loading) return;
+    if (visible < ids.length) { setVisible(value => value + 5); return; }
+    if (!cursor) return;
+    const controller = new AbortController(); request.current = controller; setLoading(true); setError('');
+    try {
+      const page = await locationKnowledgeApi.activityIds(entry.id, entry.author, period, cursor, controller.signal);
+      if (!controller.signal.aborted) { setIds(previous => [...previous, ...page.ids]); setCursor(page.nextCursor); setVisible(value => value + 5); }
+    } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Updates unavailable.'); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
+  }
   return <details className="activity-entry-details" onToggle={event => setExpanded(event.currentTarget.open)}>
-    <summary>View update{publications.length > 1 ? "s" : ""}</summary>
-    {expanded && publications.map(publication => <ContributionDetails key={publication.id} contribution={publication} />)}
+    <summary>View update{(entry.contributionIdsTotal ?? ids.length) > 1 ? "s" : ""}</summary>
+    {expanded && ids.slice(0, visible).map(id => <SharedContributionDetails key={id} id={id} fallback={publications.find(item => item.id === id)} />)}
+    {expanded && error && <p role="alert">{error}</p>}
+    {expanded && (visible < ids.length || cursor) && <button className="button secondary small" disabled={loading} onClick={() => void more()}>LOAD MORE UPDATES</button>}
   </details>;
+}
+
+function SharedContributionDetails({ id, fallback }: { id: string; fallback?: Contribution }) {
+  const { item, error, refresh } = useLocationContribution(id, fallback);
+  if (error) return <p role="alert">{error} <button className="button secondary small" onClick={refresh}>RETRY</button></p>;
+  return item ? <ContributionDetails contribution={item} /> : <p role="status">LOADING UPDATE…</p>;
 }
 
 function ContributionDetails({ contribution }: { contribution: Contribution }) {

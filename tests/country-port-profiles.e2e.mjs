@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -8,7 +9,6 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 const base = process.env.ECO_COUNTRY_PORT_ORIGIN || 'http://127.0.0.1:4323';
 const out = resolve(process.env.ECO_COUNTRY_PORT_OUTPUT || '/private/tmp/eco-country-port-profiles');
 const user = { id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'LOCATION FIXTURE ADMIN', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
-const key = `ecosystem.live.v1:${user.id}:state`;
 const countryKey = 'country:Netherlands', portKey = 'port:port-rotterdam';
 const countryTarget = { kind: 'country', id: 'Netherlands' }, portTarget = { kind: 'port', id: 'port-rotterdam' };
 const privateTitles = ['COUNTRY OWNER NOTE', 'PORT OWNER NOTE'];
@@ -40,6 +40,7 @@ async function fixture(context) {
     return route.fulfill({ status: 404, json: { message: 'Unconfigured isolated fixture endpoint.' } });
   });
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: true, generation: '10000000-0000-4000-8000-000000000010' } }));
   await context.route('**/api/access/**', route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
@@ -83,12 +84,10 @@ async function chooseTab(profile, name) {
   await profile.getByRole('tab').filter({ hasText: name }).first().click();
 }
 async function snapshot(page) {
-  return page.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
+  return sharedLocations(page).browserState(page, user.id);
 }
 async function seed(page) {
-  await expect.poll(() => page.evaluate(key => Boolean(localStorage.getItem(key)), key)).toBe(true);
-  await page.evaluate(({ key, country, port }) => {
-    const value = JSON.parse(localStorage.getItem(key));
+  sharedLocations(page).seed((value, { country, port }) => {
     const ids = ['port-singapore', 'port-hong-kong', 'port-gibraltar', 'port-rotterdam', 'port-chiba', 'port-tokyo'];
     value.ports = value.ports.filter(port => ids.includes(port.id));
     value.locationCountries = ['Singapore', 'Hong Kong', 'Gibraltar', 'Netherlands', 'Japan', 'Canada'].map(name => ({ id: name, name }));
@@ -97,8 +96,7 @@ async function seed(page) {
       'country:Japan': { version: 2, layoutVersion: 2, sections: [{ id: 'location-ports', title: 'SAVED PORT NOTES', blocks: [{ id: 'japan-original-note', type: 'text', title: 'SAVED NOTE', text: 'PRESERVE ORIGINAL COUNTRY SECTION' }] }] },
     };
     value.locationHierarchyVersion = 1;
-    localStorage.setItem(key, JSON.stringify(value));
-  }, { key, country: document('COUNTRY'), port: document('PORT') });
+  }, { country: document('COUNTRY'), port: document('PORT') });
   await page.reload();
   await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
 }

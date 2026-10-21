@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -18,6 +19,7 @@ async function fixture(context) {
   const state = {user:structuredClone(user), preview:null};
   await context.route('**/api/**', route => route.fulfill({status:404,json:{message:'Synthetic fixture only.'}}));
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await installProfileTabMocks(context,{ownerId:()=>state.user?.id,preview:()=>Boolean(state.preview)});
   await context.route('**/api/access/**', route => route.fulfill(state.user ? {json:{user:state.user,preview:state.preview,users:[],offices:[],requests:[]}} : {status:401,json:{message:'Sign in required.'}}));
   await context.route('**/api/admin/**', route => route.fulfill({json:{count:0,items:[],hats:[],timeZone:'Asia/Hong_Kong'}}));
@@ -49,10 +51,7 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
     const shot=async name=>{await page.screenshot({path:`${out}/${engine}-${width}-${theme}-${name}.png`});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No viewport overflow');};
     try {
       await page.goto(base);await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();
-      const key=`ecosystem.live.v1:${user.id}:state`;
-      await expect.poll(()=>page.evaluate(key=>Boolean(localStorage.getItem(key)),key)).toBe(true);
-      const portId=await page.evaluate(({key,text})=>{
-        const saved=JSON.parse(localStorage.getItem(key));
+      const portId=sharedLocations(page).seed((saved,{text})=>{
         saved.knowledgeRecords['country:Japan']={version:7,layoutVersion:2,sections:[{id:'readability',title:'READABILITY FIXTURE',blocks:[
           {id:'paragraph',type:'text',title:'OPERATING BACKGROUND',text},
           {id:'comparison',type:'table',title:'COMPARISON',columns:[{id:'one',name:'PORT',width:240},{id:'two',name:'DETAILS',width:240},{id:'three',name:'REFERENCE',width:240}],rows:[{id:'first',cells:['CHIBA','CONFIRMED','https://Example.test/PortData?Key=AbC']}]}]}]};
@@ -60,8 +59,8 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
         if(!port)throw new Error('Singapore fixture port absent');
         port.intelligenceKeyInfo={qualityClaim:'30 DAYS',isoSpecs:'ISO 8217',sampleLocation:'DELIVERY POINT',debunkering:'CONFIRM WITH AGENT'};
         saved.knowledgeRecords[`port:${port.id}`]={version:7,layoutVersion:2,sections:[{id:'port-info',title:'PORT INFORMATION',role:'port-information',blocks:[{id:'port-note',type:'text',title:'PORT OPERATIONS',text:'ORIGINAL PORT NOTE'}]}]};
-        localStorage.setItem(key,JSON.stringify(saved));return port.id;
-      },{key,text});
+        return port.id;
+      },{text});
       await page.reload();
       const nav=page.getByRole('navigation',{name:'Workspace navigation'});
       if(await btn(nav,'Ports & Suppliers').getAttribute('aria-expanded')!=='true')await btn(nav,'Ports & Suppliers').click();
@@ -106,7 +105,7 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       const alignment=await infoHeader.evaluate(node=>{const heading=node.querySelector('h3').getBoundingClientRect(),action=node.querySelector('.attachments-control').getBoundingClientRect();return {headingRight:heading.right,actionLeft:action.left,actionRight:action.right,right:node.getBoundingClientRect().right};});
       assert.ok(alignment.actionLeft>=alignment.headingRight-1&&alignment.right-alignment.actionRight<=20,'Key Info attachments align at header right');
       await infoHeader.scrollIntoViewIfNeeded();await shot('key-info-read');
-      const before=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).contributions.length,key);
+      const before=sharedLocations(page).snapshot().contributions.length;
       await btn(workspace,/^EDIT$/i).click();
       await expect(editor.locator('.knowledge-key-info-fields')).toBeVisible();
       const claim=editor.getByLabel('30 days quality claim period',{exact:true});
@@ -116,7 +115,7 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       await editor.locator('.knowledge-text-canvas').fill('UPDATED PORT NOTE');
       await btn(editor,/^SAVE(?: \+1)?$/i).click();await expect(editor).toHaveCount(0);
       await expect(workspace.locator('.location-search')).toBeVisible();await expect(workspace.locator('.knowledge-profile-search')).toBeVisible();await expect(btn(workspace,'Public holidays')).toBeVisible();await expect(workspace.locator('.window-foot')).toBeVisible();
-      const saved=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);
+      const saved=sharedLocations(page).state();
       assert.equal(saved.ports.find(port=>port.id===portId).intelligenceKeyInfo.qualityClaim,'45 DAYS');
       assert.equal(saved.knowledgeRecords[`port:${portId}`].sections.find(section=>section.id==='port-info').blocks[0].text,'UPDATED PORT NOTE');
       assert.equal(saved.contributions.length,before+1,'Key Info plus tab text save as one contribution');

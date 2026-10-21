@@ -1,4 +1,4 @@
-import { actors, type Contribution, type DemoState } from './model';
+import { actors, type Contribution, type DemoState, type LocationPublication } from './model';
 import type { KnowledgeBlock, KnowledgeChange, KnowledgeTarget } from './knowledge';
 import { intelligenceFields, type IntelligenceKeyInfo } from './intelligenceFields';
 import { canonicalLocationTarget } from './locations';
@@ -60,6 +60,9 @@ export interface ContributionActivityEntry {
   recordCount: number;
   /** All original publications remain available for the detailed audit. */
   contributionIds: string[];
+  /** Transport-only pagination metadata; pure grouping retains the complete IDs. */
+  contributionIdsTotal?: number;
+  contributionIdsNextCursor?: string | null;
 }
 export interface ContributionActivitySummary {
   total: number;
@@ -129,7 +132,16 @@ interface Publication extends ContributionActivityEntry {
 }
 function publication(state: DemoState, contribution: Contribution, knownActors: Set<string>): Publication | undefined {
   // Tab organisation is useful maintenance, but does not add information.
-  if (contribution.status !== 'approved' || !knownActors.has(contribution.author) || !knownKinds.has(contribution.targetType) || contribution.tabChanges) return undefined;
+  if (contribution.historicalImport || contribution.status !== 'approved' || !knownActors.has(contribution.author) || !knownKinds.has(contribution.targetType) || contribution.tabChanges) return undefined;
+  if (contribution.locationPublication) {
+    const p = contribution.locationPublication;
+    if (!p.eligible) return undefined;
+    const at = contribution.publishedAt ?? contribution.reviewedAt ?? contribution.createdAt;
+    if (!Number.isFinite(Date.parse(at))) return undefined;
+    return { id: contribution.id, at: iso(Date.parse(at)), author: contribution.author, title: contribution.title,
+      kind: p.kind, recordCount: p.records.length, contributionIds: [contribution.id], keys: p.keys, records: p.records,
+      fingerprint: p.fingerprint, keyInfoTransitions: p.keyInfoTransitions };
+  }
   const at = contribution.publishedAt ?? contribution.reviewedAt ?? contribution.createdAt;
   if (!Number.isFinite(Date.parse(at))) return undefined;
   let differences: Difference[] = [], keys: string[] = [], records: string[] = [];
@@ -186,6 +198,20 @@ function publication(state: DemoState, contribution: Contribution, knownActors: 
     kind, recordCount: records.length, contributionIds: [contribution.id], keys, records, fingerprint, keyInfoTransitions };
 }
 
+/** Produce bounded content-independent facts without changing the grouping algorithm.
+ * Hashing is injected by the server (SHA-256); no raw diff/body travels in a fact.
+ * Compute before stripping the full contribution or importing its historical marker.
+ */
+export async function projectLocationPublication(state: DemoState, contribution: Contribution, hash: (value: string) => Promise<string> | string): Promise<LocationPublication> {
+  if (contribution.locationPublication) return structuredClone(contribution.locationPublication);
+  const item = publication(state, contribution, new Set([contribution.author]));
+  if (!item) return { version: 1, eligible: false, kind: contribution.targetType, keys: [], records: [], fingerprint: '', keyInfoTransitions: [] };
+  const hashed = async (value: string) => { const result = await hash(value); if (!/^[a-f0-9]{64}$/.test(result)) throw new Error('A SHA-256 publication fingerprint is required.'); return result; };
+  return { version: 1, eligible: true, kind: item.kind, keys: await Promise.all(item.keys.map(hashed)), records: await Promise.all(item.records.map(hashed)),
+    fingerprint: await hashed(item.fingerprint), keyInfoTransitions: await Promise.all(item.keyInfoTransitions.map(async t => ({ key: await hashed(t.key), fingerprint: await hashed(t.fingerprint) }))),
+    ...(contribution.extractionBatch ? { batchId: contribution.extractionBatch.id } : {}) };
+}
+
 /** Read the immutable publications, never the old Gold amounts or starter grants.
  * Hong Kong calendar days group repeat saves to the same entry by the same author.
  * A multi-entry save is one contribution; overlapping saves that day remain one.
@@ -203,7 +229,7 @@ export function contributionHistory(state: DemoState, actorIds: string | string[
     const item = publication(state, contribution, knownActors);
     if (!item || Date.parse(item.at) > cutoff) continue;
     ids.add(contribution.id);
-    const batchId = contribution.extractionBatch?.id;
+    const batchId = contribution.locationPublication?.batchId ?? contribution.extractionBatch?.id;
     const repeatedBatch = batchId ? batches.get(batchId) : undefined;
     if (repeatedBatch) {
       repeatedBatch.contributionIds.push(contribution.id);
@@ -311,4 +337,28 @@ export function contributionActivity(state: DemoState, actorIds: string | string
   return { total: entries.length, previousTotal, delta: period === 'all' ? 0 : entries.length - previousTotal,
     activeDays: new Set(entries.map(entry => dayKey(Date.parse(entry.at)))).size,
     hatsReceived: receivedHats(state, selected, range.start, range.end, knownActors), weeks, entries, periodLabel: range.label };
+}
+
+
+export interface SharedLocationActivityPage {
+  summary: ContributionActivitySummary;
+  nextCursor: string | null;
+  /** Exact Hong Kong calendar dates for the complete selected period, not just this page. */
+  activeDates: string[];
+}
+/** Location publications are separate from local/non-location activity. Remote totals
+ * cover every page; displayed entries contain only pages already loaded by the caller.
+ * Hats remain on their existing independently verified path.
+ */
+export function mergeLocationActivity(local: ContributionActivitySummary, remote: Pick<SharedLocationActivityPage, 'summary' | 'activeDates'> | null): ContributionActivitySummary {
+  if (!remote) return local;
+  const value = remote.summary;
+  const activeDates = new Set([...remote.activeDates, ...local.entries.map(entry => dayKey(Date.parse(entry.at)))]);
+  const entries = [...local.entries, ...value.entries].sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
+  const remoteWeeks = new Map(value.weeks.map(week => [week.start, week]));
+  const weeks = local.weeks.map(week => ({ ...week, count: week.count + (remoteWeeks.get(week.start)?.count ?? 0) }));
+  for (const week of value.weeks) if (!local.weeks.some(item => item.start === week.start)) weeks.push(week);
+  return { ...local, total: local.total + value.total, previousTotal: local.previousTotal + value.previousTotal,
+    delta: local.delta + value.delta, activeDays: activeDates.size, hatsReceived: local.hatsReceived,
+    weeks: weeks.sort((a, b) => a.start.localeCompare(b.start)), entries };
 }

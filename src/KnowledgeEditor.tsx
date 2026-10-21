@@ -1,5 +1,5 @@
 import KnowledgeUpdateButton from "./KnowledgeUpdateButton";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { ArrowLeft, ArrowRight, ClipboardPaste, FileText, GripVertical, Plus, Table2, Trash2, Type, Pencil } from "lucide-react";
 import { dropDestination, dropEdge, type DropEdge } from "./lib/dropPosition";
 import { Modal } from "./ui";
@@ -65,7 +65,7 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
   mode?: "edit" | "section" | "rename" | "text" | "table";
   onClose: () => void;
 }) {
-  const { state, run, toast } = useDemo();
+  const { state, runKnowledge, toast } = useDemo();
   const [keyInfoId] = useState(() => uid('key-info-editor'));
   const [officialId] = useState(() => uid('official-table-editor'));
   const officialFeed = useOfficialFuelTable(officialTable);
@@ -108,7 +108,10 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
   const knowledgeDirty = !sameKnowledge(base, draft);
   const dirty = knowledgeDirty || Boolean(keyInfoPortId && !sameIntelligenceKeyInfo(baseKeyInfo, keyInfo));
   const editorChoices = editorTabs ? [...editorTabs.filter(tab => tab.visibility === 'private'), ...editorTabs.filter(tab => tab.visibility === 'shared')] : undefined;
-  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
+  // Source/tab navigation can happen immediately after typing. Publish the
+  // current dirty state before the browser can dispatch the next interaction.
+  useLayoutEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useLayoutEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   useEffect(() => { if (!dirty) return; const handler = (event: BeforeUnloadEvent) => event.preventDefault(); window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, [dirty]);
   const titleChanged = section.title.trim().toLowerCase() !== baseSection?.title.trim().toLowerCase();
   const nameError = !section.title.trim() ? "Enter a tab name."
@@ -194,11 +197,13 @@ export function KnowledgeEditor({ target, initial, initialSection, initialBlock,
       return;
     }
     const change = { target, baseVersion: base.version, baseDocument: base, document: draft };
-    if (run(keyInfoPortId ? { type: 'save-port-information', portId: keyInfoPortId, keyInfo, baseKeyInfo, change: knowledgeDirty ? change : undefined, reason: section.title + ' updated' }
-      : { type: "save-knowledge", change, reason: section.title + " updated" }, "Updated.")) {
-      onSaved?.(section.id, section.title.trim());
-      onClose();
-    }
+    setSaving(true);
+    try {
+      if (await runKnowledge(keyInfoPortId ? { type: 'save-port-information', portId: keyInfoPortId, keyInfo, baseKeyInfo, change: knowledgeDirty ? change : undefined, reason: section.title + ' updated' }
+        : { type: "save-knowledge", change, reason: section.title + " updated" }, "Updated.")) {
+        if (alive.current) { onSaved?.(section.id, section.title.trim()); onClose(); }
+      }
+    } finally { if (alive.current) setSaving(false); }
   }
   const nameField = <label className="knowledge-field">
     Tab name
@@ -372,7 +377,10 @@ export function KnowledgeComparison({
     index = Math.min(page, Math.max(0, Math.ceil(changes.length / 50) - 1));
   return (
     <div className="knowledge-comparison">
-      <div className="knowledge-table-wrap">
+      <div className="knowledge-table-wrap" tabIndex={0} role="region" aria-label="Change comparison" onKeyDown={event => {
+        if (event.target !== event.currentTarget || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault(); event.currentTarget.scrollBy({ left: event.key === 'ArrowRight' ? 80 : -80 });
+      }}>
         <table>
           <thead>
             <tr>

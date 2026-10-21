@@ -1,3 +1,4 @@
+import { attachmentMaxBytes, profileAttachmentPath } from '../../shared/attachments.ts';
 import { ecoConnections } from '../../config/ecoConnections.ts';
 import { BackupAuthError, verifyBackupToken } from './oidc.ts';
 
@@ -5,8 +6,8 @@ export const BACKUP_DOWNLOAD_LIMITS = Object.freeze({ objects: 20, requestBytes:
   objectBytes: 20 * 1024 * 1024, signedSeconds: 300 });
 export interface BackupObject { id: string; bucketId: string; path: string; size: number; version: string | null }
 export interface BackupStorage {
-  info(path: string): Promise<{ id: string; bucketId: string; name: string; size: number; version: string | null; contentType: string }>;
-  sign(path: string, seconds: number): Promise<string>;
+  info(path: string, bucketId?: string): Promise<{ id: string; bucketId: string; name: string; size: number; version: string | null; contentType: string; managed?: boolean; sha256?: string | null }>;
+  sign(path: string, seconds: number, bucketId?: string): Promise<string>;
 }
 class RequestError extends Error {
   readonly status: number;
@@ -25,12 +26,14 @@ export function parseBackupObjects(value: unknown): BackupObject[] {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return reject();
     const item = value as BackupObject;
     if (Object.keys(item).sort().join(',') !== 'bucketId,id,path,size,version'
-      || item.bucketId !== ecoConnections.supplierReportsBucket || typeof item.id !== 'string' || !objectId.test(item.id)
-      || typeof item.path !== 'string' || item.path.length > 200 || !objectPath.test(item.path)
-      || !Number.isSafeInteger(item.size) || item.size < 5 || item.size > BACKUP_DOWNLOAD_LIMITS.objectBytes
+      || !([ecoConnections.supplierReportsBucket, ecoConnections.profileAttachmentsBucket] as readonly string[]).includes(item.bucketId) || typeof item.id !== 'string' || !objectId.test(item.id)
+      || typeof item.path !== 'string' || item.path.length > 200
+      || !(item.bucketId === ecoConnections.supplierReportsBucket ? objectPath.test(item.path) : profileAttachmentPath.test(item.path))
+      || !Number.isSafeInteger(item.size) || item.size < (item.bucketId === ecoConnections.supplierReportsBucket ? 5 : 0)
+      || item.size > (item.bucketId === ecoConnections.supplierReportsBucket ? BACKUP_DOWNLOAD_LIMITS.objectBytes : attachmentMaxBytes)
       || (item.version !== null && (typeof item.version !== 'string' || !/^[A-Za-z0-9_.-]{1,200}$/.test(item.version)))
-      || paths.has(item.path) || ids.has(item.id)) reject();
-    paths.add(item.path); ids.add(item.id);
+      || paths.has(item.bucketId + '/' + item.path) || ids.has(item.id)) reject();
+    paths.add(item.bucketId + '/' + item.path); ids.add(item.id);
     return { id: item.id, bucketId: item.bucketId, path: item.path, size: item.size, version: item.version };
   });
 }
@@ -55,16 +58,20 @@ export async function handleBackupDownloads(request: Request, storage: BackupSto
     let parsed: unknown; try { parsed = JSON.parse(raw); } catch { return reject(); }
     const items = parseBackupObjects(parsed), output = [];
     for (const item of items) {
-      const current = await storage.info(item.path);
+      const current = await storage.info(item.path, item.bucketId);
+      const report = item.bucketId === ecoConnections.supplierReportsBucket;
       if (current.id !== item.id || current.bucketId !== item.bucketId || current.name !== item.path
-        || current.size !== item.size || current.version !== item.version || current.contentType !== 'application/pdf') reject(409);
+        || current.size !== item.size || current.version !== item.version
+        || (report ? current.contentType !== 'application/pdf' : current.managed !== true
+          || !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(current.contentType)
+          || !(current.sha256 === null || typeof current.sha256 === 'string' && /^[a-f0-9]{64}$/.test(current.sha256)))) reject(409);
       const expiresAt = new Date((options.now ?? Date.now)() + BACKUP_DOWNLOAD_LIMITS.signedSeconds * 1000).toISOString();
-      const signed = new URL(await storage.sign(item.path, BACKUP_DOWNLOAD_LIMITS.signedSeconds));
+      const signed = new URL(await storage.sign(item.path, BACKUP_DOWNLOAD_LIMITS.signedSeconds, item.bucketId));
       if (signed.origin !== `https://${ecoConnections.supabaseProjectRef}.supabase.co`
         || signed.username || signed.password || signed.hash
         || signed.pathname !== `/storage/v1/object/sign/${item.bucketId}/${item.path}`
         || [...signed.searchParams.keys()].join(',') !== 'token' || !signed.searchParams.get('token')) reject(503);
-      output.push({ ...item, sha256: objectPath.exec(item.path)![1], url: signed.href, expiresAt });
+      output.push({ ...item, sha256: report ? objectPath.exec(item.path)![1] : current.sha256, url: signed.href, expiresAt });
     }
     return respond({ schemaVersion: 1, projectRef: ecoConnections.supabaseProjectRef, objects: output }, 200);
   } catch (error) {

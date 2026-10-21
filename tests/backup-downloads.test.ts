@@ -190,3 +190,17 @@ test('changed object identity/version/size/type and a malicious storage response
   const response = await handleBackupDownloads(request(), f.storage, f.options);
   assert.equal(response.status, 503); assert.doesNotMatch(await response.text(), /secret-key|provider-body/);
 });
+
+test('general attachments require managed metadata and allow pending actual bytes up to50 MiB without a proposed hash',async()=>{
+ const general={...item,bucketId:ecoConnections.profileAttachmentsBucket,path:`${supplierId}/${id}.bin`,size:50*1024*1024};
+ for(const hash of [null,'b'.repeat(64)]){
+  const f=fixture();f.storage.info=async()=>({...general,name:general.path,contentType:'application/octet-stream',managed:true,sha256:hash});
+  f.storage.sign=async(p,_s,bucket)=>`${supabase}/storage/v1/object/sign/${bucket}/${p}?token=synthetic`;
+  const result=await handleBackupDownloads(request({objects:[general]}),f.storage,f.options);assert.equal(result.status,200);assert.equal((await result.json()).objects[0].sha256,hash);
+ }
+ for(const changed of [{managed:false},{sha256:undefined},{sha256:'proposed-untrusted'},{size:general.size+1}]){
+  const f=fixture();f.storage.info=async()=>({...general,name:general.path,contentType:'text/plain',managed:true,sha256:null,...changed});
+  assert.equal((await handleBackupDownloads(request({objects:[general]}),f.storage,f.options)).status,409);
+ }
+ const f=fixture();assert.equal((await handleBackupDownloads(request({objects:[{...general,size:general.size+1}]}),f.storage,f.options)).status,400);assert.deepEqual(f.calls,[]);
+});

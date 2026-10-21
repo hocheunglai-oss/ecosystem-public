@@ -8,6 +8,7 @@ export const ecoConnections = Object.freeze({
   supabaseOrganizationId: 'yxyxcenpgqutvoctrdkj',
   supabaseRegion: 'ap-southeast-1',
   supplierReportsBucket: 'eco-supplier-reports',
+  profileAttachmentsBucket: 'eco-profile-attachments',
   backup: Object.freeze({
     storagePath: '/api/backup/storage-downloads',
     githubRepositoryId: '1427776183',

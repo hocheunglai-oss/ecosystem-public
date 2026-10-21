@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -18,6 +19,7 @@ async function fixture(context) {
   const state = { user: structuredClone(user), preview: null, latency: 0, snapshot: syntheticIntelligence(), status: 200, requests: 0, writes: [], hold: false, pending: [] };
   await context.route('**/api/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); return route.fulfill({ status: 404, json: { message: 'Isolated fixture only' } }); });
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await context.route('**/api/access/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
     if (path === 'session') {

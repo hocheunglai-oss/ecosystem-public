@@ -11,6 +11,8 @@ import { serveInbox } from './server/inbox/node.ts';
 import { serveEmailSync } from './server/inbox-email/node.ts';
 import { serveIntelligence } from './server/intelligence/node.ts';
 import { serveOfficialTables } from './server/official-tables/node.ts';
+import { serveAttachments } from './server/attachments/node.ts';
+import { serveLocationKnowledge } from './server/location-knowledge/node.ts';
 // @ts-expect-error Build asset plugin intentionally runs as plain JavaScript.
 import { pdfPreviewAssets } from './scripts/pdf-preview-assets.mjs';
 export default defineConfig(({ mode }) => {
@@ -31,6 +33,8 @@ export default defineConfig(({ mode }) => {
         else if (req.url?.startsWith('/api/suppliers/')) void serveSuppliers(req, res, accessEnvironment);
         else if (req.url?.startsWith('/api/intelligence/')) void serveIntelligence(req, res, accessEnvironment);
         else if (req.url?.startsWith('/api/official-tables/')) void serveOfficialTables(req, res, accessEnvironment);
+        else if (req.url?.startsWith('/api/attachments/')) void serveAttachments(req, res, accessEnvironment);
+        else if (req.url?.startsWith('/api/location-knowledge/')) void serveLocationKnowledge(req, res, accessEnvironment);
         else if (req.url?.startsWith('/api/admin/')) void serveAdministration(req, res, accessEnvironment);
         else next();
       });

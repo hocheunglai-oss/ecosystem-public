@@ -35,7 +35,7 @@ export default function KnowledgeExtractor({
   embedded?: boolean;
   onSaved: (key: string) => void;
 }) {
-  const { state, run, toast, notify } = useDemo();
+  const { state, runKnowledge, toast, notify } = useDemo();
   const mobile = useMobileInterface();
   const [text, setText] = useState("");
   const [source, setSource] = useState("");
@@ -134,8 +134,9 @@ export default function KnowledgeExtractor({
     if ((text.trim() || source.trim() || sourceDate || proposals || busy) && !window.confirm('DISCARD UNSAVED CHANGES?')) return;
     onClose?.();
   }
-  function save() {
-    if (!proposals) return;
+  async function save() {
+    if (!proposals || busy) return;
+    setBusy(true);
     setSaveAttempted(true);
     setError("");
     try {
@@ -144,7 +145,7 @@ export default function KnowledgeExtractor({
         sourceDate,
         batchId: batchId.current,
       });
-      if (run(action, "Information updated."))
+      if (await runKnowledge(action, "Information updated."))
         onSaved(selected[0]?.locationKey || "");
     } catch (cause) {
       setError(
@@ -152,7 +153,7 @@ export default function KnowledgeExtractor({
           ? cause.message
           : "Please check the selected information.",
       );
-    }
+    } finally { setBusy(false); }
   }
   const message = error || (saveAttempted && toast?.error ? toast.message : "");
   useEffect(() => {

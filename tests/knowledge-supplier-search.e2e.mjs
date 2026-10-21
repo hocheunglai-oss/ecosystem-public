@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -21,6 +22,7 @@ async function fixture(context) {
     return route.fulfill({ status: 404, json: { message: 'Synthetic fixture only.' } });
   });
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await installProfileTabMocks(context, { ownerId: () => state.user?.id });
   await context.route('**/api/access/**', route => route.fulfill(state.user ? { json: { user: state.user, preview: null } } : { status: 401, json: { message: 'Sign in required.' } }));
   await context.route('**/api/admin/**', route => route.fulfill({ json: { count: 0, items: [] } }));
@@ -58,15 +60,12 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png` }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)); };
     try {
       await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-      const key = `ecosystem.live.v1:${user.id}:state`;
-      await expect.poll(() => page.evaluate(key => Boolean(localStorage.getItem(key)), key)).toBe(true);
-      await page.evaluate(key => {
-        const saved = JSON.parse(localStorage.getItem(key));
+      sharedLocations(page).seed(saved => {
         saved.knowledgeRecords['port:port-singapore'] = { version: 1, layoutVersion: 2, sections: [
           { id: 'operations', title: 'OPERATIONS', blocks: [{ id: 'standards', type: 'text', title: 'BUNKERING STANDARD', text: 'SS 600 PROCEDURES REMAIN AVAILABLE IN SEARCH.' }] },
           { id: 'suppliers', role: 'suppliers', title: 'SUPPLIERS', blocks: [] },
-        ] }; localStorage.setItem(key, JSON.stringify(saved));
-      }, key);
+        ] };
+      });
       await page.reload(); const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
       await btn(nav, 'Ports & Suppliers').click(); await btn(nav, 'Countries & Ports').click();
       const workspace = page.getByRole('dialog', { name: 'Countries & Ports', exact: true });

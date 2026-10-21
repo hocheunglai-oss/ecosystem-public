@@ -146,6 +146,7 @@ async function verifyStorage(capture, inventory) {
   const storage = inventory.storage;
   check(storage && Array.isArray(storage.objects) && storage.objectCount === storage.objects.length
     && Number.isSafeInteger(storage.totalBytes) && storage.totalBytes >= 0, 'INVALID_STORAGE_INVENTORY');
+  verifyRecordedAttachmentFiles(inventory);
   const directory = await privateDirectory(join(capture, 'storage'));
   await privateDirectory(join(directory, 'objects'));
   const paths = new Set(); let totalBytes = 0;
@@ -326,4 +327,22 @@ export async function restoreLocal({ captureDir, bin, workParent }) {
   }
   if (failure) { const error = new LocalRestoreError(failure.code, receiptPath); error.phase = receipt.phase; throw error; }
   return { receiptPath, ...receipt };
+}
+
+/** The encrypted inventory preserves both pending originals and verified published references. */
+export function verifyRecordedAttachmentFiles(inventory) {
+  if (inventory.attachmentUploads === undefined) return; // Earlier format1 archives have report PDFs only.
+  check(Array.isArray(inventory.attachmentUploads), 'INVALID_ATTACHMENT_INVENTORY');
+  const bucket=inventory.attachmentBucket,uploads=inventory.attachmentUploads;
+  if (bucket === undefined && uploads.length === 0) return;
+  check(typeof bucket==='string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(bucket), 'INVALID_ATTACHMENT_INVENTORY');
+  const byPath=new Map();
+  for (const upload of uploads) {
+    check(upload && typeof upload.object_path==='string' && !byPath.has(upload.object_path) && ['active','pending'].includes(upload.state), 'INVALID_ATTACHMENT_INVENTORY');
+    byPath.set(upload.object_path,upload);
+    const object=inventory.storage.objects.find(o=>o.bucket_id===bucket && o.name===upload.object_path);
+    if (upload.state==='active') check(object && object.id===upload.storage_object_id && object.version===upload.storage_version
+      && object.sha256===upload.sha256 && object.size===Number(upload.size_bytes) && object.mimeType===upload.expected_mime, 'ATTACHMENT_REFERENCE_MISMATCH');
+  }
+  for (const object of inventory.storage.objects) if (object.bucket_id===bucket) check(byPath.has(object.name), 'UNRECOGNIZED_ATTACHMENT_FILE');
 }

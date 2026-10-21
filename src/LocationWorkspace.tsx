@@ -23,6 +23,8 @@ import type { OpenModal } from "./types";
 import type { OpenWorkspace, WorkspaceNavigationContext } from "./workspaceNavigation";
 import "./locations.css";
 import KnowledgeExtractor from "./KnowledgeExtractor";
+import LocationStorageStatus from './LocationStorageStatus';
+import { useAccess } from './auth';
 
 type NewLocation = {
   kind: "country" | "port";
@@ -63,7 +65,8 @@ export default function LocationWorkspace({
   onOpen: OpenWorkspace;
   context?: WorkspaceNavigationContext;
 }) {
-  const { state, actor } = useDemo();
+  const { state, actor, locations } = useDemo();
+  const { preview } = useAccess();
   const records = useMemo(
     () => locationRecords(state),
     [state],
@@ -164,6 +167,7 @@ export default function LocationWorkspace({
   const landing = !current && !directory;
   return (
     <div className={`location-workspace${current && !directory ? " location-workspace-profile" : ""}`}>
+      <LocationStorageStatus />
       <div className="location-toolbar">
         {!landing && <button className="location-back" aria-label="Back to Countries & Ports" title="Back to Countries & Ports" onClick={showLanding}><ArrowLeft size={17} /></button>}
         <label className="location-search">
@@ -185,11 +189,12 @@ export default function LocationWorkspace({
           )}
         </label>
         <div className="location-toolbar-actions">
-          <button className="button secondary" onClick={() => { if (leaveProfile()) setExtracting(true); }}>
+          <button className="button secondary" disabled={!locations.ready || Boolean(preview)} onClick={() => { if (leaveProfile()) setExtracting(true); }}>
             <ClipboardPaste size={14} /> Information extractor
           </button>
           <button
             className="button secondary location-add"
+            disabled={!locations.ready || Boolean(preview)}
             onClick={() => { if (leaveProfile()) setAdding(true); }}
           >
             <Plus size={14} /> Add location
@@ -369,7 +374,8 @@ function AddLocation({
   onClose: () => void;
   onCreated: (value: NewLocation) => void;
 }) {
-  const { state, run, toast } = useDemo();
+  const { state, runKnowledge, toast } = useDemo();
+  const [saving, setSaving] = useState(false);
   const [kind, setKind] = useState<NewLocation["kind"]>("port");
   const [name, setName] = useState("");
   const [country, setCountry] = useState(
@@ -380,15 +386,19 @@ function AddLocation({
     <Modal title="Add location" onClose={onClose}>
       <form
         className="location-create"
-        onSubmit={(e) => {
+        aria-busy={saving}
+        inert={saving}
+        onSubmit={async (e) => {
           e.preventDefault();
+          if (saving) return;
+          setSaving(true);
           const value = {
             kind,
             name: name.trim(),
             ...(kind !== "country" ? { country } : {}),
           };
-          if (run({ type: "add-location", ...value }, "Location added."))
-            onCreated(value);
+          try { if (await runKnowledge({ type: "add-location", ...value }, "Location added.")) onCreated(value); }
+          finally { setSaving(false); }
         }}
       >
         {toast?.error && (

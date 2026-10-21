@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -25,7 +26,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   await installStagingCookies(context,base);
   const state={user:structuredClone(user),snapshot:{feedId:'mpa-singapore-alternative-fuels',status:'current',checkedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),rows:structuredClone(rows)},fail:false,writes:[],reads:0};
   await context.route('**/api/**',route=>{if(route.request().method()!=='GET')state.writes.push(route.request().url());return route.fulfill({status:404,json:{message:'Synthetic fixture only.'}});});
-  await installEmptyLiveInbox(context); await installProfileTabMocks(context,{ownerId:()=>state.user?.id});
+  await installEmptyLiveInbox(context); await installSharedLocations(context, { user: () => state.user }); await installProfileTabMocks(context,{ownerId:()=>state.user?.id});
   await context.route('**/api/access/**',route=>route.fulfill(state.user?{json:{user:state.user,preview:null,users:[],requests:[],offices:[]}}:{status:401,json:{message:'Sign in required.'}}));
   await context.route('**/api/admin/**',route=>route.fulfill({json:{count:0,items:[]}}));
   await context.route('**/api/enquiries/test-policy',route=>route.fulfill({json:{enabled:false}}));
@@ -38,7 +39,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    let workspace=await openTable(page);
    let table=workspace.locator('.official-fuel-table');await expect(table.locator('tbody tr')).toHaveCount(4);await expect(table).toContainText('SYNTHETIC VERIFIED LNG FACT');
    const link=table.getByRole('link').first();await expect(link).toHaveAttribute('href',rows[0].sourceUrl);assert.equal(await link.evaluate(el=>getComputedStyle(el).textTransform),'none');
-   const key=`ecosystem.live.v1:${user.id}:state`,count=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)).contributions.length,key);const before=await count();
+   const count=()=>sharedLocations(page).snapshot().contributions.length;const before=await count();
    await expect(btn(workspace.locator('.knowledge-content-toolbar'),'EDIT')).toHaveCount(1);
    await page.screenshot({path:`${out}/${engine}-${width}-${theme}-read.png`});
    await btn(workspace.locator('.knowledge-content-toolbar'),'EDIT').click();const editor=workspace.locator('.knowledge-editor');await expect(editor.locator('.official-fuel-table')).toBeVisible();
@@ -49,7 +50,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    await expect(table).toContainText('SYNTHETIC VERIFIED UPDATED LNG FACT');await expect(table).toContainText('MANUAL NOTE');assert.equal(await count(),before+1);
    state.fail=true;const reads=state.reads;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect.poll(()=>state.reads).toBeGreaterThan(reads);await expect(table).toContainText('Update unavailable');await expect(table).toContainText('SYNTHETIC VERIFIED UPDATED LNG FACT');
    await page.screenshot({path:`${out}/${engine}-${width}-${theme}-stale.png`});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
-   await page.evaluate(key=>{const saved=JSON.parse(localStorage.getItem(key)),section=saved.knowledgeRecords['port:port-singapore'].sections.find(section=>section.blocks.some(block=>block.id.startsWith('mpa-alternative-fuels-notes'))),copy=structuredClone(section.blocks.find(block=>block.id.startsWith('mpa-alternative-fuels-notes')));copy.id+='-manual-copy';for(const item of [...copy.columns,...copy.rows])item.id+='-manual-copy';copy.rows[0].cells[1]='SECOND TABLE REMAINS MANUAL';section.blocks.push(copy);localStorage.setItem(key,JSON.stringify(saved));},key);
+   sharedLocations(page).seed(saved=>{const section=saved.knowledgeRecords['port:port-singapore'].sections.find(section=>section.blocks.some(block=>block.id.startsWith('mpa-alternative-fuels-notes'))),copy=structuredClone(section.blocks.find(block=>block.id.startsWith('mpa-alternative-fuels-notes')));copy.id+='-manual-copy';for(const item of [...copy.columns,...copy.rows])item.id+='-manual-copy';copy.rows[0].cells[1]='SECOND TABLE REMAINS MANUAL';section.blocks.push(copy);});
    state.fail=false;await page.reload();workspace=await openTable(page);await expect(workspace).toContainText('SECOND TABLE REMAINS MANUAL');
    await expect(workspace.locator('.official-fuel-table')).toHaveCount(1);await btn(workspace.locator('.knowledge-content-toolbar'),'EDIT').click();
    const titles=workspace.locator('.knowledge-outline-select').filter({hasText:'Current alternative-fuel supply position'});await expect(titles).toHaveCount(2);await titles.last().click();await expect(workspace.getByRole('group',{name:'Table controls'})).toBeVisible();await expect(workspace.getByLabel('Row 1, Commercial implication',{exact:true})).toHaveValue('SECOND TABLE REMAINS MANUAL');await btn(workspace.locator('.knowledge-editor'),'Cancel').click();

@@ -36,9 +36,9 @@ test('public source guard admits ordinary source, placeholders and only the exis
   await put(root,'README.md','# Synthetic public application\n');
   await put(root,'src/app.ts','export const ready = true;');
   await put(root,'.env.example','OPENAI_API_KEY=\nECO_SUPABASE_SECRET_KEY=\n');
-  for(const path of ['public/privacy.html','tests/privacy-page.test.ts','tests/privacy-page.e2e.mjs'])await put(root,path,`Public privacy contact: ${approvedContact}`);
+  for(const path of ['public/privacy.html','tests/privacy-page.test.ts','tests/privacy-page.e2e.mjs','public/backup-privacy.html','tests/backup-privacy-page.e2e.mjs'])await put(root,path,`Public privacy contact: ${approvedContact}`);
   await git('add','.');
-  const {code,report}=await scan(root);assert.equal(code,0);assert.equal(report.checkedFiles,6);assert.deepEqual(report.findings,[]);
+  const {code,report}=await scan(root);assert.equal(code,0);assert.equal(report.checkedFiles,8);assert.deepEqual(report.findings,[]);
  });
 });
 
@@ -69,9 +69,9 @@ test('private business snapshot and operational document paths fail even when th
 
 test('privacy contact exception cannot admit a roster or allow the public contact in unrelated source',async()=>{
  await repository(async(root)=>{
-  for(const path of ['public/privacy.html','tests/privacy-page.test.ts','tests/privacy-page.e2e.mjs'])await put(root,path,`${approvedContact}\n${privateContact}`);
-  await put(root,'src/config.ts',`const contact = '${approvedContact}';`);
-  const {code,report,stdout}=await scan(root);assert.equal(code,1);assert.equal(report.findings.length,4);
+  for(const path of ['public/privacy.html','tests/privacy-page.test.ts','tests/privacy-page.e2e.mjs','public/backup-privacy.html','tests/backup-privacy-page.e2e.mjs'])await put(root,path,`${approvedContact}\n${privateContact}`);
+  for(const path of ['src/config.ts','public/backup-privacy-copy.html','tests/backup-privacy-page.extra.mjs'])await put(root,path,`const contact = '${approvedContact}';`);
+  const {code,report,stdout}=await scan(root);assert.equal(code,1);assert.equal(report.findings.length,8);
   assert.ok(report.findings.every(f=>f.rule==='private-directory-contact'));
   assert.ok(!stdout.includes(approvedContact)&&!stdout.includes(privateContact));
  });

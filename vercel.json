@@ -8,7 +8,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!api/|assets/|fonts/|marine/|pdf-preview/|privacy\\.html$|favicon.svg|logo.png|logo-transparent.png|world-v2.png).*)",
+      "source": "/((?!api/|assets/|fonts/|marine/|pdf-preview/|privacy\\.html$|backup-privacy\\.html$|favicon.svg|logo.png|logo-transparent.png|world-v2.png).*)",
       "destination": "/index.html"
     }
   ],

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ECO Nightly Backups — Privacy</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    @font-face{font-family:"DM Sans";font-style:normal;font-weight:400 700;font-display:swap;src:url("/fonts/dm-sans.woff2") format("woff2")}
+    @font-face{font-family:"Manrope";font-style:normal;font-weight:400 800;font-display:swap;src:url("/fonts/manrope.woff2") format("woff2")}
+    :root{color-scheme:light dark;--surface:#f5f9fc;--ink:#17364a;--muted:#4c6279;--line:#91aabd;--focus:#158da4;--canvas:#edf3f8;font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;font-weight:450;line-height:1.5;background:var(--canvas);color:var(--ink)}
+    *{box-sizing:border-box}
+    body{margin:0;padding:32px 20px;text-transform:uppercase}
+    main{max-width:76ch;margin:0 auto;padding:28px;background:var(--surface);border:1px solid var(--line);border-radius:5px;overflow-wrap:anywhere}
+    header{padding-bottom:20px;border-bottom:1px solid var(--line)}
+    h1,h2{font-family:"Manrope","DM Sans",sans-serif;font-weight:700;line-height:1.35}
+    h1{font-size:1.5384615385rem;margin:0 0 10px}
+    h2{font-size:1.0769230769rem;margin:0 0 12px}
+    section{margin-top:24px}
+    p{margin:0 0 14px}
+    p:last-child{margin-bottom:0}
+    .updated{font-size:.8461538462rem;color:var(--muted);margin-bottom:18px}
+    a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+    a[href^="mailto:"]{text-transform:none}
+    a:focus-visible{outline:2px solid var(--focus);outline-offset:4px}
+    strong{font-weight:600}
+    @media(prefers-color-scheme:dark){:root{--surface:#192b3c;--ink:#edf5fb;--muted:#afc3d3;--line:#658399;--focus:#78d9dd;--canvas:#101d2b}}
+    @media(max-width:760px){body{padding:16px 12px}main{padding:20px 16px}a[href^="mailto:"]{display:inline-flex;align-items:center;min-height:44px;max-width:100%}}
+    @media print{body{padding:0}main{max-width:none;border:0;background:white;color:black}a{color:inherit}}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ECO Nightly Backups</h1>
+      <p class="updated">Privacy notice · <time datetime="2026-10-21">21 October 2026</time></p>
+      <p>ECO Nightly Backups is a private tool for authorised ECO operators. It is designed to protect ECO’s database and stored documents by keeping encrypted recovery copies in a designated private Google Drive folder.</p>
+      <p>This page describes the backup design and Google connection. It does not confirm that scheduled backups are active.</p>
+    </header>
+    <section aria-labelledby="information">
+      <h2 id="information">Information handled</h2>
+      <p>A backup contains ECO database records, including business, account and authentication data, together with stored documents. The authorised backup runner reads this information to prepare the recovery copy.</p>
+      <p>The tool checks the connected Google account’s email address, storage quota, and the ownership and permissions of its backup folder and files. Backup metadata includes the backup date, file size, integrity checksum and verification status.</p>
+    </section>
+    <section aria-labelledby="access">
+      <h2 id="access">Google Drive access</h2>
+      <p>The Google connection uses the <strong>drive.file</strong> permission, covering files created by this app or explicitly made available to it. The tool works only with its designated backup folder and managed backup files. It does not access unrelated Drive files.</p>
+      <p>It uploads encrypted archives, downloads them to verify their integrity, and manages retention. Backups must remain private to the authorised operator account; the tool does not share or publish them.</p>
+    </section>
+    <section aria-labelledby="protection">
+      <h2 id="protection">Encryption and recovery</h2>
+      <p>Backup contents are encrypted before upload to Google Drive. The private recovery key is kept separately, outside Google Drive and GitHub. The backup runner uses only the public encryption key. Restoring a backup requires the private recovery key.</p>
+      <p>Google stores the encrypted files and their metadata. GitHub Actions runs the backup process using protected credentials. Temporary unencrypted working files are removed after processing.</p>
+    </section>
+    <section aria-labelledby="retention">
+      <h2 id="retention">Retention and disconnection</h2>
+      <p>The retention policy keeps the latest <strong>five verified Hong Kong backup dates</strong>. An older managed archive is moved to Google Drive’s trash only after the current backup is verified and at least five newer verified dates remain. Other files and recovery materials are excluded from this cleanup.</p>
+      <p>Trashed files remain recoverable until Google’s automatic expiry or earlier deletion by the account owner. Drive currently deletes trash after 30 days, and trashed files continue to use storage quota.</p>
+      <p>Revoking the app’s Google account access stops future backups. It does not delete existing backup files; the account owner can manage those files directly in Google Drive.</p>
+    </section>
+    <section aria-labelledby="contact">
+      <h2 id="contact">Contact</h2>
+      <p>For access, correction, deletion or recovery enquiries, contact the ECO operator:</p>
+      <p><a href="mailto:otto@cosulich.com.hk">otto@cosulich.com.hk</a></p>
+      <p>Do not email passwords, access tokens or recovery keys.</p>
+    </section>
+  </main>
+</body>
+</html>

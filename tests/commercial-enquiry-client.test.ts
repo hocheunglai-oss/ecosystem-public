@@ -24,7 +24,7 @@ test('LIVE legacy commercial actions cannot save, confirm or change outcomes whi
     assert.doesNotThrow(() => assertLocalCommercialAction({ type, id: row.id }, 'test'));
   }
   assert.throws(() => assertLocalCommercialAction({ type: 'record-actual-volume', id: row.id, quantity: 20 }, 'live'));
-  assert.doesNotThrow(() => assertLocalCommercialAction({ type: 'update-profile', email: 'synthetic@example.test', phone: '+85290000000' }, 'live'));
+  assert.doesNotThrow(() => assertLocalCommercialAction({ type: 'save-buyer-private-list', buyerId: 'synthetic-buyer', entries: [], baseEntries: [] }, 'live'));
 });
 test('commercial API blocks LIVE reads before fetch in TEST and VIEW AS', async () => {
   const original = globalThis.fetch; let calls = 0;

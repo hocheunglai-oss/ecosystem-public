@@ -51,7 +51,7 @@ test('local mutation boundary rejects deferred buyer actions without disabling o
   const state = createSeedState(), trader = { ...admin, isAdmin: false };
   const actions = [
     { type: 'save-buyer-credit-remarks', buyerId: 'company-meridian', text: 'Changed' },
-    { type: 'save-buyer-private-remark', buyerId: 'company-meridian', text: 'Changed' },
+    { type: 'save-buyer-private-list', buyerId: 'company-meridian', baseEntries: [], entries: [{ id: 'private', text: 'Changed' }] },
     { type: 'mark-credit-request-read', id: 'request-existing' },
     { type: 'acknowledge-credit', id: 'request-existing' },
     { type: 'submit-contribution', targetType: 'company', targetId: 'company-meridian', title: 'Changed', body: 'Changed' },

@@ -335,7 +335,7 @@ export default function KnowledgeExtractor({
               <ArrowLeft size={14} /> Back
             </button>
             <KnowledgeUpdateButton disabled={!selected.length} onClick={save}>
-              <Check size={15} /> CONTRIBUTE +1
+              <Check size={15} /> SAVE
             </KnowledgeUpdateButton>
           </footer>
         </>

@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { chromium, webkit, expect } from '@playwright/test';
+import { installIntelligence, syntheticIntelligence } from './fixtures/intelligence.mjs';
+import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
+import { installProfileTabMocks } from './fixtures/profile-tabs.mjs';
+import { createLiveFixtureBuyer } from './fixtures/test-workspace.mjs';
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
+import { installStagingCookies } from './fixtures/protection-cookies.mjs';
+
+const base = process.env.ECO_ACTIONS_ORIGIN || 'http://127.0.0.1:4399';
+const out = resolve(process.env.ECO_ACTIONS_OUTPUT || '/private/tmp/eco-contribution-actions');
+const user = { id:'10000000-0000-4000-8000-000000000001',email:'owner@example.test',displayName:'FIXTURE ADMIN',phone:'',officeId:'HONG KONG',officeName:'HONG KONG',isAdmin:true,isSpcTrader:true,isManager:false,isActive:true,activated:true,passwordChangeSuggested:false,revision:1,capabilities:{testWorkspace:true,appearancePreview:true} };
+const key = `ecosystem.live.v1:${user.id}:state`;
+const button = (scope,name) => scope.getByRole('button',{name,exact:true});
+const saved = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
+const results = [];
+await mkdir(out,{recursive:true});
+
+async function fixture(context) {
+  const state={user:structuredClone(user),preview:null,feedback:[],unexpected:[]};
+  await context.route('**/api/**',route=>{state.unexpected.push(new URL(route.request().url()).pathname);return route.fulfill({status:404,json:{message:'Unconfigured isolated fixture endpoint.'}});});
+  await installEmptyLiveInbox(context);
+  await installIntelligence(context, syntheticIntelligence());
+  await installProfileTabMocks(context,{ownerId:()=>state.user?.id,preview:()=>Boolean(state.preview)});
+  await context.route('**/api/enquiries/test-policy',route=>route.fulfill({json:{enabled:true,generation:'10000000-0000-4000-8000-000000000010'}}));
+  await context.route('**/api/access/**',route=>{
+    const path=new URL(route.request().url()).pathname.split('/api/access/')[1];
+    if(!state.user)return route.fulfill({status:401,json:{message:'Sign in required.'}});
+    if(path==='session')return route.fulfill({json:{user:state.user,preview:state.preview}});
+    if(path==='users')return route.fulfill({json:{users:[state.user],offices:[{id:'HONG KONG',name:'HONG KONG'}]}});
+    if(path==='phone-requests')return route.fulfill({json:{requests:[]}});
+    state.unexpected.push(path);return route.fulfill({status:403,json:{message:'Unavailable.'}});
+  });
+  await context.route('**/api/admin/**',route=>{
+    const path=new URL(route.request().url()).pathname.split('/api/admin/')[1], request=route.request();
+    if(path==='feedback'&&request.method()==='POST'){
+      assert.equal(request.headers()['x-eco-request'],'1');
+      if(state.preview)return route.fulfill({status:403,json:{message:'Read only.'}});
+      const body=request.postDataJSON(), item={...body,id:crypto.randomUUID(),createdAt:new Date().toISOString(),createdBy:user.id,status:'new'};
+      state.feedback.push(item);return route.fulfill({json:{item}});
+    }
+    if(request.method()!=='GET')state.unexpected.push(path);
+    return route.fulfill({json:{items:state.feedback,total:state.feedback.length,count:state.feedback.length,page:1,pageSize:50,periodStart:'2026-10-15T00:00:00Z',periodEnd:'2026-10-21T00:00:00Z',timeZone:'Asia/Hong_Kong',source:'shared-feedback'}});
+  });
+  await context.route('**/api/suppliers/**',route=>route.fulfill({json:{items:[],total:0,page:1,pageSize:50}}));
+  return state;
+}
+async function profile(page) {
+  const nav=page.getByRole('navigation',{name:'Workspace navigation'}), group=button(nav,'Buyers and Credit');
+  if(await group.getAttribute('aria-expanded')!=='true')await group.click();
+  await button(nav,'Buyer Profiles').click();
+  const workspace=page.getByRole('dialog',{name:'Buyer Profiles',exact:true});
+  const search=workspace.getByRole('textbox',{name:'Search buyer profiles',exact:true});
+  await expect.poll(async()=>await search.isVisible()||await workspace.locator('.buyer-profile').isVisible()).toBe(true);
+  if(await search.isVisible()){await search.fill('ACTION FIXTURE BUYER');await button(workspace,'ACTION FIXTURE BUYER').click();}
+  return workspace.locator('.buyer-profile');
+}
+async function credited(action) {
+  await expect(action).toHaveAttribute('aria-description','CONTRIBUTION +1');
+  await expect(action).toHaveClass(/knowledge-update-button/);
+  const style=await action.evaluate(node=>{const probe=document.createElement('i');probe.style.background='var(--ui-primary)';document.body.append(probe);const result={actual:getComputedStyle(node).backgroundColor,expected:getComputedStyle(probe).backgroundColor};probe.style.background='var(--ui-primary-hover)';result.hover=getComputedStyle(probe).backgroundColor;probe.remove();return result;});
+  assert.ok([style.expected,style.hover].includes(style.actual),'Credited action uses the shared green fill or its shared hover state');
+}
+async function neutral(action) {
+  assert.equal(await action.getAttribute('aria-description'),null);
+  await expect(action).not.toHaveClass(/knowledge-update-button/);
+  await expect(action.locator('.contribution-action-hint')).toHaveCount(0);
+}
+const finance = state => ({companies:state.companies,requests:state.requests,enquiries:state.enquiries,outcomes:state.outcomes});
+for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
+  if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
+  const browser=await type.launch({headless:true});
+  try{for(const width of [1440,320,390])for(const theme of ['light','dark']) {
+    if(process.env.ECO_TEST_WIDTH&&Number(process.env.ECO_TEST_WIDTH)!==width)continue;
+    if(process.env.ECO_TEST_THEME&&process.env.ECO_TEST_THEME!==theme)continue;
+    const context=await browser.newContext({viewport:{width,height:width<760?844:1000},isMobile:width<760,hasTouch:width<760,reducedMotion:'reduce'});
+    await installStagingCookies(context,base);
+    const state=await fixture(context), errors=[];
+    await context.addInitScript(theme=>localStorage.setItem('ecosystem.theme.v1',theme),theme);
+    const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
+    const shot=async name=>{await page.screenshot({path:resolve(out,`${engine}-${width}-${theme}-${name}.png`)});};
+    try {
+      await page.goto(base);await expect(page.getByRole('navigation',{name:'Workspace navigation'})).toBeVisible();
+      const feedback=page.locator('.home-display-controls').getByRole('button',{name:'Feedback for ecosystem',exact:true});
+      await credited(feedback);await page.keyboard.press('Tab');await feedback.focus();await expect(feedback).toBeFocused();
+      await expect(feedback.locator('.contribution-action-hint')).toBeVisible();await shot('feedback-hint');
+      await feedback.click();const modal=page.getByRole('dialog',{name:'Feedback for ecosystem',exact:true});
+      const submit=button(modal.getByRole('form',{name:'Submit feedback',exact:true}),'Submit feedback');await credited(submit);
+      await modal.getByLabel('Title',{exact:true}).fill('ACTION FEEDBACK FIXTURE');
+      await modal.getByLabel('Details',{exact:true}).fill('SYNTHETIC FEEDBACK VERIFICATION WITH NO BUSINESS DATA OR EXTERNAL WRITES.');
+      await submit.click();await expect(modal).toContainText('Feedback submitted.');assert.equal(state.feedback.length,1);
+      await button(modal,'Close dialog').click();
+      await createLiveFixtureBuyer(page,'ACTION FIXTURE BUYER');
+      let view=await profile(page), overview=view.locator('.buyer-overview-grid');
+      const initial=await saved(page), initialFinance=finance(initial);
+      const edit=button(overview,'EDIT');await expect(edit).toHaveCount(1);await credited(edit);await shot('overview');
+      await edit.click();await expect(button(overview,'EDIT')).toHaveCount(0);
+      const competition=overview.getByRole('region',{name:'Competition',exact:true}), team=overview.getByRole('region',{name:'Team Remarks',exact:true}), own=overview.getByRole('region',{name:'Private Remarks',exact:true});
+      await competition.getByLabel('Competition 1',{exact:true}).fill('COMPETITOR FIXTURE SHARED NOTE');
+      await team.getByLabel('Team Remarks 1',{exact:true}).fill('TEAM FIXTURE PENDING DRAFT');
+      await own.getByLabel('Private Remarks 1',{exact:true}).fill('PRIVATE FIXTURE OWNER NOTE');
+      await credited(button(competition,'SAVE'));await credited(button(team,'SAVE'));await neutral(button(own,'SAVE'));
+      await view.getByRole('tab',{name:'Stem Records',exact:true}).click();await view.getByRole('tab',{name:'Overview',exact:true}).click();
+      await expect(team.getByLabel('Team Remarks 1',{exact:true})).toHaveValue('TEAM FIXTURE PENDING DRAFT');
+      await expect(own.getByLabel('Private Remarks 1',{exact:true})).toHaveValue('PRIVATE FIXTURE OWNER NOTE');
+      await own.getByLabel('Private Remarks 1',{exact:true}).scrollIntoViewIfNeeded();await shot('private-editor');
+      await button(competition,'Cancel').click();await expect(team.getByLabel('Team Remarks 1',{exact:true})).toHaveValue('TEAM FIXTURE PENDING DRAFT');
+      const beforePrivate=await saved(page);await button(own,'SAVE').click();
+      await expect(own).toContainText('PRIVATE FIXTURE OWNER NOTE');let after=await saved(page);
+      assert.deepEqual(after.contributions,beforePrivate.contributions);assert.deepEqual(after.audit,beforePrivate.audit);
+      await button(team,'SAVE').click();await expect(button(overview,'EDIT')).toBeVisible();after=await saved(page);
+      assert.equal(after.contributions.length,initial.contributions.length+1);
+      assert.ok(!JSON.stringify(after.contributions).includes('PRIVATE FIXTURE OWNER NOTE'));assert.ok(!JSON.stringify(after.audit).includes('PRIVATE FIXTURE OWNER NOTE'));
+      await button(overview,'EDIT').click();await expect(team.getByLabel('Team Remarks 1',{exact:true})).toHaveValue('TEAM FIXTURE PENDING DRAFT');await expect(button(team,'SAVE')).toBeDisabled();await expect(own.getByLabel('Private Remarks 1',{exact:true})).toHaveValue('PRIVATE FIXTURE OWNER NOTE');await expect(button(own,'SAVE')).toBeDisabled();
+      await competition.getByLabel('Competition 1',{exact:true}).fill('COMPETITOR FIXTURE SHARED NOTE');await button(competition,'SAVE').click();await button(team,'Cancel').click();await button(own,'Cancel').click();
+      await expect(button(overview,'EDIT')).toHaveCount(1);after=await saved(page);assert.equal(after.contributions.length,initial.contributions.length+2);assert.deepEqual(finance(after),initialFinance);
+      await button(page,'Close workspace').click();view=await profile(page);overview=view.locator('.buyer-overview-grid');await expect(overview).toContainText('PRIVATE FIXTURE OWNER NOTE');await expect(overview).toContainText('COMPETITOR FIXTURE SHARED NOTE');
+      const workspaceFeedback=page.locator('.window-foot').getByRole('button',{name:'Feedback for ecosystem',exact:true});await credited(workspaceFeedback);
+      await button(view,'Manage tabs').click();let manager=page.getByRole('dialog',{name:'Manage tabs',exact:true});await button(manager,'PRIVATE TAB').click();await manager.getByLabel('Tab 1 name',{exact:true}).fill('PRIVATE ACTION NOTE');await neutral(button(manager,'SAVE'));await button(manager,'SAVE').click();
+      await view.getByRole('tab',{name:/PRIVATE ACTION NOTE/}).click();const content=view.locator('.profile-tab-content');await neutral(button(content,'EDIT'));await button(content,'EDIT').click();await neutral(button(content,'SAVE'));await button(content,'Cancel').click();
+      await view.getByRole('tab',{name:'Overview',exact:true}).click();await button(overview,'EDIT').click();await team.getByLabel('Team Remarks 1',{exact:true}).fill('UNSAVED PREVIEW DRAFT');const beforePreview=await saved(page);
+      state.preview={role:'trader',officeId:'HONG KONG',officeName:'HONG KONG',readOnly:true};await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});await expect(page.getByRole('status',{name:'Role preview'})).toBeVisible();await expect(page.getByText('UNSAVED PREVIEW DRAFT',{exact:true})).toHaveCount(0);assert.deepEqual((await saved(page)).contributions,beforePreview.contributions);
+      state.preview=null;await invalidateFixtureAuthority(page,{user:state.user,preview:null});await expect(page.getByRole('status',{name:'Role preview'})).toHaveCount(0);view=await profile(page);await expect(view.locator('.buyer-overview-grid').getByRole('button',{name:'EDIT',exact:true})).toHaveCount(1);
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No page horizontal overflow');
+      state.user=null;await invalidateFixtureAuthority(page,{user:null,preview:null});await expect(page.getByRole('button',{name:'Feedback for ecosystem',exact:true})).toHaveCount(0);
+      assert.deepEqual(state.unexpected,[]);assert.deepEqual(errors,[]);
+      results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: one Overview EDIT, independent drafts/saves, credit/private distinction, feedback, private tabs, VIEW AS/signout`);
+    } catch(error) {await shot('failure');throw error;} finally {await context.close();}
+  }}finally{await browser.close();await writeFile(resolve(out,'results.json'),JSON.stringify({base,results},null,2));}
+}

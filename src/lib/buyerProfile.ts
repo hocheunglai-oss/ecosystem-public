@@ -1,3 +1,4 @@
+import { reportingDate } from './reportingDate';
 import type { Company, DemoState, Outcome } from './model';
 
 export type BuyerPeriod = '12m' | 'year' | 'all';
@@ -29,7 +30,7 @@ export function paymentDays(stem: Outcome, today: string) {
 }
 
 export function buyerPerformance(state: DemoState, buyerId: string, period: BuyerPeriod = '12m', now = new Date()) {
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const today = reportingDate.format(now);
   const end = calendarDay(today)!;
   const [year, month, day] = today.split('-').map(Number);
   const priorYearDay = Math.min(day, new Date(Date.UTC(year - 1, month, 0)).getUTCDate());
@@ -37,7 +38,7 @@ export function buyerPerformance(state: DemoState, buyerId: string, period: Buye
   const recordDay = (value: string) => {
     if (!value.includes('T')) return calendarDay(value);
     const parsed = new Date(value);
-    return Number.isFinite(parsed.getTime()) ? calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' }).format(parsed)) : null;
+    return Number.isFinite(parsed.getTime()) ? calendarDay(reportingDate.format(parsed)) : null;
   };
   const inPeriod = (value: string) => { const date = recordDay(value); return date !== null && date >= start && date <= end; };
   // One commercial STEM per enquiry, irrespective of product lines or duplicate imports.
@@ -76,7 +77,7 @@ export function buyerPrivateRemark(state: DemoState, buyerId: string, actorId: s
 
 /** Exact volumes only; pending ranges and missing pricing never become invented totals. */
 export function buyerTrends(stems: Outcome[], now = new Date()) {
-  const today = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Hong_Kong',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+  const today = reportingDate.format(now);
   const [year, month] = today.split('-').map(Number);
   const points = Array.from({length:6}, (_,index) => ({
     month: new Date(Date.UTC(year,month-6+index,1)).toISOString().slice(0,7), volume:0, pricedVolume:0, profit:0, margin:null as number|null,
@@ -87,7 +88,7 @@ export function buyerTrends(stems: Outcome[], now = new Date()) {
     seen.add(stem.enquiryId);
     const parsed = new Date(stem.bookedAt);
     if (!Number.isFinite(parsed.getTime())) continue;
-    const day = stem.bookedAt.includes('T') ? new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Hong_Kong',year:'numeric',month:'2-digit',day:'2-digit'}).format(parsed) : stem.bookedAt.slice(0,10);
+    const day = stem.bookedAt.includes('T') ? reportingDate.format(parsed) : stem.bookedAt.slice(0,10);
     if (day > today) continue;
     const point = points.find(item=>item.month===day.slice(0,7));
     if (!point) continue;

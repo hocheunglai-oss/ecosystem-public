@@ -20,7 +20,7 @@ Manage Tabs supports add, rename, remove, restore and reorder. Confirm content r
 
 Edit information beside the selected content in one text/table editor. Use the main tab strip and its manager action; do not repeat an Edit tab selector or Manage Tabs button inside the editor. Switching profiles, tabs or indices with unsaved work requires the existing discard guard. Cancellation keeps the editor and draft. Enlarged windows retain compact working widths and preserve drafts when resized.
 
-Text remains text; tables retain stable row/cell IDs. Table controls act on the focused row/column and accept pasted spreadsheet cells. Links preserve their original URL and case. Publication retains existing sources and records automatic change descriptions. Eligible shared changes use CONTRIBUTE +1; private saves, layout-only changes and no-op retries do not create contributions. Per-entry attribution comes from the authenticated actor and publication time; unchanged entries keep their prior attribution.
+Text remains text; tables retain stable row/cell IDs. Table controls act on the focused row/column and accept pasted spreadsheet cells. Links preserve their original URL and case. Publication retains existing sources and records automatic change descriptions. Each shared tab has one green EDIT action and a green SAVE action in its editor, with CONTRIBUTION +1 on hover or keyboard focus. Private saves remain neutral; private, layout-only changes and no-op retries do not create contributions. Per-entry attribution comes from the authenticated actor and publication time; unchanged entries keep their prior attribution.
 
 ## Storage and verification
 

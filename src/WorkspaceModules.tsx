@@ -1,3 +1,4 @@
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { ReleaseNotice, useBuyerCreditAvailable } from './ReleaseGate';
 import { isBuyerCreditWorkspace } from '../shared/ecoRelease';
 import LocationWorkspace from "./LocationWorkspace";
@@ -159,8 +160,7 @@ function ContributionLibrary({ open }: { open: OpenModal }) {
             </Field>
           )}
         </div>
-        <button
-          className="button primary"
+        <KnowledgeUpdateButton
           onClick={() =>
             open({
               type: "contribute",
@@ -169,8 +169,8 @@ function ContributionLibrary({ open }: { open: OpenModal }) {
             })
           }
         >
-          <Plus size={17} /> Contribute
-        </button>
+          EDIT
+        </KnowledgeUpdateButton>
       </section>
       <ContributionRecords open={open} feedback={false} />
     </>

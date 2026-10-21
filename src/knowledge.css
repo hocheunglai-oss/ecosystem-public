@@ -170,6 +170,7 @@
 .knowledge-prose {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  max-width: 86ch;
   line-height: 1.6;
   font-size: 12px;
   margin: 0;
@@ -542,6 +543,8 @@
 .knowledge-facts header {
   margin-bottom: 5px;
 }
+.knowledge-facts > header { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
+.knowledge-facts > header > .attachments-control { margin-left: auto; }
 .knowledge-content {
   padding: 14px 18px;
 }
@@ -1041,5 +1044,6 @@
 .knowledge-content-toolbar,.shared-supplier-content-toolbar { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-bottom:12px; min-width:0; }
 .knowledge-content-toolbar h3 { margin:0 auto 0 0; min-width:0; overflow-wrap:anywhere; }
 .knowledge-content-toolbar > div { display:flex; flex-wrap:wrap; gap:8px; }
+.knowledge-block:has(> .knowledge-prose), .profile-tab-content > .knowledge-block:has(> .knowledge-prose) { width:100%; max-width:90ch; margin-inline:auto; }
 
 .knowledge-profile-country { color:var(--muted); font-size:11px; }

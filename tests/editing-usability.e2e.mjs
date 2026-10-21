@@ -112,13 +112,13 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
           await expect(anchor).toHaveAttribute('rel', 'noopener noreferrer');
         }
         const prose = workspace.locator('.knowledge-block').filter({ has: page.getByRole('heading', { name: 'WEB REFERENCE', exact: true }) });
-        await prose.getByRole('button', { name: /^(Update|CONTRIBUTE.*) WEB REFERENCE$/i }).click();
+        await btn(workspace.locator('.knowledge-content-toolbar'), 'EDIT').click();
         const text = workspace.getByLabel('Block 1 text', { exact: true });
         await expect(text).toHaveValue(`READ (${link}).`);
         assert.equal(await text.evaluate(el => getComputedStyle(el).textTransform), 'none');
         await text.fill(`updated ${link}`);
         await expect(text).toHaveValue(`UPDATED ${link}`);
-        await btn(workspace.locator('.knowledge-editor'), 'CONTRIBUTE +1').click();
+        await btn(workspace.locator('.knowledge-editor'), /^SAVE$/i).click();
         await expect(prose.locator('a')).toHaveAttribute('href', link);
         await shot('links');
         await btn(workspace, 'Close workspace').click();

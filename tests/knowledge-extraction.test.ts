@@ -63,7 +63,7 @@ test('a stale document or Key Info field rejects the entire batch without partia
   const before = JSON.stringify(changed);
   assert.throws(() => applyAction(changed, batch, actor, when), /Information changed/);
   assert.equal(JSON.stringify(changed), before);
-  const keyInfoChanged = applyAction(state, { type: 'save-intelligence', portId: target.id, baseKeyInfo: emptyIntelligenceKeyInfo(), keyInfo: { ...emptyIntelligenceKeyInfo(), isoSpecs: 'All' }, reason: 'Concurrent change' }, actor, when);
+  const keyInfoChanged = applyAction(state, { type: 'save-port-information', portId: target.id, baseKeyInfo: emptyIntelligenceKeyInfo(), keyInfo: { ...emptyIntelligenceKeyInfo(), isoSpecs: 'All' }, reason: 'Concurrent change' }, actor, when);
   const keyInfoBefore = JSON.stringify(keyInfoChanged);
   assert.throws(() => applyAction(keyInfoChanged, batch, actor, when), /Key Info changed/);
   assert.equal(JSON.stringify(keyInfoChanged), keyInfoBefore);
@@ -101,7 +101,7 @@ test('manual Key Info changes do not prevent a later extraction from restoring a
   state = applyAction(state, buildExtractionBatch(state, [field], metadata), actors[0], when);
   const changeManually = () => {
     const before = state.ports.find(port => port.id === target.id)!.intelligenceKeyInfo!;
-    state = applyAction(state, { type: 'save-intelligence', portId: target.id, baseKeyInfo: before, keyInfo: { ...before, qualityClaim: 'No' }, reason: 'Updated terms' }, actors[0], when);
+    state = applyAction(state, { type: 'save-port-information', portId: target.id, baseKeyInfo: before, keyInfo: { ...before, qualityClaim: 'No' }, reason: 'Updated terms' }, actors[0], when);
   };
   changeManually();
   const sameSource = buildExtractionBatch(state, [field], { ...metadata, batchId: 'restore-original-source' });
@@ -180,7 +180,7 @@ test('free-text extraction publishes multiline values, current source and per-fi
   let state = createSeedState();
   const port = state.ports.find(item => item.id === target.id)!;
   const initial = { ...emptyIntelligenceKeyInfo(), sampleLocation: 'EXISTING AGREED SAMPLE LOCATION' };
-  state = applyAction(state, { type: 'save-intelligence', portId: port.id, baseKeyInfo: emptyIntelligenceKeyInfo(), keyInfo: initial, reason: 'Saved prior information' }, actors[1], '2026-10-09T07:00:00.000Z');
+  state = applyAction(state, { type: 'save-port-information', portId: port.id, baseKeyInfo: emptyIntelligenceKeyInfo(), keyInfo: initial, reason: 'Saved prior information' }, actors[1], '2026-10-09T07:00:00.000Z');
   const sampleStamp = state.ports.find(item => item.id === port.id)!.intelligenceEntryUpdates!.sampleLocation;
   const value = 'ISO 8217:2024 for the nominated grade.\nConfirm sulphur limit and certificate before delivery. '.repeat(3);
   assert.ok(value.length > 100, 'Free-text extraction is not limited by the former dropdown response bound');

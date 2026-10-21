@@ -6,8 +6,8 @@ import type { Action, DemoState } from './model';
 export function isBuyerCreditAction(action: Action, state: Pick<DemoState, 'contributions'>): boolean {
   switch (action.type) {
     case 'request-credit': case 'acknowledge-credit': case 'decide-credit': case 'add-company':
-    case 'save-buyer-private-list': case 'save-buyer-private-remark': case 'save-buyer-shared-list':
-    case 'add-buyer-competition': case 'save-buyer-credit-remarks': case 'set-active-credit-remark': case 'mark-credit-request-read':
+    case 'save-buyer-private-list': case 'save-buyer-shared-list':
+    case 'save-buyer-credit-remarks': case 'set-active-credit-remark': case 'mark-credit-request-read':
       return true;
     case 'save-knowledge': case 'suggest-knowledge': return isBuyerKnowledgeTarget(action.change.target.kind);
     case 'manage-knowledge-tabs': case 'save-extracted-knowledge': return action.changes.some(change => isBuyerKnowledgeTarget(change.target.kind));

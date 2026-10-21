@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actors, canTrade, contactsFor, currentMonth, getOutcomePrivateNote, isAdmin, profileFor, teamDrops, teamMembers, teamMonthlyStats, activeAccountTraders, type Enquiry } from '../src/lib/model';
+import { actors, canTrade, contactsFor, currentMonth, getOutcomePrivateNote, isAdmin, profileFor, teamDrops, teamMembers, teamMonthlyStats, activeAccountTraders, type Action, type Enquiry } from '../src/lib/model';
 import { createSeedState, upgradeDemoState } from '../src/lib/seed';
 import { createDemoIncoming, deserializeInbox, receiveInboxMessage, routeInboxSender } from '../src/inbox';
 import { applyAction, activeSupplierFixtures as historicalSupplierFixtures } from './fixtures/activeSuppliers';
@@ -51,7 +51,6 @@ test('Manager can contribute but cannot approve credit or change Admin controls'
     { type: 'decide-credit' as const, id: 'credit-001', approve: true, amount: 1000, terms: '30 days', note: 'Approved' },
     { type: 'save-lost-reasons' as const, reasons: state.lostReasons! },
     { type: 'review-contribution' as const, id: 'contribution-001', approve: true, note: 'Reviewed' },
-    { type: 'set-goals' as const, owner: trader.id, month: currentMonth(), volume: 10000, profit: 130000 },
   ]) assert.throws(() => applyAction(state, action, manager, now), /role cannot/);
   assert.doesNotThrow(() => applyAction(state, { type: 'save-lost-reasons', reasons: state.lostReasons! }, admin, now));
 });
@@ -83,11 +82,12 @@ test('account activity includes Manager enquiries for other traders', () => {
   assert.equal(activeAccountTraders(state, 'company-meridian', trader.id)[0].trader.id, manager.id);
 });
 
-test('own contact edits validate identities and route new demo arrivals without changing old ownership', () => {
+test('stored contact records route new demo arrivals without changing historical ownership', () => {
   const original = createSeedState();
   const oldMessage = createDemoIncoming('email', trader.id, new Date(now), 'before-edit');
   const accepted = receiveInboxMessage([], oldMessage).items;
-  const state = applyAction(original, { type: 'update-profile', phone: '+852 1111 2222', email: ' OTTO.NEW@ECOSYSTEM.EXAMPLE ' }, trader, now);
+  const state = structuredClone(original);
+  state.profiles = { ...state.profiles, [trader.id]: { phone: '+85211112222', email: 'otto.new@ecosystem.example' } };
   assert.deepEqual(profileFor(state, trader.id), { phone: '+85211112222', email: 'otto.new@ecosystem.example' });
   assert.equal(profileFor(original, trader.id).email, 'otto@ecosystem.example');
   assert.equal(routeInboxSender('email', 'otto@ecosystem.example', contactsFor(state)).owner, null);
@@ -104,16 +104,12 @@ test('own contact edits validate identities and route new demo arrivals without 
   assert.equal(routeInboxSender('email', 'vincent@ecosystem.example', contactsFor(state)).owner, manager.id);
 });
 
-test('invalid or duplicate contacts cannot capture another profile\'s enquiries', () => {
-  const state = createSeedState();
-  for (const details of [
-    { phone: 'abc', email: 'otto@ecosystem.example' },
-    { phone: '+85211112222', email: 'Otto <otto@ecosystem.example>' },
-    { phone: profileFor(state, manager.id).phone, email: 'new@ecosystem.example' },
-    { phone: '+85211112222', email: 'VINCENT@ECOSYSTEM.EXAMPLE' },
-  ]) assert.throws(() => applyAction(state, { type: 'update-profile', ...details }, trader, now), /valid|belongs to another/);
-  const snapshot = structuredClone(state);
-  assert.doesNotThrow(() => applyAction(state, { type: 'update-profile', ...profileFor(state, credit.id) }, credit, now));
+test('retired local profile mutations cannot replace authenticated contact identities', () => {
+  const state = createSeedState(), snapshot = structuredClone(state);
+  for (const actor of actors) {
+    const retired = { type: 'update-profile', phone: '+85211112222', email: 'new@ecosystem.example' } as unknown as Action;
+    assert.throws(() => applyAction(state, retired, actor, now), /not supported/);
+  }
   assert.deepEqual(state, snapshot);
 });
 

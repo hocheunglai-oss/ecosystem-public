@@ -42,7 +42,7 @@ import { useSupplierCatalog } from "./lib/supplierApi";
 import { productSupplierName } from "./lib/fixtureSuppliers";
 import { lostReasonsFor } from "./lib/lostReasons";
 import { useMobileInterface } from "./mobile";
-import { IntelligenceAmendment, IntelligenceEditor } from "./IntelligenceEditor";
+import { IntelligenceAmendment } from "./IntelligenceEditor";
 import { emptyIntelligenceKeyInfo } from "./lib/intelligenceFields";
 type Close = () => void;
 function Frame({
@@ -311,32 +311,16 @@ function ContributionForm({
   close: Close;
 }) {
   const { state, run } = useDemo();
-  const target =
-    spec.targetType === "port"
-      ? state.ports.find((p) => p.id === spec.targetId)?.name
-      : spec.targetType === "company"
-        ? state.companies.find((c) => c.id === spec.targetId)?.name
-        : spec.targetType === "country"
-          ? spec.targetId
-          : spec.targetType === "feedback"
-            ? "Feedback for ecosystem"
-            : "Shared case study";
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [source, setSource] = useState("");
-  const feedback = spec.targetType === "feedback";
-  if (feedback) return <Frame title="Feedback for ecosystem" close={close}><FeedbackPortal /></Frame>;
+  if (spec.targetType === "feedback") return <Frame title="Feedback for ecosystem" close={close}><FeedbackPortal /></Frame>;
+  const target = spec.targetType === "port" ? state.ports.find(p => p.id === spec.targetId)?.name
+    : spec.targetType === "company" ? state.companies.find(c => c.id === spec.targetId)?.name
+    : spec.targetType === "country" ? spec.targetId : "Shared case study";
   return (
     <Frame
-      title={
-        spec.targetType === "feedback"
-          ? "Feedback for ecosystem"
-          : spec.targetType === "country"
-            ? "Contribute"
-            : spec.targetType === "case-study"
-              ? "Share a case study"
-              : "Contribute your knowledge"
-      }
+      title={spec.targetType === "country" ? "Contribute" : spec.targetType === "case-study" ? "Share a case study" : "Contribute your knowledge"}
       close={close}
     >
       <div className="contribution-reward">
@@ -352,11 +336,9 @@ function ContributionForm({
                 targetType: spec.targetType,
                 targetId: spec.targetId,
                 title,
-                body: body + (!feedback && source ? `\nSource: ${source}` : ""),
+                body: body + (source ? `\nSource: ${source}` : ""),
               },
-              spec.targetType === "feedback"
-                ? "Feedback sent."
-                : "Updated.",
+              "Updated.",
             )
           )
             close();
@@ -671,8 +653,6 @@ export default function Modals({
       return <OutcomeForm spec={spec} close={close} />;
     case "company":
       return <CompanyForm name={spec.name} close={close} />;
-    case "intelligence-edit":
-      return <IntelligenceEditor key={spec.portId} portId={spec.portId} close={close} />;
     case "contribute":
       return <ContributionForm spec={spec} close={close} />;
     case "review-contribution":

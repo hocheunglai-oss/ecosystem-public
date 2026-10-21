@@ -2,11 +2,14 @@ import { useState, useEffect, useLayoutEffect, useRef, type KeyboardEvent, type 
 import { ChevronDown, Plus, Copy, ArrowDownAZ } from "lucide-react";
 import { useDemo } from "./store";
 import { uid } from "./lib/model";
-import { isEmailText, uppercaseText } from "./lib/uppercase";
-import { pasteKnowledgeTable, type KnowledgeBlock } from "./lib/knowledge";
+import { hasCaseSensitiveText, uppercaseText } from "./lib/uppercase";
+import type { KnowledgeBlock } from "./lib/knowledge";
+import { assertPreviewWritable } from './lib/previewGuard';
+import { parseClipboardTable, pasteTableCells, tableToTsv, type TableClipboard } from './lib/tablePaste';
 import { knowledgeCellAddress, knowledgeColumnLetter, moveKnowledgeColumn, moveKnowledgeRow, sortKnowledgeRows } from "./lib/knowledgeTableEditor";
 import { dropDestination, dropEdge, type DropEdge } from "./lib/dropPosition";
 import "./knowledge-sheet.css";
+import './table-paste.css';
 
 type Table = Extract<KnowledgeBlock, { type: "table" }>;
 type Point = { row: number; col: number };
@@ -14,11 +17,16 @@ type Header = { kind: "row" | "column"; index: number };
 type Menu = Header & { left: number; top: number };
 type Resize = { column: number; startX: number; startWidth: number; width: number };
 const clampWidth = (width: number) => Math.max(100, Math.min(600, Math.round(width)));
+import TablePasteDialog from './TablePasteDialog';
 
 export default function KnowledgeTableEditor({ table, onChange }: { table: Table; onChange: (value: Table) => void }) {
   const { notify } = useDemo();
   const [focus, setFocus] = useState<Point>({ row: 0, col: 0 });
   const [page, setPage] = useState(0);
+  const [pasteOpen, setPasteOpen] = useState(false), [pasteError, setPasteError] = useState('');
+  const alive = useRef(true), currentTable = useRef(table);
+  currentTable.current = table;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [menu, setMenu] = useState<Menu>();
   const [drop, setDrop] = useState<Header & { edge: DropEdge }>();
   const [resize, setResize] = useState<Resize>();
@@ -36,7 +44,7 @@ export default function KnowledgeTableEditor({ table, onChange }: { table: Table
   useEffect(() => {
     if (!pendingFocus.current) return;
     const point = pendingFocus.current;
-    const cell = grid.current?.querySelector<HTMLInputElement>(`[data-row="${point.row}"][data-col="${point.col}"]`);
+    const cell = grid.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-row="${point.row}"][data-col="${point.col}"]`);
     cell?.focus(); cell?.select(); pendingFocus.current = null;
   }, [table, index, focus]);
   useEffect(() => {
@@ -73,6 +81,19 @@ export default function KnowledgeTableEditor({ table, onChange }: { table: Table
     setFocus({ row: nextRow, col: nextCol }); setPage(Math.floor(nextRow / 50));
   }
   function focusCell(nextRow: number, nextCol: number) { selectCell(nextRow, nextCol, true); }
+  function pasteCells(clipboard: TableClipboard, row: number, col: number) {
+    const rowId = currentTable.current.rows[row]?.id, columnId = currentTable.current.columns[col]?.id;
+    try {
+      if (!alive.current) return;
+      assertPreviewWritable();
+      const parsed = parseClipboardTable(clipboard);
+      const nextRow = currentTable.current.rows.findIndex(item => item.id === rowId), nextColumn = currentTable.current.columns.findIndex(item => item.id === columnId);
+      if (nextRow < 0 || nextColumn < 0) throw new Error('TABLE CHANGED. SELECT A CELL AND PASTE AGAIN.');
+      const next = pasteTableCells(currentTable.current, nextRow, nextColumn, parsed.cells.map(line => line.map(uppercaseText)), () => uid('cell'));
+      onChange(next); setPasteError('');
+      if (parsed.notes.length) notify(parsed.notes.join(' '));
+    } catch (failure) { if (alive.current) setPasteError((failure as Error).message); }
+  }
   function mutate(fn: (value: Table) => void) { const next = structuredClone(table); fn(next); onChange(next); }
   function closeMenu(restoreFocus = true) { setMenu(undefined); if (restoreFocus) menuTrigger.current?.focus({ preventScroll: true }); }
   function openMenu(kind: Header["kind"], at: number, trigger: HTMLButtonElement, x?: number, y?: number) {
@@ -169,7 +190,7 @@ export default function KnowledgeTableEditor({ table, onChange }: { table: Table
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (value && commit) mutate(next => { next.columns[value.column].width = value.width; });
   }
-  function navigate(event: KeyboardEvent<HTMLInputElement>, cellRow: number, cellCol: number) {
+  function navigate(event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, cellRow: number, cellCol: number) {
     if (event.metaKey || event.ctrlKey || event.nativeEvent.isComposing) return;
     const input = event.currentTarget;
     const caretStart = input.selectionStart === 0 && input.selectionEnd === 0;
@@ -199,11 +220,18 @@ export default function KnowledgeTableEditor({ table, onChange }: { table: Table
       <button type="button" disabled={table.rows.length < 2} onClick={() => sort("asc")}><ArrowDownAZ size={14} /> Sort A–Z</button>
       <button type="button" disabled={table.rows.length >= 1000} onClick={() => insertRow(table.rows.length)}><Plus size={13} /> Add Row</button>
       <button type="button" disabled={table.columns.length >= 30} onClick={() => insertColumn(table.columns.length)}><Plus size={13} /> Add Column</button>
+      <button type="button" onClick={() => setPasteOpen(true)}>PASTE TABLE</button>
       <button type="button" aria-label="Copy table" title="Copy table" onClick={() => {
-        const value = [table.columns.map(item => item.name), ...table.rows.map(item => item.cells)].map(item => item.join("\t")).join("\n");
-        void navigator.clipboard.writeText(uppercaseText(value)).then(() => notify("Table copied."), () => notify("Copy unavailable. Select and copy the table.", true));
+        void Promise.resolve().then(() => navigator.clipboard.writeText(tableToTsv([table.columns.map(item => item.name), ...table.rows.map(item => item.cells)])))
+          .then(() => notify("Table copied."), () => notify("Copy unavailable. Select and copy the table.", true));
       }}><Copy size={14} /><span>Copy</span></button>
     </div>
+    {pasteError && <p className="notice rose" role="alert">{pasteError}</p>}
+    {pasteOpen && <TablePasteDialog onClose={() => setPasteOpen(false)} replaceExisting={table.rows.some(item => item.cells.some(Boolean))} onImport={imported => {
+      assertPreviewWritable();
+      onChange({ ...table, columns: imported.columns.map(name => ({ id: uid('column'), name })), rows: imported.rows.map(cells => ({ id: uid('row'), cells })) });
+      setPasteOpen(false); setPasteError(''); setFocus({ row: 0, col: 0 }); setPage(0);
+    }} />}
     <div className="knowledge-table-wrap" ref={grid} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDrop(undefined); }} onWheel={() => { if (menu) closeMenu(false); }}>
       <table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
         <colgroup><col style={{ width: 52 }} />{table.columns.map((item, column) => <col key={item.id} style={{ width: widths[column] }} />)}</colgroup>
@@ -214,7 +242,7 @@ export default function KnowledgeTableEditor({ table, onChange }: { table: Table
             <button type="button" className="sheet-header-menu sheet-column-menu" aria-label={`Column ${column + 1} actions`} aria-haspopup="menu" aria-expanded={menu?.kind === "column" && menu.index === column} title={`Column ${knowledgeColumnLetter(column)} actions · Drag to move`} draggable
               onDragStart={event => dragStart(event, { kind: "column", index: column })} onDragEnd={() => { dragging.current = undefined; setDrop(undefined); }}
               onClick={event => openMenu("column", column, event.currentTarget)}>{knowledgeColumnLetter(column)}<ChevronDown size={11} /></button>
-            <input data-row={-1} data-col={column} aria-label={`Column ${column + 1} name`} required maxLength={150} value={item.name} onFocus={() => setFocus({ row, col: column })} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); focusCell(index * 50, column); } }}
+            <input data-row={-1} data-col={column} aria-label={`Column ${column + 1} name`} required maxLength={150} value={item.name} data-case-sensitive-value={hasCaseSensitiveText(item.name) ? "" : undefined} onFocus={() => setFocus({ row, col: column })} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); focusCell(index * 50, column); } }}
               onChange={event => mutate(value => { value.columns[column].name = event.target.value; })} />
           </div>
           <button type="button" className="sheet-resize-handle" aria-label={`Resize column ${column + 1}`} title={`Column width ${widths[column]} px`} onPointerDown={event => resizeStart(event, column)} onPointerMove={resizeMove} onPointerUp={event => resizeEnd(event, true)} onPointerCancel={event => resizeEnd(event, false)}
@@ -230,15 +258,15 @@ export default function KnowledgeTableEditor({ table, onChange }: { table: Table
                 onDragStart={event => dragStart(event, { kind: "row", index: absolute })} onDragEnd={() => { dragging.current = undefined; setDrop(undefined); }}
                 onClick={event => openMenu("row", absolute, event.currentTarget)}>{absolute + 1}<ChevronDown size={10} /></button>
             </th>{item.cells.map((value, column) => <td key={table.columns[column].id} className={`${row === absolute && col === column ? "selected-cell" : col === column ? "selected-table-column" : ""} ${drop?.kind === "column" && drop.index === column ? `sheet-drop-column-${drop.edge}` : ""}`}>
-              <input data-row={absolute} data-col={column} aria-label={`Row ${absolute + 1}, ${table.columns[column].name}`} value={value} data-email-value={isEmailText(value) ? "" : undefined} maxLength={5000}
+              <textarea className="sheet-cell" rows={Math.min(4, Math.max(1, value.split('\n').length))} data-row={absolute} data-col={column} aria-label={`Row ${absolute + 1}, ${table.columns[column].name}`} value={value} data-case-sensitive-value={hasCaseSensitiveText(value) ? "" : undefined} maxLength={5000}
                 onFocus={() => setFocus({ row: absolute, col: column })} onKeyDown={event => navigate(event, absolute, column)}
                 onChange={event => mutate(next => { next.rows[absolute].cells[column] = event.target.value; })}
                 onPaste={event => {
                   const clipboard = event.clipboardData.getData("text/plain");
-                  if (!/[\t\n\r]/.test(clipboard)) return;
+                  const html = event.clipboardData.getData('text/html');
+                  if (!/[\t\n\r]/.test(clipboard) && !/<table(?:\s|>)/i.test(html)) return;
                   event.preventDefault();
-                  try { onChange(pasteKnowledgeTable(table, absolute, column, uppercaseText(clipboard), () => uid("cell"))); }
-                  catch (error) { notify((error as Error).message, true); }
+                  void pasteCells({ text: clipboard, html }, absolute, column);
                 }} />
             </td>)}</tr>;
         })}</tbody>

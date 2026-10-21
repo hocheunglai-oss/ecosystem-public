@@ -125,13 +125,13 @@ test('table-row Hats identify that row, retaining its author when another row ch
 test('Key Info fields have independent latest-contributor attribution and reader slots', () => {
   let state = createSeedState();
   const base = state.ports.find(port => port.id === target.id)!.intelligenceKeyInfo ?? emptyIntelligenceKeyInfo();
-  state = applyAction(state, { type: 'save-intelligence', portId: target.id, keyInfo: { ...base, qualityClaim: 'All', isoSpecs: 'All' }, reason: 'Confirmed supplier terms' }, author, firstAt);
+  state = applyAction(state, { type: 'save-port-information', portId: target.id, baseKeyInfo: base, keyInfo: { ...base, qualityClaim: 'All', isoSpecs: 'All' }, reason: 'Confirmed supplier terms' }, author, firstAt);
   const field: HatTarget = { kind: 'key-info', portId: target.id, field: 'qualityClaim' };
   const otherField: HatTarget = { ...field, field: 'isoSpecs' };
   assert.equal(hatRecipient(state, field)?.updatedBy, author.id);
   state = give(state, field);
   const current = state.ports.find(port => port.id === target.id)!.intelligenceKeyInfo!;
-  state = applyAction(state, { type: 'save-intelligence', portId: target.id, keyInfo: { ...current, qualityClaim: 'No' }, reason: 'Reconfirmed claim terms' }, replacement, thirdAt);
+  state = applyAction(state, { type: 'save-port-information', portId: target.id, baseKeyInfo: current, keyInfo: { ...current, qualityClaim: 'No' }, reason: 'Reconfirmed claim terms' }, replacement, thirdAt);
   state = give(state, field, otherReader);
   state = give(state, otherField, reader);
   assert.equal(hatCount(state, author.id), 2);

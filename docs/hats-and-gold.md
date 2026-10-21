@@ -50,7 +50,7 @@ Stationary Fratelli Cosulich bunker barges are decorative harbour artwork. They 
 
 The profile-header search covers all tabs in the current country, port or supplier profile, including inherited country information and generated price/fixture data. Fixture searching uses the existing actor-filtered index. Results are grouped by source tab; selecting a group opens that tab, and clearing search retains the earlier selected tab. It does not search other location or supplier profiles.
 
-Compact coloured title rows distinguish the profile and information sections. Key Info has a transparent body with bold facts. Eligible shared knowledge actions use CONTRIBUTE +1 with the shared compact control style in both themes. Private saves do not promise contributions.
+Compact coloured title rows distinguish the profile and information sections. Key Info has a transparent body with bold facts. Each shared tab has one green EDIT action; its editor uses green SAVE. These controls show CONTRIBUTION +1 on hover or keyboard focus and use the shared compact style in both themes. Private saves remain neutral and do not promise contributions.
 
 Every knowledge block requires a nonblank title. Existing untitled content receives a section-based title, preserving IDs, contents, attribution, Hats, sources and immutable history. This migration does not create a revision or reward. Drafts opened before the migration retain compatible fallback titles, while new entries and edits cannot save blank titles. AI extraction uses the same fallback for untitled text or tables.
 

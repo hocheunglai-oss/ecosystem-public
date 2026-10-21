@@ -403,11 +403,42 @@ export function holidayLocalDate(now: Date, timeZone: string): string | null {
 export function holidayDates(calendar: CountryHolidayCalendar, year: number): readonly PublicHoliday[] {
   return [...(calendar.years[year]?.holidays ?? [])].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
 }
-export function nextPublicHoliday(calendar: CountryHolidayCalendar, localDate: string): PublicHoliday | undefined {
+export function nextPublicHoliday(calendar: CountryHolidayCalendar, localDate: string, includeToday = true): PublicHoliday | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate)) return undefined;
   return Object.values(calendar.years).flatMap(year => year.holidays)
-    .filter(day => day.date >= localDate)
+    .filter(day => includeToday ? day.date >= localDate : day.date > localDate)
     .sort((a, b) => a.date.localeCompare(b.date))[0];
+}
+
+export type TodayPublicHoliday = { kind: 'holiday'; holidays: readonly PublicHoliday[] } | { kind: 'nonholiday' | 'unconfirmed' | 'unavailable' };
+
+function publicationComplete(publication: HolidayYear | undefined): boolean {
+  // A pending/movable date or employer-dependent schedule cannot prove absence.
+  return Boolean(publication && !publication.pending?.length && !publication.holidays.some(day => day.status === 'scheduled') &&
+    !publication.notes?.some(note => note.includes('PRIVATE EMPLOYERS')));
+}
+
+export function todayPublicHoliday(calendar: CountryHolidayCalendar | undefined, localDate: string | null): TodayPublicHoliday {
+  if (!calendar || !localDate || !/^\d{4}-\d{2}-\d{2}$/.test(localDate)) return { kind: 'unavailable' };
+  const civilDate = new Date(`${localDate}T12:00:00Z`);
+  if (!Number.isFinite(civilDate.getTime()) || civilDate.toISOString().slice(0, 10) !== localDate) return { kind: 'unavailable' };
+  const publication = calendar.years[Number(localDate.slice(0, 4))];
+  if (!publication) return { kind: 'unavailable' };
+  const holidays = publication.holidays.filter(day => day.date === localDate && day.status !== 'scheduled');
+  if (holidays.length) return { kind: 'holiday', holidays };
+  // The existing Hong Kong publication lists named holidays and explicitly notes
+  // recurring Sundays separately. An absent named row cannot negate a Sunday.
+  if (!publicationComplete(publication) || calendar.code === 'HK' && civilDate.getUTCDay() === 0) return { kind: 'unconfirmed' };
+  return { kind: 'nonholiday' };
+}
+
+/** Missing years or unconfirmed dates may precede the next published entry. */
+export function nextHolidayIsComplete(calendar: CountryHolidayCalendar, localDate: string, next: PublicHoliday): boolean {
+  if (calendar.code === 'HK') return false;
+  for (let year = Number(localDate.slice(0, 4)); year <= Number(next.date.slice(0, 4)); year++) {
+    if (!publicationComplete(calendar.years[year])) return false;
+  }
+  return true;
 }
 export function formatHolidayDate(date: string, includeYear = false): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', ...(includeYear ? { year: 'numeric' } : {}), timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`)).toUpperCase();

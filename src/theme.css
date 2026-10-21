@@ -35,7 +35,10 @@
   .home-display-controls { right: 22px; bottom: 37px; }
 }
 
-/* Explicit navy surfaces. Light mode continues to use its existing styles. */
+/* Standard summary panels share the flat workspace surface in each theme. */
+:is(.office-selected-summary, .resource-balance) { background: var(--ws-surface, #eef3f9); }
+
+/* Explicit navy surfaces. */
 :root[data-theme="dark"] :is(.workspace-window, .modal) .contribution-reward {
   color: var(--theme-amber);
 }
@@ -72,7 +75,7 @@
   color-scheme: dark;
   color: var(--theme-ink);
   border-color: #789fa659;
-  background: linear-gradient(135deg, #172737, #0e1a28 78%);
+  background: var(--theme-canvas);
   box-shadow: 0 28px 100px #000a, inset 0 1px #c1ebed0b;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal)::backdrop {
@@ -80,7 +83,7 @@
 }
 :root[data-theme="dark"] .workspace-window .window-toolbar {
   color: var(--theme-ink);
-  background: linear-gradient(100deg, #1b3043, #172737);
+  background: var(--theme-panel);
   border-color: var(--theme-line);
   box-shadow: 0 2px 20px #0001;
 }
@@ -195,7 +198,7 @@
 ) { color: var(--theme-ink); background: var(--theme-raised); border-color: #79afb1; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .button.primary {
   color: #172d20;
-  background: linear-gradient(110deg, #b8ef79, #d4f879);
+  background: var(--theme-lime);
   border-color: #b6dc62;
   box-shadow: inset 0 1px #ffffff59, 0 3px 14px #a0d44b15;
 }
@@ -228,7 +231,7 @@
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.badge.rose, .notice.rose, .segmented .active.danger) { color: var(--theme-rose); background: #462c3c; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.badge.blue, .notice.blue) { color: #b4dff9; background: #203c54; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.enquiry-format-error, .center-account-notice p) { color: var(--theme-amber); }
-:root[data-theme="dark"] .workspace-window .center-account-notice { background: linear-gradient(90deg, #403526, transparent); border-color: #c49d59; }
+:root[data-theme="dark"] .workspace-window .center-account-notice { background: #403526; border-color: #c49d59; }
 :root[data-theme="dark"] .workspace-window .center-account-notice span { color: #d4bd92; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.new-enquiry-label, .center-incoming-open .new-enquiry-label, .resource-history li > b) { color: var(--theme-green); }
 
@@ -255,21 +258,21 @@
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item:hover, .port-card:hover, .center-incoming-open:hover, .center-history-compact summary:hover) { background: var(--theme-raised); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item.active, .port-card.active, .center-incoming-row.is-selected, .office-comparison-table tbody tr.is-selected) {
-  background: linear-gradient(105deg, #253e3f, #1d334b);
+  background: var(--theme-raised);
   border-color: #6b9695;
   box-shadow: inset 3px 0 #8dd4b3;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-avatar, .square-icon, .circle-icon, .step-number) { color: var(--theme-cyan); background: #223e4c; }
 :root[data-theme="dark"] .workspace-window .center-credit-indicator {
   color: var(--theme-ink);
-  background: linear-gradient(130deg, #173a43, #1a2c3e);
+  background: var(--theme-panel);
   border-color: #49818a;
   box-shadow: inset 0 1px #c4fcfb0a;
 }
 :root[data-theme="dark"] .workspace-window .center-credit-numbers > div:last-child strong { color: var(--theme-lime); }
 :root[data-theme="dark"] .workspace-window .center-credit-numbers .is-negative strong { color: var(--theme-rose) !important; }
 :root[data-theme="dark"] :is(.center-credit-track, .progress, .team-progress-track) { background: #36505e; }
-:root[data-theme="dark"] .workspace-window .center-queue-divider { background: linear-gradient(90deg, #638a9a, #30475b); box-shadow: none; }
+:root[data-theme="dark"] .workspace-window .center-queue-divider { background: var(--theme-line); box-shadow: none; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .outcome-form .fixture-product h3 { color: var(--theme-cyan); }
 
 /* Tables and resource history share the same contrast as the enquiry editor. */
@@ -291,7 +294,7 @@
   .office-selected-summary, .resource-balance
 ) {
   color: var(--theme-ink);
-  background: linear-gradient(120deg, #1e3547, #172a3b);
+  background: var(--theme-panel);
   border-color: var(--theme-line);
   box-shadow: inset 0 1px #c6eaf408;
 }

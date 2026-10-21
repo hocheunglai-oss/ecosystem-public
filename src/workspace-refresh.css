@@ -1,4 +1,4 @@
-/* Pearl and platinum working surfaces; the harbour and home HUD keep their identity. */
+/* Flat working surfaces; the harbour and home HUD keep their identity. */
 :is(.workspace-window, .modal) {
   --ink: #1a3048;
   --muted: #5c6e83;
@@ -12,9 +12,7 @@
   color: var(--ink);
   border: 1px solid #ffffffcc;
   border-radius: 16px;
-  background:
-    radial-gradient(ellipse at 100% 0%, #d3eff86b, transparent 52%),
-    linear-gradient(145deg, #f9fbfe, #eaf0f7 65%);
+  background: var(--surface);
   box-shadow:
     0 28px 100px #102c4a47,
     inset 0 1px #ffffffd9;
@@ -25,7 +23,7 @@
 }
 .workspace-window .window-toolbar {
   color: #1e3a54;
-  background: linear-gradient(100deg, #ffffffed, #eaf0f8fa);
+  background: var(--ws-surface);
   border-bottom: 1px solid #9dbacd66;
   box-shadow: 0 2px 20px #2544650b;
   padding-block: 12px;
@@ -143,7 +141,7 @@
     box-shadow 0.16s;
 }
 :is(.workspace-window, .modal) .button.primary {
-  background: linear-gradient(110deg, #b8ef79, #d4f879);
+  background: var(--ws-accent);
   color: #173221;
   border: 1px solid #b6dc62;
   box-shadow:
@@ -332,7 +330,7 @@
   background: #f4fafc;
 }
 :is(.workspace-window, .modal) :is(.directory-item.active, .port-card.active) {
-  background: linear-gradient(105deg, #e5f3ef, #e7f0fc);
+  background: var(--ws-surface);
   border-color: #85bcbb;
   box-shadow: inset 3px 0 #57aaa5;
 }
@@ -360,7 +358,7 @@
 :is(.workspace-window, .modal) .table-wrap {
   scrollbar-color: #abbdd0 #e6edf5;
 }
-/* White controls sit above a cool pearl canvas with restrained mint and cyan accents. */
+/* Solid controls and panels retain their mint and cyan state accents. */
 .workspace-window .center-tabs {
   gap: 5px;
   border-color: #b8c8d866;
@@ -390,7 +388,7 @@
 }
 .workspace-window .center-parser {
   border-color: #b8cede;
-  background: linear-gradient(140deg, #fffffff0, #f8fbffd9);
+  background: var(--ws-field);
 }
 .workspace-window .center-standard {
   background: #f5fafd;
@@ -443,7 +441,7 @@
   color: #27465e;
   border: 1px solid #a9cbd0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #fbfffef5, #e4eefbf0);
+  background: var(--ws-surface);
   box-shadow:
     inset 0 1px #ffffff,
     0 5px 22px #133c5c0f;
@@ -480,7 +478,7 @@
   overflow: hidden;
 }
 .workspace-window .center-incoming-row.is-selected {
-  background: linear-gradient(115deg, #ecf8ec, #e3effc);
+  background: var(--ws-surface);
   border-color: #8bbab2;
   box-shadow: inset 3px 0 #77b689;
 }
@@ -517,13 +515,13 @@
 }
 .workspace-window .center-queue-divider {
   height: 1px;
-  background: linear-gradient(90deg, #85a9bc, #c5d6e4);
+  background: var(--line);
   margin: 17px 0;
   box-shadow: 0 1px #ffffff;
 }
 .workspace-window .center-account-notice {
   border-color: #c79740;
-  background: linear-gradient(90deg, #fff3d8, transparent);
+  background: #fff3d8;
   padding-block: 7px;
   border-radius: 0 5px 5px 0;
 }

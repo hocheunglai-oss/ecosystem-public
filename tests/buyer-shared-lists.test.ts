@@ -1,3 +1,4 @@
+import { competitionAction } from './fixtures/profile-actions';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { actors, applyAction, canTrade, personalResources, type Action } from '../src/lib/model';
@@ -16,7 +17,8 @@ for (const kind of ['group', 'competition'] as BuyerSharedListKind[]) test(`${ki
   const buyer = state.companies.find(item => item.id === buyerId)!;
   const targetId = kind === 'group' ? buyerGroupKey(buyer) : buyerId;
   const text = 'A useful original shared record for this buyer group.';
-  state = applyAction(state, kind === 'group' ? { type: 'submit-contribution', targetType: 'buyer-group', targetId, title: 'Group Remarks', body: text } : { type: 'add-buyer-competition', buyerId, text }, trader, at);
+  if (kind === 'group') state = applyAction(state, { type: 'submit-contribution', targetType: 'buyer-group', targetId, title: 'Group Remarks', body: text }, trader, at);
+  else state.contributions.unshift({ id: 'legacy-competition', targetType: 'buyer-competition', targetId, title: 'Competition', body: text, author: trader.id, createdAt: at, publishedAt: at, publication: 'direct', status: 'approved' });
   const original = structuredClone(state), entries = buyerSharedEntries(state, kind, targetId), gold = personalResources(state, manager.id).gold;
   const action: Action = { type: 'save-buyer-shared-list', buyerId, kind, baseEntries: buyerSharedDraft(entries), entries: [{ id: entries[0].id, text: 'The current supplier competition or shared remark has changed.' }, { id: 'second-entry', text: 'A new list entry' }] };
   const saved = applyAction(state, action, manager, later);
@@ -40,7 +42,7 @@ for (const kind of ['group', 'competition'] as BuyerSharedListKind[]) test(`${ki
 });
 
 test('unchanged, duplicate, blank, oversized and malformed lists cannot earn Gold or modify records', () => {
-  const state = applyAction(createSeedState(), { type: 'add-buyer-competition', buyerId, text: 'Competitor A' }, trader, at), original = structuredClone(state);
+  const state = applyAction(createSeedState(), competitionAction(createSeedState(), 'Competitor A', buyerId), trader, at), original = structuredClone(state);
   const baseEntries = buyerSharedDraft(buyerSharedEntries(state, 'competition', buyerId));
   for (const entries of [baseEntries, [{ ...baseEntries[0], text: ' competitor   a ' }], [{ id: 'a', text: 'A' }, { id: 'b', text: ' a ' }], [{ id: 'a', text: '' }], [{ id: 'a', text: 'x'.repeat(10001) }], [{ id: 'a', text: 'A' }, { id: 'a', text: 'B' }]]) {
     assert.throws(() => applyAction(state, { type: 'save-buyer-shared-list', buyerId, kind: 'competition', baseEntries, entries }, trader, later));
@@ -48,7 +50,7 @@ test('unchanged, duplicate, blank, oversized and malformed lists cannot earn Gol
   }
 });
 
-test('competition permissions stay restricted, group remarks share only the group and legacy adds still append after editing', () => {
+test('competition permissions stay restricted, group remarks share only the group and new list entries still append after editing', () => {
   const initial = createSeedState();
   for (const actor of actors) {
     const action: Action = { type: 'save-buyer-shared-list', kind: 'competition', buyerId, baseEntries: [], entries: [{ id: 'one', text: 'A' }] };
@@ -56,7 +58,7 @@ test('competition permissions stay restricted, group remarks share only the grou
     else assert.throws(() => applyAction(initial, action, actor, at), /role/);
   }
   let state = applyAction(initial, { type: 'save-buyer-shared-list', kind: 'competition', buyerId, baseEntries: [], entries: [{ id: 'one', text: 'A' }] }, trader, at);
-  state = applyAction(state, { type: 'add-buyer-competition', buyerId, text: 'B' }, trader, later);
+  state = applyAction(state, competitionAction(state, 'B', buyerId), trader, later);
   assert.deepEqual(buyerCompetitionEntries(state, buyerId).map(entry => entry.body), ['B','A']);
   const targetId = buyerGroupKey(state.companies.find(buyer => buyer.id === buyerId)!);
   state = applyAction(state, { type: 'save-buyer-shared-list', kind: 'group', buyerId, baseEntries: [], entries: [{ id: 'group-one', text: 'Group shared remark' }] }, credit, at);

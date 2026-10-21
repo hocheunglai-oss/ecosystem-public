@@ -32,6 +32,8 @@ import { KnowledgeEditor, KnowledgeComparison } from "./KnowledgeEditor";
 import { KnowledgeTopSuppliers } from "./KnowledgeTopSuppliers";
 import { SupplierFixtures } from "./SupplierFixtures";
 import SupplierWorkspace from "./SupplierWorkspace";
+import { useSupplierList } from "./lib/supplierApi";
+import { supplierPortForLocation } from "../shared/supplierPorts";
 import { ManageKnowledgeTabs, type KnowledgeTabSource } from "./ManageKnowledgeTabs";
 import { date, Modal } from "./ui";
 import { ResourceIcon } from "./ResourceWallet";
@@ -49,6 +51,8 @@ import { locationCountries, locationProfileTarget, profileCountryTarget, locatio
 import { portLocalTime } from "./lib/portTime";
 import type { Port } from "./lib/model";
 import CountryPublicHolidays from "./CountryPublicHolidays";
+import OfficialFuelTable, { officialTableMatches, useOfficialFuelTable } from './OfficialFuelTable';
+import { isOfficialNotes, officialNotes } from './lib/officialTableNotes';
 
 const keyInfoFields = [
   ["qualityClaim", "30 days quality claim period"],
@@ -219,6 +223,16 @@ export function KnowledgePanel({
     ...tabs.filter(tab => !isReadOnlyKnowledgeSection({ id: tab.id, title: tab.title, role: tab.role, blocks: [] })).map(tab => ({ id: tab.id, title: tab.title, visibility: 'shared' as const })),
   ];
   const searching = Boolean(query.trim());
+  const officialSection = port?.id === 'port-singapore' ? profileSections.find(section => section.entries.some(entry => isOfficialNotes(entry.block))) ?? profileSections.find(section => section.role === 'grades-delivery') : undefined;
+  const officialEntry = officialSection?.entries.find(entry => isOfficialNotes(entry.block));
+  const officialNotesValues = officialNotes(officialSection ? { blocks: officialSection.entries.map(entry => entry.block) } : undefined);
+  const officialFeed = useOfficialFuelTable(Boolean(officialSection && (searching || active?.id === officialSection.id)));
+  const renderOfficialTable = (query = '') => <OfficialFuelTable {...officialFeed} notes={officialNotesValues} query={query} />;
+  const supplierSearch = query.trim();
+  const supplierScope = port ? supplierPortForLocation(port) : undefined;
+  const supplierSections = profileSections.filter(section => section.role === "suppliers");
+  const checkSupplierMatches = Boolean(searching && supplierScope && supplierSections.some(section => !matchesKnowledgeSearch(supplierSearch, section.title)));
+  const supplierMatches = useSupplierList({ portId: supplierScope?.id, search: supplierSearch, limit: 1 }, checkSupplierMatches);
   const matchingPorts = hasPortsTab && searching ? countryPorts.filter(item => matchesKnowledgeSearch(query, "Ports", item.name, item.country)) : [];
   const supplierFixtureRecords = useMemo(() => actual.kind === "supplier" && searching
     ? indexSupplierFixtures(state, actor, actual.id) : [],
@@ -226,15 +240,16 @@ export function KnowledgePanel({
   const searchSections = searching ? profileSections.map(section => {
     const titleMatches = matchesKnowledgeSearch(query, section.title);
     const sectionQuery = titleMatches ? "" : query;
-    const entries = section.entries.filter(({ block }) => knowledgeBlockMatches(block, sectionQuery));
+    const entries = section.entries.filter(entry => entry !== officialEntry && knowledgeBlockMatches(entry.block, sectionQuery));
+    const official = section.id === officialSection?.id && officialTableMatches(officialFeed.snapshot, officialNotesValues, sectionQuery);
     const facts = Boolean(port && info && section.role === "port-information" && keyInfoFields.some(([field, label]) => matchesKnowledgeSearch(sectionQuery, "Key Info", label, info.keyInfo[field])));
     const suppliers = Boolean(port && section.role === "port-information" && getSupplierIntelligence(port.id, intelligence).suppliers.some(supplier => matchesKnowledgeSearch(sectionQuery, "Top Suppliers", supplier.name, ...supplier.grades)));
     const prices = Boolean(port && section.role === "price-history" && (titleMatches || portBuyPriceRows(state, port.id, sectionQuery).length));
     const fixtures = actual.kind === "supplier" && section.role === "supplier-fixtures" && (titleMatches || querySupplierFixtures(supplierFixtureRecords, { search: sectionQuery }).total > 0);
-    const supplierDirectory = Boolean(port && section.role === "suppliers");
+    const supplierDirectory = Boolean(port && section.role === "suppliers" && (titleMatches || (checkSupplierMatches && (supplierMatches.data?.total ?? 0) > 0)));
     const supplierDetails = actual.kind === "supplier" && section.role === "supplier-information" && Boolean(supplierInformation) && matchesKnowledgeSearch(sectionQuery, supplierInformationSearch);
-    return { ...section, entries, facts, suppliers, prices, fixtures, supplierDetails, supplierDirectory, query: sectionQuery };
-  }).filter(section => section.entries.length || section.facts || section.suppliers || section.prices || section.fixtures || section.supplierDetails || section.supplierDirectory || matchesKnowledgeSearch(query, section.title)) : [];
+    return { ...section, entries, facts, suppliers, prices, fixtures, supplierDetails, supplierDirectory, official, query: sectionQuery.trim() };
+  }).filter(section => section.entries.length || section.facts || section.suppliers || section.prices || section.fixtures || section.supplierDetails || section.supplierDirectory || section.official || matchesKnowledgeSearch(query, section.title)) : [];
   const openEditor = (
     mode: NonNullable<typeof editing>["mode"],
     source: { target: KnowledgeTarget; document: KnowledgeDocument; sectionId: string } = active,
@@ -264,7 +279,6 @@ export function KnowledgePanel({
     <header>
       <h3>Key Info</h3>
       <AttachmentsButton scope={{ target: actual, section: { id: 'key-info', name: 'Key Info' } }} />
-      {canEdit && <KnowledgeUpdateButton className="knowledge-entry-edit" onClick={() => open({ type: "intelligence-edit", portId: port.id })} />}
     </header>
     <dl>{keyInfoFields.filter(([field, label]) => matchesKnowledgeSearch(search, "Key Info", label, info.keyInfo[field])).map(([field, label]) => <div key={field}>
       <dt className="knowledge-fact-title"><span>{label}</span><KnowledgeEntryAttribution label={label} update={knowledgeKeyInfoUpdate(state, port.id, field)} hatTarget={{ kind: "key-info", portId: port.id, field }} /></dt>
@@ -278,6 +292,7 @@ export function KnowledgePanel({
     : onOpen ? supplierId => onOpen("suppliers", { portId: port.id, supplierId }) : undefined} />;
   const renderEntry = (entry: typeof profileSections[number]["entries"][number], search = "") => {
     const { block } = entry;
+    if (entry === officialEntry) return null;
     const getUpdate = entry.target.kind === "country" && countryEntryUpdate ? countryEntryUpdate : entryUpdate;
     return <KnowledgeBlockView key={`${knowledgeKey(state, entry.target)}:${block.id}`} block={block} query={search} showUpdate
       hatTarget={{ kind: "knowledge", target: entry.target, blockId: block.id }}
@@ -294,6 +309,7 @@ export function KnowledgePanel({
       })}
     </tbody></table></div>
   </section>;
+  const editingSources = editing ? profileSections.find(section => section.sources.some(source => source.target.kind === editing.target.kind && source.target.id === editing.target.id && source.sectionId === editing.sectionId))?.sources ?? [] : [];
   return (
     <section className={`knowledge${managedProfile ? " knowledge--open" : ""}${fixedLayout ? " knowledge-fixed-layout" : ""}`} aria-label={`${knowledgeName(state, actual)} information`}>
       <header className="knowledge-header">
@@ -305,12 +321,12 @@ export function KnowledgePanel({
           )}
           {port && <PortCurrentTime port={port} />}
           {port && countryTarget && holidayCountry && holidayCountry.toLowerCase() !== port.name.toLowerCase() && <span className="knowledge-profile-country">{holidayCountry}</span>}
-          {isLocation && holidayCountry && <CountryPublicHolidays country={holidayCountry} />}
+          {isLocation && holidayCountry && <CountryPublicHolidays country={holidayCountry} port={port} />}
           {navigation}
         </div>
         <label className="knowledge-profile-search">
           <Search size={14} aria-hidden="true" />
-          <input aria-label="Search all tabs" placeholder="Search all tabs" value={query}
+          <input aria-label="Search all tabs" placeholder="Search all tabs" maxLength={160} value={query}
             onChange={event => { const value = event.target.value; leaveEditor(() => { setQuery(value); setPanel(null); content.current?.scrollTo({ top: 0 }); }); }}
             onKeyDown={event => { if (event.key === "Escape" && query) { event.preventDefault(); event.stopPropagation(); setQuery(""); } }} />
           {query && <button type="button" aria-label="Clear information search" onClick={() => setQuery("")}><X size={13} /></button>}
@@ -346,12 +362,14 @@ export function KnowledgePanel({
           {!editing && !activePrivate && !panel && !searching && active && !readOnlySection && <header className="knowledge-content-toolbar">
             <h3>{active.title}</h3>
             {canEdit && <div className="knowledge-inline-tools">
-              <button type="button" className="button secondary" onClick={() => openEditor('text')}><Plus size={14} />Add text</button>
-              <button type="button" className="button secondary" onClick={() => openEditor('table')}><Plus size={14} />Add table</button>
               <KnowledgeUpdateButton onClick={() => openEditor('edit')} />
             </div>}
           </header>}
-          {editing ? (
+          {editing ? (<>
+        {editingSources.length > 1 && <label className="knowledge-edit-source">Information source<select aria-label="Information source" value={`${editing.target.kind}:${editing.target.id}:${editing.sectionId}`} onChange={event => {
+          const source = editingSources.find(item => `${item.target.kind}:${item.target.id}:${item.sectionId}` === event.target.value);
+          if (source) leaveEditor(() => openEditor('edit', source));
+        }}>{editingSources.map(source => <option key={`${source.target.kind}:${source.target.id}`} value={`${source.target.kind}:${source.target.id}:${source.sectionId}`}>{knowledgeName(state, source.target)} ({source.target.kind})</option>)}</select></label>}
         <KnowledgeEditor
           key={`${editing.target.kind}:${editing.target.id}:${editing.sectionId}:${editing.blockId ?? ''}:${editing.mode}`}
           embedded
@@ -363,6 +381,8 @@ export function KnowledgePanel({
           initial={editing.document}
           initialSection={editing.sectionId}
           initialBlock={editing.blockId}
+          officialTable={Boolean(officialSection && editing.sectionId === (officialEntry?.sectionId ?? officialSection.sectionId) && editing.target.kind === (officialEntry?.target.kind ?? officialSection.target.kind) && editing.target.id === (officialEntry?.target.id ?? officialSection.target.id))}
+          keyInfoPortId={port && editing.target.kind === 'port' && editing.target.id === port.id && editing.document.sections.some(section => section.id === editing.sectionId && knowledgeSectionRole(section) === 'port-information') ? port.id : undefined}
           mode={editing.mode}
           reservedTabNames={tabs.map((tab) => tab.title)}
           onManageTabs={canManageTabs ? () => { setEditing(undefined); setEditingDirty(false); setManaging(true); } : undefined}
@@ -376,7 +396,7 @@ export function KnowledgePanel({
             setQuery("");
             setPanel(null);
           }}
-        />
+        /></>
       ) : panel === "history" ? (
             <>
               <header className="knowledge-section-head">
@@ -394,17 +414,22 @@ export function KnowledgePanel({
               )) : <p className="knowledge-empty">No changes</p>}
             </>
           ) : searching ? (
-            searchSections.length || matchingPorts.length ? <>{matchingPorts.length > 0 && renderPortList(matchingPorts)}{searchSections.map(section => <section className="knowledge-search-section" key={section.id} aria-label={section.title}>
+            <>
+            {checkSupplierMatches && supplierMatches.loading && <p className="knowledge-empty" role="status">Searching suppliers…</p>}
+            {checkSupplierMatches && supplierMatches.error && <div className="knowledge-empty" role="alert">Supplier search unavailable. {supplierMatches.error}<button type="button" className="button secondary" onClick={supplierMatches.refresh}>Retry supplier search</button></div>}
+            {searchSections.length || matchingPorts.length ? <>{matchingPorts.length > 0 && renderPortList(matchingPorts)}{searchSections.map(section => <section className="knowledge-search-section" key={section.id} aria-label={section.title}>
               <header className="knowledge-search-section-head"><button type="button" onClick={() => selectSection(section.id)}>{section.title}<ArrowUpRight size={13} aria-hidden="true" /></button></header>
               {section.facts && renderKeyInfo(section.query)}
+              {section.official && renderOfficialTable(section.query)}
               {section.suppliers && renderTopSuppliers(section.query)}
               {section.supplierDetails && supplierInformation}
               {section.prices && port && <PortBuyPrices portId={port.id} title={section.title} search={section.query} />}
               {section.supplierDirectory && port && <div className="knowledge-supplier-search-results"><SupplierWorkspace key={`${port.id}:${section.query}`} open={open} onOpen={onOpen} port={port} embedded initialSearch={section.query} /></div>}
               {section.fixtures && <SupplierFixtures supplierId={actual.id} open={open} search={section.query} />}
               {section.entries.map(entry => renderEntry(entry, section.query))}
-              {!section.facts && !section.suppliers && !section.supplierDetails && !section.prices && !section.fixtures && !section.supplierDirectory && !section.entries.length && <p className="knowledge-empty">—</p>}
-            </section>)}</> : <p className="knowledge-empty" role="status">No results</p>
+              {!section.facts && !section.suppliers && !section.supplierDetails && !section.prices && !section.fixtures && !section.supplierDirectory && !section.official && !section.entries.length && <p className="knowledge-empty">—</p>}
+            </section>)}</> : !(checkSupplierMatches && (supplierMatches.loading || supplierMatches.error)) && <p className="knowledge-empty" role="status">No results</p>}
+            </>
           ) : activePrivateEntry?.controller.data ? (
             <PrivateProfileTabPanel key={`${activePrivateEntry.controller.scopeKey}:${activePrivateEntry.tab.id}:${activePrivateEntry.controller.data.private.revision}:${privateEditorId ?? ''}`} controller={activePrivateEntry.controller} tab={activePrivateEntry.tab}
               initialEditing={privateEditorId === selectedTabId} editorTabs={editorTabs} editorTabId={selectedTabId} onSelectEditorTab={selectEditorTab} onManageTabs={() => { activePrivateEntry.controller.setDirty(false); setPrivateEditorId(undefined); setManaging(true); }} />
@@ -412,6 +437,7 @@ export function KnowledgePanel({
             renderPortList(countryPorts)
           ) : showingSupplierDirectory && port ? (
             <>
+              {active.id === officialSection?.id && renderOfficialTable()}
               {active.entries.length ? <div className="knowledge-supplier-search-results"><SupplierWorkspace key={port.id} open={open} onOpen={onOpen} port={port} embedded /></div> : <SupplierWorkspace key={port.id} open={open} onOpen={onOpen} port={port} embedded />}
               {active.entries.map(entry => renderEntry(entry))}
             </>
@@ -421,6 +447,7 @@ export function KnowledgePanel({
             <SupplierFixtures supplierId={actual.id} open={open} />
           ) : active ? (
             <>
+              {active.id === officialSection?.id && renderOfficialTable()}
               {port && info && active.role === "port-information" && (
                 <>
                   <div className="knowledge-port-summary">{renderKeyInfo()}{renderTopSuppliers()}</div>
@@ -428,7 +455,7 @@ export function KnowledgePanel({
                 </>
               )}
               {actual.kind === "supplier" && active.role === "supplier-information" && supplierInformation}
-              {active.entries.length ? active.entries.map(entry => renderEntry(entry)) : actual.kind === "supplier" && active.role === "supplier-information" && supplierInformation ? null : <p className="knowledge-empty">—</p>}
+              {active.entries.length ? active.entries.map(entry => renderEntry(entry)) : active.id === officialSection?.id || (actual.kind === "supplier" && active.role === "supplier-information" && supplierInformation) ? null : <p className="knowledge-empty">—</p>}
             </>
           ) : <p>No results</p>}
         </div>
@@ -548,9 +575,6 @@ export function KnowledgeBlockView({
         <div className="knowledge-block-actions">
         {showBlockUpdate && <KnowledgeEntryAttribution label={block.title || block.type} update={update} hatTarget={hatTarget} />}
         {hatTarget && <AttachmentsButton scope={{ target: hatTarget.target, section: { id: block.id, name: block.title || 'General Information' } }} />}
-        {onEdit && (
-          <KnowledgeUpdateButton className="knowledge-entry-edit" onClick={onEdit} aria-label={`Update ${block.title || block.type}`} />
-        )}
         </div>
       </header>
       {block.type === "text" ? (

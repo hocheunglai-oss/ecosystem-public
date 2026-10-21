@@ -8,7 +8,8 @@ const owner=actors.find(actor=>actor.id==='otto')!, other=actors.find(actor=>act
 const at='2026-10-09T09:00:00Z', later='2026-10-09T09:30:00Z', buyerId='company-meridian';
 
 test('private list migrates the existing note, supports editing/removing, survives reload and stays owner-scoped without shared records or rewards',()=>{
-  let state=applyAction(createSeedState(),{type:'save-buyer-private-remark',buyerId,text:'Existing private note'},owner,at);
+  let state=createSeedState();
+  state.buyerPrivateRemarks={ [JSON.stringify([owner.id,buyerId])]:{owner:owner.id,buyerId,text:'Existing private note',updatedAt:at} }; // Persisted single-note fixture from the retired editor.
   const legacy=buyerPrivateEntries(state,buyerId,owner.id), audit=structuredClone(state.audit), contributions=structuredClone(state.contributions), gold=personalResources(state,owner.id).gold;
   assert.equal(legacy[0].text,'Existing private note');
   state=applyAction(state,{type:'save-buyer-private-list',buyerId,baseEntries:buyerSharedDraft(legacy),entries:[{id:legacy[0].id,text:'Updated private note'},{id:'second',text:'A second private note'}]},owner,later);

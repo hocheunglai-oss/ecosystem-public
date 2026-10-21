@@ -43,9 +43,16 @@
     {
       "path": "/api/enquiries/email-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/official-tables/refresh",
+      "schedule": "0 22 * * *"
     }
   ],
   "functions": {
+    "api/official-tables/refresh.ts": {
+      "maxDuration": 120
+    },
     "api/enquiries/email-sync.ts": {
       "maxDuration": 60
     },

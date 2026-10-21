@@ -24,4 +24,4 @@ This repository starts from a reviewed clean snapshot. Earlier development histo
 
 Production releases use the pinned targets in `config/ecoConnections.ts`, all required checks, a staged production deployment, and verification of that exact deployment before promotion. Source publication does not make production data, user accounts or report storage public.
 
-Supabase is the live database and protected document store. Independent encrypted backups are planned separately; their operation and restore testing must be verified before making recovery claims. Keep detailed privacy information behind authentication and private operational records outside this repository.
+Supabase is the live database and protected document store. The independent encrypted backup workflow is implemented; current operation and restore testing require verified run and recovery evidence. Keep detailed privacy information behind authentication and private operational records outside this repository.

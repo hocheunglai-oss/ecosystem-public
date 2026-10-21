@@ -1,38 +1,55 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { Modal } from './ui';
-import { HOLIDAYS_CHECKED_ON, formatHolidayDate, holidayDates, holidayLocalDate, nextPublicHoliday, publicHolidayCalendar } from './lib/publicHolidays';
+import { HOLIDAYS_CHECKED_ON, formatHolidayDate, holidayDates, holidayLocalDate, nextHolidayIsComplete, nextPublicHoliday, publicHolidayCalendar, todayPublicHoliday } from './lib/publicHolidays';
+import { portLocalDate } from './lib/portTime';
+import type { Port } from './lib/model';
 import './public-holidays.css';
 
-export default function CountryPublicHolidays({ country, timezone }: { country: string; timezone?: string }) {
-  return <HolidayCalendar key={`${country}:${timezone ?? ''}`} country={country} timezone={timezone} />;
+type HolidayCalendarProps = { country: string; timezone?: string; port?: Pick<Port, 'id' | 'timezone'> };
+
+export default function CountryPublicHolidays(props: HolidayCalendarProps) {
+  return <HolidayCalendar key={`${props.country}:${props.port?.id ?? ''}:${props.port?.timezone ?? props.timezone ?? ''}`} {...props} />;
 }
 
-function HolidayCalendar({ country, timezone }: { country: string; timezone?: string }) {
+function HolidayCalendar({ country, timezone, port }: HolidayCalendarProps) {
   const calendar = publicHolidayCalendar(country);
   const [now, setNow] = useState(() => new Date());
   const [open, setOpen] = useState(false);
-  const localDate = calendar ? (timezone && holidayLocalDate(now, timezone)) || holidayLocalDate(now, calendar.timeZone) : null;
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const hintId = useId();
+  const statusId = useId();
+  const localDate = port ? portLocalDate(port, now) ?? null : timezone ? holidayLocalDate(now, timezone) : calendar ? holidayLocalDate(now, calendar.timeZone) : null;
   const currentYear = localDate ? Number(localDate.slice(0, 4)) : now.getUTCFullYear();
   const [year, setYear] = useState(currentYear);
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    const timer = window.setInterval(() => setNow(new Date()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
-  const next = calendar && localDate ? nextPublicHoliday(calendar, localDate) : undefined;
+  const today = todayPublicHoliday(calendar, localDate);
+  const status = today.kind === 'holiday' ? `PUBLIC HOLIDAY (${today.holidays.map(day => day.name.toUpperCase()).join(' / ')})`
+    : today.kind === 'nonholiday' ? 'TODAY IS NOT A PUBLIC HOLIDAY'
+    : today.kind === 'unconfirmed' ? 'PUBLIC HOLIDAY STATUS UNCONFIRMED' : 'PUBLIC HOLIDAY DATES UNAVAILABLE';
+  const next = calendar && localDate ? nextPublicHoliday(calendar, localDate, false) : undefined;
+  const nextText = next ? `${nextHolidayIsComplete(calendar!, localDate!, next) ? 'NEXT' : 'NEXT PUBLISHED'}: ${formatHolidayDate(next.date, true)} · ${next.name.toUpperCase()}${next.status === 'scheduled' ? ' (SCHEDULED)' : ''}`
+    : 'NEXT PUBLIC HOLIDAY NOT YET AVAILABLE.';
   const publication = calendar?.years[year];
   const years = [...new Set([currentYear, ...Object.keys(calendar?.years ?? {}).map(Number)])].sort();
   const days = calendar ? holidayDates(calendar, year) : [];
-  const partialNext = calendar && localDate && Object.entries(calendar.years).some(([publishedYear, data]) =>
-    Number(publishedYear) >= currentYear && Number(publishedYear) <= Number(next?.date.slice(0, 4) ?? currentYear) && data.pending?.length);
   return <>
-    <button type="button" className="button secondary public-holidays-trigger" aria-label="Public holidays" aria-haspopup="dialog" aria-expanded={open}
-      onClick={() => { setYear(currentYear); setOpen(true); }}>
-      <CalendarDays size={16} aria-hidden="true" />
-      <span>PUBLIC HOLIDAYS{next ? <> · {next.date === localDate ? 'TODAY' : partialNext ? 'NEXT PUBLISHED' : 'NEXT'}: {formatHolidayDate(next.date, next.date.slice(0, 4) !== String(currentYear))} · {next.name.toUpperCase()}{next.status === 'scheduled' ? ' (SCHEDULED)' : ''}</> : ' · DATES UNAVAILABLE'}</span>
-    </button>
+    <span className="public-holidays-control" data-hint-hidden={open || hintDismissed || undefined}
+      onPointerEnter={() => setHintDismissed(false)} onFocus={() => setHintDismissed(false)}
+      onKeyDown={event => { if (event.key === 'Escape' && !open && !hintDismissed) { event.preventDefault(); event.stopPropagation(); setHintDismissed(true); } }}>
+      <button type="button" className="button secondary public-holidays-trigger" aria-label="Public holidays" aria-describedby={`${statusId} ${hintId}`} aria-haspopup="dialog" aria-expanded={open}
+        onClick={() => { setYear(currentYear); setOpen(true); }}>
+        <CalendarDays size={16} aria-hidden="true" />
+        <span id={statusId} className={today.kind === 'holiday' ? 'public-holidays-today' : undefined}>{status}</span>
+      </button>
+      <span id={hintId} role="tooltip" className="public-holidays-hint">{nextText}</span>
+    </span>
     {open && <Modal title="PUBLIC HOLIDAYS" kicker={country.toUpperCase()} onClose={() => setOpen(false)}>
       <div className="public-holidays">
+        <p className="public-holidays-next">{nextText}</p>
         {calendar ? <>
           <div className="public-holidays-toolbar">
             <label>YEAR <select aria-label="Holiday year" value={year} onChange={event => setYear(Number(event.target.value))}>

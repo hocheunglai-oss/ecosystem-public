@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { actors, availableCredit, type Action, type Company, type DemoState } from '../src/lib/model';
 import { activeTemporaryCredit, creditHistoryFor, creditRequestStage, effectiveCreditLimit } from '../src/lib/credit';
-import { createSeedState } from '../src/lib/seed';
+import { createSeedState, upgradeDemoState } from '../src/lib/seed';
 import { applyAction, activeSupplierFixtures as historicalSupplierFixtures } from './fixtures/activeSuppliers';
 
 const [trader, credit, admin] = actors;
@@ -75,14 +75,14 @@ test('approvals and declines are immutable, role controlled and separate from cr
   assert.equal(creditHistoryFor(approvedState).length, 1);
 });
 
-test('active temporary credit permits a priced fixture, while exact expiry blocks it atomically', () => {
+test('historical priced exposure persists while temporary credit expires at the exact boundary', () => {
   const state = approved();
-  const action: Action = { type: 'record-outcome', id: 'credit-enquiry', kind: 'fixture', quantity: 100, price: 500, margin: 10, reason: '', complianceChecked: true, creditChecked: true };
-  const booked = applyAction(state, action, trader, now);
-  assert.equal(buyer(booked).exposure, 130000);
-  assert.throws(() => applyAction(state, action, trader, expiry), /Insufficient credit/);
-  assert.equal(buyer(state).exposure, 80000);
-  assert.equal(state.outcomes.length, 0);
+  buyer(state).exposure = 130000;
+  const restored = upgradeDemoState(JSON.parse(JSON.stringify(state)));
+  assert.equal(buyer(restored).exposure, 130000);
+  assert.equal(availableCredit(buyer(restored), now), 20000);
+  assert.equal(availableCredit(buyer(restored), expiry), -30000);
+  assert.equal(creditHistoryFor(restored).length, 1);
 });
 
 test('unpriced STEM checks maximum purchase cost and does not book estimated exposure', () => {
@@ -95,13 +95,12 @@ test('unpriced STEM checks maximum purchase cost and does not book estimated exp
   assert.equal(booked.outcomes[0].price, 0);
 });
 
-test('suspended, on-hold and closed buyers cannot book either fixture path despite sufficient headroom', () => {
+test('suspended, on-hold and closed buyers cannot record STEM despite sufficient headroom', () => {
   for (const creditStatus of ['Suspended', 'On hold', 'Closed'] as const) {
     const state = approved();
     buyer(state).creditStatus = creditStatus;
     const common = { id: 'credit-enquiry', complianceChecked: true, creditChecked: true };
     assert.throws(() => applyAction(state, { type: 'record-stem', ...common, products: [{ grade: 'VLSFO', quantityText: '1', buyPrice: 1, supplierId: historicalSupplierFixtures[0].id }] }, trader, now), /Buyer credit is/);
-    assert.throws(() => applyAction(state, { type: 'record-outcome', ...common, kind: 'fixture', quantity: 1, price: 1, margin: 0, reason: '' }, trader, now), /Buyer credit is/);
   }
 });
 

@@ -20,11 +20,11 @@ const values = {
   debunkering: "No",
 } as const;
 const save = {
-  type: "save-intelligence" as const,
+  type: "save-port-information" as const,
   portId,
   keyInfo: values,
+  baseKeyInfo: createSeedState().ports[0].intelligenceKeyInfo ?? emptyIntelligenceKeyInfo(),
   reason: "New source",
-  source: "Port team",
 };
 test("all users can update Key Info; publication, audit and reward are immediate", () => {
   for (const actor of actors) {
@@ -34,7 +34,7 @@ test("all users can update Key Info; publication, audit and reward are immediate
     const next = applyAction(s, { ...save, baseKeyInfo: base }, actor);
     assert.deepEqual(next.ports[0].intelligenceKeyInfo, values);
     assert.deepEqual(next.ports[0].notes, s.ports[0].notes);
-    assert.equal(next.audit[0].action, "Key Info updated");
+    assert.equal(next.audit[0].action, "Information updated");
     assert.equal(next.contributions[0].publication, "direct");
     assert.equal(next.contributions[0].reviewer, undefined);
     assert.equal(personalResources(next, actor.id).gold, gold + 1);
@@ -43,7 +43,7 @@ test("all users can update Key Info; publication, audit and reward are immediate
         .intelligenceKeyInfo,
       values,
     );
-    assert.throws(() => applyAction(next, save, actor), /No Key Info changes/);
+    assert.throws(() => applyAction(next, { ...save, baseKeyInfo: values }, actor), /No changes/);
   }
 });
 test("old amendment action also publishes immediately without requiring review", () => {
@@ -117,7 +117,8 @@ test("free Key Info text preserves line breaks, existing values and exact saved 
     const reloaded = upgradeDemoState(JSON.parse(JSON.stringify(next)));
     assert.deepEqual(reloaded.ports[0].intelligenceKeyInfo, input);
     assert.deepEqual(reloaded.contributions[0].proposedKeyInfo, input);
-    assert.ok(reloaded.audit[0].detail.includes(input.qualityClaim));
+    assert.deepEqual(reloaded.contributions[0].proposedKeyInfo, input, 'Exact field values remain in the publication history');
+    assert.match(reloaded.audit[0].detail, /contribution recorded/);
     for (const update of Object.values(reloaded.ports[0].intelligenceEntryUpdates!)) assert.deepEqual(update, { updatedBy: actor.id, updatedAt: "2026-10-09T08:00:00.000Z" });
   }
 });

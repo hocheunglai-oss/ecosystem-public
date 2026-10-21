@@ -2,7 +2,7 @@
 
 ## Interaction
 
-Open INFORMATION EXTRACTOR from the country/port toolbar when needed. Paste an email or notes, optionally choose the location and record its source/date, then extract. Review destinations, text, tables, Key Info and source excerpts. Warnings and unresolved destinations start unselected. Opening or running extraction creates a draft; only an explicit CONTRIBUTE +1 publication applies eligible selected changes.
+Open INFORMATION EXTRACTOR from the country/port toolbar when needed. Paste an email or notes, optionally choose the location and record its source/date, then extract. Review destinations, text, tables, Key Info and source excerpts. Warnings and unresolved destinations start unselected. Opening or running extraction creates a draft; only an explicit SAVE applies eligible selected changes. The green SAVE action shows CONTRIBUTION +1 on hover or keyboard focus.
 
 Existing information stays unless the user explicitly chooses a block to replace. Closing/cancelling discards the extraction draft. Stale records, duplicates and replayed batches fail without partial publication or duplicate contributions. Keep retained sources and previous versions. Preserve URL/link values in their original case.
 

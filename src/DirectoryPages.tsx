@@ -1,13 +1,10 @@
 import KnowledgeUpdateButton from "./KnowledgeUpdateButton";
-import { useEffect, useState } from "react";
-import PortBuyPrices from "./PortBuyPrices";
+import { useState } from "react";
 import {
-  Anchor,
   ArrowUpRight,
   Building2,
   CheckCircle2,
   Clock3,
-  Globe2,
   Mail,
   MapPin,
   Plus,
@@ -16,8 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { useDemo } from "./store";
-import { actors, availableCredit, canTrade, type Port } from "./lib/model";
-import { getLocationIntelligence } from "./lib/intelligence";
+import { actors, availableCredit, canTrade } from "./lib/model";
 import {
   Badge,
   CardHeading,
@@ -30,40 +26,6 @@ import {
   Status,
 } from "./ui";
 import type { OpenModal } from "./types";
-import type { WorkspaceNavigationContext } from "./workspaceNavigation";
-
-/** Port and country details read the same facts as the enquiry briefing. */
-export function LocationIntelligenceDetails({ port, open, showPortName = false }: { port: Port; open: OpenModal; showPortName?: boolean }) {
-  const { actor } = useDemo();
-  const { keyInfo, refineries } = getLocationIntelligence(port);
-  const facts = [
-    ["30 days quality claim period", keyInfo.qualityClaim],
-    ["ISO Specs", keyInfo.isoSpecs],
-    ["Sample Location", keyInfo.sampleLocation],
-    ["Debunkering", keyInfo.debunkering],
-  ];
-  return <>
-    <div className="detail-section">
-      <div className="review-item-head">
-        <h3>Key Info{showPortName && ` · ${port.name}`}</h3>
-        <KnowledgeUpdateButton onClick={() => open({ type: "intelligence-edit", portId: port.id })} />
-      </div>
-      <dl className="detail-list">
-        {facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "—"}</dd></div>)}
-      </dl>
-    </div>
-    <div className="detail-section">
-      <h3>Refineries</h3>
-      {refineries.length ? <div className="table-wrap"><table>
-        <thead><tr><th scope="col">Name</th><th scope="col">Location</th><th scope="col">Capacity</th></tr></thead>
-        <tbody>{refineries.map((refinery) => <tr key={`${refinery.name}-${refinery.location}`}>
-          <th scope="row">{refinery.name}</th>
-          <td>{refinery.location}</td><td>{refinery.capacity}</td>
-        </tr>)}</tbody>
-      </table></div> : <p>—</p>}
-    </div>
-  </>;
-}
 
 export function CompaniesPage({ open }: { open: OpenModal }) {
   const { state, actor } = useDemo();
@@ -303,7 +265,7 @@ export function CompaniesPage({ open }: { open: OpenModal }) {
                       })
                     }
                   >
-                    CONTRIBUTE +1
+                    EDIT
                   </KnowledgeUpdateButton>
                 }
               />
@@ -365,293 +327,6 @@ export function CompaniesPage({ open }: { open: OpenModal }) {
           <section className="card directory-detail">
             <Empty title="Your customer context appears here">
               Select a company or change the filters.
-            </Empty>
-          </section>
-        )}
-      </div>
-    </>
-  );
-}
-
-export function PortsPage({ open, context }: { open: OpenModal; context?: WorkspaceNavigationContext }) {
-  const { state } = useDemo();
-  const [query, setQuery] = useState("");
-  const [country, setCountry] = useState("all");
-  const [selectedId, setSelectedId] = useState(() => {
-    const requested = context?.portId ?? new URLSearchParams(
-      location.hash.split("?")[1] || "",
-    ).get("port");
-    return state.ports.some((port) => port.id === requested)
-      ? requested!
-      : state.ports[0]?.id || "";
-  });
-  useEffect(() => {
-    if (!context?.portId) return;
-    setQuery("");
-    setCountry("all");
-    if (state.ports.some((port) => port.id === context.portId)) setSelectedId(context.portId);
-  }, [context, state.ports]);
-  const contextual = Boolean(context?.portId);
-  const countries = [
-    ...new Set(state.ports.map((port) => port.country)),
-  ].sort();
-  const filtered = state.ports.filter(
-    (port) =>
-      (country === "all" || port.country === country) &&
-      [port.name, port.code, port.country, ...port.tags]
-        .join(" ")
-        .toLowerCase()
-        .includes(query.trim().toLowerCase()),
-  );
-  const port = contextual
-    ? state.ports.find((item) => item.id === context?.portId)
-    : filtered.find((item) => item.id === selectedId) || filtered[0];
-  const combinedLocation = Boolean(context?.combinedLocation && context.portId === port?.id);
-  const countryName = combinedLocation && port ? getLocationIntelligence(port).countryName : port?.country;
-  const countryUpdates = combinedLocation ? state.contributions.filter((item) => item.targetType === "country" && item.targetId === countryName && item.status === "approved") : [];
-  const accepted = port
-    ? state.contributions.filter(
-        (item) =>
-          item.targetType === "port" &&
-          item.targetId === port.id &&
-          item.status === "approved",
-      )
-    : [];
-  const pending = port
-    ? state.contributions.filter(
-        (item) =>
-          item.targetType === "port" &&
-          item.targetId === port.id &&
-          item.status === "pending",
-      ).length
-    : 0;
-  const introductorySummary = (value: string) =>
-    value.replace(
-      " Illustrative demo information; not verified operational or navigation guidance.",
-      "",
-    );
-
-  return (
-    <>
-      {!contextual && <PageHeading
-        eyebrow="LOCAL KNOWLEDGE. SHARED ADVANTAGE."
-        title="A better view of every port."
-        description="Useful context from across the desks, ready for your next enquiry."
-        action={
-          <Badge tone="green">
-            <Globe2 size={15} /> {state.ports.length} demo ports
-          </Badge>
-        }
-      />}
-      <div className="knowledge-banner" hidden={contextual}>
-        <span className="square-icon mint">
-          <Sparkles size={22} />
-        </span>
-        <div>
-          <strong>Your local insight travels further.</strong>
-          <p>
-            Publish an update. It becomes
-            shared knowledge.
-          </p>
-        </div>
-      </div>
-      <div className="directory-toolbar" hidden={contextual}>
-        <SearchBox
-          value={query}
-          onChange={setQuery}
-          placeholder="Search port, country, code or tag"
-        />
-        <label className="filter-select">
-          <span className="sr-only">Filter by country</span>
-          <select
-            aria-label="Filter ports by country"
-            value={country}
-            onChange={(event) => setCountry(event.target.value)}
-          >
-            <option value="all">All countries</option>
-            {countries.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="results-count">
-          {filtered.length} {filtered.length === 1 ? "port" : "ports"}
-        </span>
-      </div>
-      <div className="port-directory-layout" style={contextual ? { gridTemplateColumns: "minmax(0, 1fr)" } : undefined}>
-        <section className="port-grid" aria-label="Port results" hidden={contextual}>
-          {filtered.length ? (
-            filtered.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`card port-card ${item.id === port?.id ? "active" : ""}`}
-                aria-pressed={item.id === port?.id}
-                aria-controls="port-detail"
-                onClick={() => setSelectedId(item.id)}
-              >
-                <span className="port-card-top">
-                  <span className="square-icon blue">
-                    <Anchor size={21} />
-                  </span>
-                  <Badge>{item.code}</Badge>
-                  <ArrowUpRight size={16} />
-                </span>
-                <strong className="port-card-name">{item.name}</strong>
-                <span className="port-card-country">
-                  <MapPin size={14} /> {item.country}
-                </span>
-                <span className="port-card-summary">
-                  {introductorySummary(item.summary)}
-                </span>
-                <span className="tag-list">
-                  {item.tags.map((tag) => (
-                    <Badge key={tag}>{tag}</Badge>
-                  ))}
-                </span>
-                <span className="port-card-bottom">
-                  <Clock3 size={14} /> {item.leadTime}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="card">
-              <Empty title="No ports match your search">
-                Try a port code, another country or a shorter search.
-              </Empty>
-            </div>
-          )}
-        </section>
-        {port ? (
-          <section
-            className="card directory-detail port-detail"
-            id="port-detail"
-            aria-label={`${port.name} port details`}
-          >
-            <div className="detail-hero">
-              <span className="square-icon blue">
-                <Anchor size={25} />
-              </span>
-              <div>
-                <div className="section-label">PORT KNOWLEDGE</div>
-                <h2>{port.name}</h2>
-                <p>
-                  {countryName} <Badge>{port.code}</Badge>
-                </p>
-              </div>
-            </div>
-            <p className="port-description">
-              {introductorySummary(port.summary)}
-            </p>
-            <dl className="detail-list">
-              <div>
-                <dt>Country / territory</dt>
-                <dd>{countryName}</dd>
-              </div>
-              <div>
-                <dt>Port code</dt>
-                <dd>{port.code}</dd>
-              </div>
-              <div>
-                <dt>Time zone</dt>
-                <dd>{port.timezone}</dd>
-              </div>
-              <div>
-                <dt>Illustrative lead time</dt>
-                <dd>{port.leadTime}</dd>
-              </div>
-              <div>
-                <dt>Record updated</dt>
-                <dd>{date(port.updatedAt)}</dd>
-              </div>
-              <div>
-                <dt>Source</dt>
-                <dd>
-                  {accepted.length
-                    ? "Demo library + reviewed contributions"
-                    : "Illustrative demo library"}
-                </dd>
-              </div>
-            </dl>
-            <LocationIntelligenceDetails port={port} open={open} />
-            {combinedLocation && countryUpdates.length > 0 && <div className="detail-section">
-              <h3>Country data</h3>
-              <div className="review-list country-updates">{countryUpdates.map((item) => <article className="review-item" key={item.id}>
-                <h3>{item.title}</h3><p className="module-preserve-lines">{item.body}</p>
-                <small>{actors.find((actor) => actor.id === item.author)?.name ?? item.author} · {date(item.reviewedAt ?? item.createdAt)}</small>
-              </article>)}</div>
-            </div>}
-            <PortBuyPrices portId={port.id} />
-            <div className="detail-section">
-              <h3>Desk notes</h3>
-              <ul className="port-notes">
-                {port.notes.map((note, index) => (
-                  <li key={index}>{note}</li>
-                ))}
-              </ul>
-            </div>
-            {accepted.length > 0 && (
-              <div className="detail-section">
-                <h3>Recently accepted insights</h3>
-                <div className="accepted-insights">
-                  {accepted
-                    .slice()
-                    .reverse()
-                    .slice(0, 3)
-                    .map((item) => (
-                      <div key={item.id}>
-                        <CheckCircle2 size={16} />
-                        <span>
-                          <strong>{item.title}</strong>
-                          <small>
-                            {actors.find((actor) => actor.id === item.author)
-                              ?.name || "Contributor"}{" "}
-                            · {date(item.reviewedAt || item.createdAt)}
-                          </small>
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-            {pending > 0 && (
-              <div className="notice amber">
-                <Clock3 size={16} />
-                <span>
-                  {pending} {pending === 1 ? "update is" : "updates are"}{" "}
-                  awaiting review. Accepted updates are published here.
-                </span>
-              </div>
-            )}
-            <div className="notice">
-              <ShieldCheck size={17} />
-              <span>
-                Illustrative information for this demo. Confirm operational
-                details with the relevant source before real use.
-              </span>
-            </div>
-            <KnowledgeUpdateButton
-              className="full"
-              onClick={() =>
-                open({
-                  type: "contribute",
-                  targetType: "port",
-                  targetId: port.id,
-                })
-              }
-            >
-              CONTRIBUTE +1
-            </KnowledgeUpdateButton>
-            <small className="source-note">
-              Changes are recorded in History.
-            </small>
-          </section>
-        ) : (
-          <section className="card directory-detail">
-            <Empty title="Port knowledge appears here">
-              Choose another country or search to see a port.
             </Empty>
           </section>
         )}

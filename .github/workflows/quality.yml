@@ -84,7 +84,7 @@ jobs:
             --mount "type=bind,source=$(command -v node),target=/usr/local/bin/node,readonly" \
             --workdir /workspace \
             --env ECO_NATIVE_PG_BIN=/usr/lib/postgresql/17/bin \
-            postgres:17-bookworm node --test tests/access-sql.test.mjs tests/admin-sql.test.mjs tests/suppliers-sql.test.mjs tests/supplier-ports-sql.test.mjs tests/parser-sql.test.mjs tests/inbox-sql.test.mjs tests/commercial-enquiries-sql.test.mjs tests/intelligence-sql.test.mjs
+            postgres:17-bookworm node --test tests/access-sql.test.mjs tests/admin-sql.test.mjs tests/suppliers-sql.test.mjs tests/supplier-ports-sql.test.mjs tests/parser-sql.test.mjs tests/inbox-sql.test.mjs tests/commercial-enquiries-sql.test.mjs tests/intelligence-sql.test.mjs tests/official-tables-sql.test.mjs
 
 
   recovery:
@@ -113,7 +113,7 @@ jobs:
   browser:
     name: Browser verification · ${{ matrix.label }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: ${{ matrix.group == 'knowledge' && 35 || 20 }}
     strategy:
       fail-fast: false
       matrix:
@@ -122,12 +122,14 @@ jobs:
             label: Administration
             scripts: |
               tests/administration.e2e.mjs
+              tests/contribution-actions.e2e.mjs
               tests/auth-session-persistence.e2e.mjs
               tests/admin-health-refresh.e2e.mjs
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
             artifacts: |
               output/administration-ui
+              output/contribution-actions-ui
               output/auth-session-ui
               output/shared-contribution-availability
               output/eco-release-gates-ui
@@ -168,7 +170,12 @@ jobs:
             scripts: |
               tests/location-flattening.e2e.mjs
               tests/country-port-profiles.e2e.mjs
+              tests/public-holidays.e2e.mjs
+              tests/table-paste.e2e.mjs
+              tests/knowledge-supplier-search.e2e.mjs
+              tests/official-tables.e2e.mjs
               tests/editing-usability.e2e.mjs
+              tests/knowledge-readability.e2e.mjs
               tests/pdf-attachment-preview.e2e.mjs
               tests/private-profile-tabs.e2e.mjs
               tests/eco-supplier-ports.e2e.mjs
@@ -177,7 +184,12 @@ jobs:
             artifacts: |
               output/location-flattening-ui
               output/country-port-profiles-ui
+              output/holiday-status
+              output/table-paste-ui
+              output/knowledge-supplier-search-ui
+              output/official-table-ui
               output/editing-usability-ui
+              output/knowledge-readability-ui
               output/pdf-preview-ui
               output/private-profile-tabs-ui
               output/supplier-ports-ui
@@ -202,10 +214,14 @@ jobs:
           ECO_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           ECO_ADMIN_UI_ORIGIN: http://127.0.0.1:4286
           ECO_ADMIN_UI_OUTPUT: output/administration-ui
+          ECO_ACTIONS_ORIGIN: http://127.0.0.1:4286
+          ECO_ACTIONS_OUTPUT: output/contribution-actions-ui
           ECO_AUTH_UI_ORIGIN: http://127.0.0.1:4286
           ECO_AUTH_UI_OUTPUT: output/auth-session-ui
           ECO_EDITING_ORIGIN: http://127.0.0.1:4286
           ECO_EDITING_OUTPUT: output/editing-usability-ui
+          ECO_READABILITY_ORIGIN: http://127.0.0.1:4286
+          ECO_READABILITY_OUTPUT: output/knowledge-readability-ui
           ECO_PDF_PREVIEW_ORIGIN: http://127.0.0.1:4286
           ECO_PDF_PREVIEW_OUTPUT: output/pdf-preview-ui
           ECO_RELEASE_UI_ORIGIN: http://127.0.0.1:4286
@@ -220,6 +236,14 @@ jobs:
           ECO_LOCATION_UI_OUTPUT: output/location-flattening-ui
           ECO_COUNTRY_PORT_ORIGIN: http://127.0.0.1:4286
           ECO_COUNTRY_PORT_OUTPUT: output/country-port-profiles-ui
+          ECO_HOLIDAY_ORIGIN: http://127.0.0.1:4286
+          ECO_HOLIDAY_OUTPUT: output/holiday-status
+          ECO_TABLE_PASTE_ORIGIN: http://127.0.0.1:4286
+          ECO_TABLE_PASTE_OUTPUT: output/table-paste-ui
+          ECO_KNOWLEDGE_SEARCH_ORIGIN: http://127.0.0.1:4286
+          ECO_KNOWLEDGE_SEARCH_OUTPUT: output/knowledge-supplier-search-ui
+          ECO_OFFICIAL_TABLE_ORIGIN: http://127.0.0.1:4286
+          ECO_OFFICIAL_TABLE_OUTPUT: output/official-table-ui
           ECO_PRIVATE_UI_ORIGIN: http://127.0.0.1:4286
           ECO_PRIVATE_UI_OUTPUT: output/private-profile-tabs-ui
           ECO_INTELLIGENCE_ORIGIN: http://127.0.0.1:4286

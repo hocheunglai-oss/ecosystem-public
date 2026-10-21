@@ -157,11 +157,14 @@ function publication(state: DemoState, contribution: Contribution, knownActors: 
     kind = 'ai-import';
     keys = [`ai-import:${batch.id}`];
   } else if (contribution.knowledgeChange) {
-    differences = knowledgeDifferences(state, contribution.knowledgeChange);
+    const documentEdits = knowledgeDifferences(state, contribution.knowledgeChange);
+    const keyInfoEdits = contribution.proposedKeyInfo ? keyInfoDifferences(contribution.targetId, contribution.keyInfoBase, contribution.proposedKeyInfo) : [];
+    differences = [...documentEdits, ...keyInfoEdits];
     if (!differences.length) return undefined;
-    keys = differences.map(change => change.key);
+    keys = [...documentEdits.map(change => change.key), ...(keyInfoEdits.length ? [`port:${contribution.targetId}:key-info`] : [])];
     records = [recordKey(state, contribution.knowledgeChange.target)];
-    documentVersions.push([records[0], contribution.knowledgeChange.baseVersion]);
+    if (documentEdits.length) documentVersions.push([records[0], contribution.knowledgeChange.baseVersion]);
+    if (keyInfoEdits.length) keyInfoTransitions.push({ key: `port:${contribution.targetId}`, fingerprint: JSON.stringify(keyInfoEdits) });
   } else if (contribution.proposedKeyInfo) {
     differences = keyInfoDifferences(contribution.targetId, contribution.keyInfoBase, contribution.proposedKeyInfo);
     if (!differences.length) return undefined;

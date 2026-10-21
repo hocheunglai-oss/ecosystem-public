@@ -1,3 +1,4 @@
+import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useEffect, useRef, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import type { SupplierRecord, SupplierSummary, SupplierUpdate } from '../shared/suppliers';
@@ -120,7 +121,7 @@ function PicDialog({ supplier, name, options, optionsLoading, optionsError, onRe
       </select></label>
       {optionsLoading && <p role="status">LOADING TRADERS…</p>}
       <footer><button type="button" className="button secondary" disabled={saving} onClick={close}>CANCEL</button>
-        <button type="submit" className="button primary" disabled={!allowed || !changed || !selectionAllowed || loading || saving || conflict}>{saving ? 'SAVING…' : 'CONTRIBUTE +1'}</button></footer>
+        <KnowledgeUpdateButton type="submit" disabled={!allowed || !changed || !selectionAllowed || loading || saving || conflict}>{saving ? 'SAVING…' : 'SAVE'}</KnowledgeUpdateButton></footer>
     </form>
   </Modal>;
 }

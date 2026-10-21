@@ -143,6 +143,21 @@ test('invalid context and symlinked runner directory cannot create config or sta
     }
   });
 });
+test('launcher publishes only fixed phase/code/elapsed diagnostics and never arbitrary child values', async () => {
+  await withDirectory(async directory => {
+    const logs=[],secret='synthetic-private-provider-response';
+    const ok=await runGitHubBackup(environment(directory),{log:value=>logs.push(value),async launch({onDiagnostic}){
+      onDiagnostic({phase:'STORAGE',code:'AUTHORIZATION_FAILED',elapsedSeconds:12});
+      for(const value of [secret,{phase:secret,code:'FAILED',elapsedSeconds:1},
+        {phase:'STORAGE',code:secret,elapsedSeconds:1},{phase:'STORAGE',code:'FAILED',elapsedSeconds:secret},
+        {phase:'STORAGE',code:'FAILED',elapsedSeconds:1,message:secret}])onDiagnostic(value);
+      throw new Error(secret);
+    }});
+    assert.equal(ok,false);assert.equal(logs.length,2);
+    assert.equal(logs[0],'ECO backup phase=STORAGE code=AUTHORIZATION_FAILED elapsed=12s.');
+    assert.ok(logs.every(value=>!value.includes(secret)));assert.deepEqual(await readdir(directory),[]);
+  });
+});
 
 test('always cleanup removes only owned private backup prefixes and never follows nested links', async () => {
   await withDirectory(async directory => {

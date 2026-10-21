@@ -17,6 +17,57 @@ const exact = (value, keys) => plain(value) && Object.keys(value).length === key
 const MAX_RUNTIME_BYTES = 64 * 1024;
 const MAX_DURATION_MS = 45 * 60_000;
 const PRIVATE_MARKER = 'AGE-SECRET-KEY-1';
+const DIAGNOSTIC_PREFIX = 'ECO_BACKUP_DIAGNOSTIC ';
+const DIAGNOSTIC_PHASES = new Set(['CONFIGURATION','RUN_LOCK','DRIVE_TARGET','DATABASE_CAPTURE','STORAGE','ENCRYPTION','DRIVE_UPLOAD','RETENTION','CLEANUP','WORKER']);
+const DIAGNOSTIC_CODES = new Set(['STARTED','COMPLETED','FAILED','TIMEOUT','CANCELLED','CLEANUP_FAILED','AUTHORIZATION_FAILED','OIDC_TOKEN_INVALID','SOURCE_LOCK_LOST','CHECKSUM_MISMATCH']);
+
+/** Rebuild exactly three allowlisted scalar fields; never serialize an exception. */
+export function safeDiagnostic(value) {
+  try {
+    if (!exact(value,['phase','code','elapsedSeconds']) || !DIAGNOSTIC_PHASES.has(value.phase)
+      || !DIAGNOSTIC_CODES.has(value.code) || !Number.isSafeInteger(value.elapsedSeconds)
+      || value.elapsedSeconds < 0 || value.elapsedSeconds > MAX_DURATION_MS / 1000) return null;
+    return { phase:value.phase, code:value.code, elapsedSeconds:value.elapsedSeconds };
+  } catch { return null; }
+}
+export function diagnosticLine(value) {
+  const safe = safeDiagnostic(value); return safe ? DIAGNOSTIC_PREFIX + JSON.stringify(safe) + '\n' : null;
+}
+export function publicDiagnostic(value) {
+  const safe = safeDiagnostic(value);
+  return safe ? `ECO backup phase=${safe.phase} code=${safe.code} elapsed=${safe.elapsedSeconds}s.` : null;
+}
+/** Bounded parser for untrusted subprocess stderr. Invalid/noisy text is discarded. */
+export function diagnosticReader(onDiagnostic = () => {}) {
+  let pending = '', dropping = false, total = 0;
+  return bytes => {
+    total += bytes.length; if (total > 16 * 1024) { pending = ''; return; }
+    for (const part of bytes.toString('utf8').split(/(?<=\n)/u)) {
+      if (!dropping) { pending += part; if (pending.length > 512) { pending = ''; dropping = true; } }
+      if (!part.endsWith('\n')) continue;
+      if (!dropping && pending.startsWith(DIAGNOSTIC_PREFIX)) {
+        try { const safe = safeDiagnostic(JSON.parse(pending.slice(DIAGNOSTIC_PREFIX.length))); if (safe) onDiagnostic(safe); } catch {}
+      }
+      pending = ''; dropping = false;
+    }
+  };
+}
+function diagnosticCode(error) {
+  try {
+    if (['AUTHORIZATION_RESPONSE_INVALID','DRIVE_AUTH_FAILED','HTTP_401','HTTP_403'].includes(error?.code)) return 'AUTHORIZATION_FAILED';
+    if (error?.code === 'OIDC_TOKEN_INVALID') return 'OIDC_TOKEN_INVALID';
+    if (['RUN_LOCK_LOST','RUN_LOCK_UNAVAILABLE'].includes(error?.code)) return 'SOURCE_LOCK_LOST';
+    if (['INVENTORY_CHECKSUM_MISMATCH','DOWNLOAD_HASH_MISMATCH','STORAGE_CHECKSUM_MISMATCH'].includes(error?.code)) return 'CHECKSUM_MISMATCH';
+  } catch {}
+  return 'FAILED';
+}
+function diagnosticEmitter(onDiagnostic = () => {}) {
+  const started = performance.now();
+  return (phase,code) => {
+    const safe = safeDiagnostic({phase,code,elapsedSeconds:Math.min(MAX_DURATION_MS/1000,Math.max(0,Math.floor((performance.now()-started)/1000)))});
+    if (safe) try { onDiagnostic(safe); } catch {}
+  };
+}
 export class NightlyError extends Error {
   constructor(code) { super(`Nightly backup failed (${code}).`); this.name = 'NightlyError'; this.code = code; }
 }
@@ -146,11 +197,15 @@ export async function runNightly({ target, config, secrets, runDirectory, proven
   const deps = { now: () => new Date(), capture: capturePostgres, seal: sealDirectory, lock: acquireRunLock,
     manifest: writeManifest, ...dependencies };
   const startedAt = deps.now().toISOString(), runId = randomUUID();
-  let lock;
+  const emit = diagnosticEmitter(deps.onDiagnostic);
+  let lock, phase = 'RUN_LOCK';
+  const enter = value => { phase = value; emit(phase,'STARTED'); };
   try {
+    enter('RUN_LOCK');
     lock = await deps.lock({ bin: config.pgBin, connection, projectRef: target.supabaseProjectRef, expectedSourceRole: config.expectedSourceRole });
     const drive = deps.createDrive ? deps.createDrive({ beforeMutation: () => lock.assertAlive() }) : deps.drive;
     check(drive && typeof drive.verifyTarget === 'function', 'DRIVE_CLIENT_REQUIRED');
+    enter('DRIVE_TARGET');
     await drive.verifyTarget();
     const existing = await drive.findVerifiedNight({ snapshotAt: startedAt });
     let receipt, reused = false;
@@ -159,35 +214,47 @@ export async function runNightly({ target, config, secrets, runDirectory, proven
       receipt = existing; reused = true;
     } else {
       const sourceDir = join(runDirectory, 'capture');
+      enter('DATABASE_CAPTURE');
       const inventory = await deps.capture({ bin: config.pgBin, connection, expectedProjectRef: target.supabaseProjectRef,
         expectedSourceRole: config.expectedSourceRole, supplierReportsBucket: target.supplierReportsBucket,
-        outputDir: sourceDir, captureObjects: deps.captureObjects });
+        outputDir: sourceDir, captureObjects: async (...args) => {
+          enter('STORAGE');
+          const result = await deps.captureObjects(...args);
+          emit('STORAGE','COMPLETED'); enter('DATABASE_CAPTURE'); return result;
+        } });
       check(inventory?.sourceProjectRef === target.supabaseProjectRef && inventory.source?.role === config.expectedSourceRole
         && Number.isFinite(Date.parse(inventory.source.snapshot_time))
         && Math.abs(Date.parse(inventory.source.snapshot_time) - Date.parse(startedAt)) <= config.timeoutMs, 'CAPTURE_IDENTITY_MISMATCH');
       // A midnight crossing must not create a second differently-labelled snapshot in the same run.
       check(hongKongNight(inventory.source.snapshot_time) === hongKongNight(startedAt), 'NIGHT_CHANGED_DURING_CAPTURE');
+      enter('ENCRYPTION');
       await deps.manifest(sourceDir, { runId, sourceProjectRef: target.supabaseProjectRef,
         snapshotTime: inventory.source.snapshot_time, databaseServer: inventory.source.server_version,
         toolVersion: 'eco-nightly-v1', unattended: true, restorationVerified: false, provenance });
       const encrypted = await deps.seal({ sourceDir, outputFile: join(runDirectory, 'backup.tar.gz.age'), recipient: config.recipient, ageBin: config.ageBin });
       check(/^[a-f0-9]{64}$/u.test(encrypted?.sha256 || '') && Number.isSafeInteger(encrypted.size) && encrypted.size > 0, 'ENCRYPTION_RECEIPT_INVALID');
       // Plaintext is no longer needed during the network upload/readback phase.
+      enter('CLEANUP');
       await rm(sourceDir, { recursive: true, force: true });
+      enter('RUN_LOCK');
       await lock.assertAlive();
+      enter('DRIVE_UPLOAD');
       receipt = await drive.uploadAndVerify({ archiveFile: encrypted.archiveFile,
         snapshotAt: inventory.source.snapshot_time, expectedSha256: encrypted.sha256 });
       check(receipt?.verified === true && receipt.sha256 === encrypted.sha256 && receipt.size === encrypted.size
         && receipt.night === hongKongNight(startedAt), 'UPLOAD_RECEIPT_MISMATCH');
     }
+    enter('RUN_LOCK');
     await lock.assertAlive();
+    enter('RETENTION');
     const retention = await drive.retainLatestNights({ currentReceipt: receipt });
     check(retention?.keepNights === 5 && retention.permanentDeletionUsed === false, 'INVALID_RETENTION_RESULT');
+    emit('RETENTION','COMPLETED');
     return { schemaVersion: 1, runId, completedAt: deps.now().toISOString(), verified: true, reused,
       encryptedCopy: { fileId: receipt.fileId, night: receipt.night, sha256: receipt.sha256, size: receipt.size },
       retention, restorationVerified: false, provenance };
-  } catch { fail('RUN_FAILED'); }
-  finally { try { await lock?.close(); } catch { fail('RUN_FAILED'); } }
+  } catch (error) { emit(phase,diagnosticCode(error)); fail('RUN_FAILED'); }
+  finally { try { await lock?.close(); } catch { emit('CLEANUP','CLEANUP_FAILED'); fail('RUN_FAILED'); } }
 }
 
 /** Refresh tokens remain in memory; only fixed Google OAuth/Drive endpoints receive credentials. */
@@ -236,16 +303,23 @@ async function boundedResponse(response, maxBytes) {
 
 /** All spawned tools share the worker's process group. Stop them before removing owned plaintext. */
 export async function superviseWorker({ payload, workParent = tmpdir(), timeoutMs, signal,
-  workerFile = fileURLToPath(import.meta.url), nodeBin = process.execPath }) {
+  workerFile = fileURLToPath(import.meta.url), nodeBin = process.execPath, onDiagnostic = () => {} }) {
   check(process.platform !== 'win32' && Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= MAX_DURATION_MS, 'SUPERVISOR_CONFIGURATION_INVALID');
   process.umask(0o077);
   const runDirectory = await mkdtemp(join(workParent, 'eco-nightly-'));
   const input = JSON.stringify({ ...payload, runDirectory });
-  let child, timer, aborted = false, output = '', outputBytes = 0, failure = false;
+  let child, timer, aborted = false, output = '', outputBytes = 0, failure = false, phase = 'WORKER', reportedFailure = false;
+  const emit = diagnosticEmitter(onDiagnostic);
+  const report = diagnosticReader(value => {
+    phase = value.phase;
+    if (!['STARTED','COMPLETED'].includes(value.code)) reportedFailure = true;
+    emit(value.phase,value.code);
+  });
   const kill = () => {
     aborted = true;
     if (child?.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') failure = true; } }
   };
+  const cancel = () => { emit(phase,'CANCELLED'); reportedFailure = true; kill(); };
   try {
     check(Buffer.byteLength(input) <= MAX_RUNTIME_BYTES && !input.includes(PRIVATE_MARKER), 'WORKER_INPUT_INVALID');
     check(!signal?.aborted, 'RUN_CANCELLED');
@@ -254,24 +328,26 @@ export async function superviseWorker({ payload, workParent = tmpdir(), timeoutM
     const closed = new Promise(resolveClose => {
       child.once('error', () => { failure = true; }); child.once('close', code => resolveClose(code));
     });
-    child.stderr.on('data', () => {});
+    child.stderr.on('data', report);
     child.stdout.on('data', bytes => { outputBytes += bytes.length; if (outputBytes > MAX_RUNTIME_BYTES) { failure = true; kill(); }
       else output += bytes.toString('utf8'); });
     child.stdin.on('error', () => { failure = true; kill(); });
-    timer = setTimeout(kill, timeoutMs);
-    signal?.addEventListener('abort', kill, { once:true });
+    timer = setTimeout(() => { emit(phase,'TIMEOUT'); reportedFailure = true; kill(); }, timeoutMs);
+    signal?.addEventListener('abort', cancel, { once:true });
     child.stdin.end(input);
     const exitCode = await closed;
     check(!aborted && !failure && exitCode === 0, 'WORKER_FAILED');
     let receipt; try { receipt = JSON.parse(output); } catch { fail('WORKER_RECEIPT_INVALID'); }
     check(receipt?.verified === true && receipt.schemaVersion === 1, 'WORKER_RECEIPT_INVALID');
     return receipt;
+  } catch (error) {
+    if (!reportedFailure) emit(phase,'FAILED'); throw error;
   } finally {
-    clearTimeout(timer); signal?.removeEventListener('abort', kill);
+    clearTimeout(timer); signal?.removeEventListener('abort', cancel);
     // A worker can finish while a descendant still exists; stop the group before cleanup either way.
     if (child?.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') failure = true; } }
     try { await rm(runDirectory, { recursive:true, force:true, maxRetries:3, retryDelay:100 }); }
-    catch { fail('PRIVATE_CLEANUP_FAILED'); }
+    catch { emit('CLEANUP','CLEANUP_FAILED'); fail('PRIVATE_CLEANUP_FAILED'); }
     check(!failure, 'WORKER_FAILED');
   }
 }
@@ -290,7 +366,8 @@ async function workerMain() {
   const authorizedFetch = createGoogleAuthorizedFetch({ clientId:payload.secrets.driveClientId,
     clientSecret:payload.secrets.driveClientSecret, refreshToken:payload.secrets.driveRefreshToken });
   const createDrive = ({ beforeMutation }) => createDriveBackupClient({ authorizedFetch, config:payload.config.drive, beforeMutation });
-  const result = await runNightly(payload, { captureObjects, createDrive });
+  const result = await runNightly(payload, { captureObjects, createDrive,
+    onDiagnostic: value => process.stderr.write(diagnosticLine(value)) });
   process.stdout.write(JSON.stringify(result));
 }
 async function cliMain() {
@@ -305,7 +382,8 @@ async function cliMain() {
   const controller = new AbortController(), abort = () => controller.abort();
   process.once('SIGINT', abort); process.once('SIGTERM', abort);
   try {
-    await superviseWorker({ payload:{ target, config, secrets, provenance }, timeoutMs:config.timeoutMs, signal:controller.signal });
+    await superviseWorker({ payload:{ target, config, secrets, provenance }, timeoutMs:config.timeoutMs, signal:controller.signal,
+      onDiagnostic:value => process.stderr.write(diagnosticLine(value)) });
     process.stdout.write(publicStatus(true) + '\n');
   } finally { process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort); }
 }

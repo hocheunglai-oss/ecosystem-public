@@ -3,6 +3,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ecoConnections } from '../../config/ecoConnections.ts';
+import { diagnosticReader, publicDiagnostic } from './nightly.mjs';
 
 const reject = () => { throw new Error('Invalid backup startup configuration.'); };
 const check = value => { if (!value) reject(); };
@@ -69,12 +70,14 @@ export function prepareGitHubBackup(env) {
   return { config, childEnv };
 }
 
-function runChild({ configPath, env }) {
+function runChild({ configPath, env, onDiagnostic }) {
   return new Promise((accept, rejectChild) => {
-    // Suppress unexpected worker exceptions as well as normal provider output.
+    // stdout can contain a private receipt. stderr is parsed as a strict bounded
+    // diagnostic protocol; no arbitrary child/provider output reaches the log.
     const child = spawn(process.execPath, [fileURLToPath(new URL('./nightly.mjs', import.meta.url)),
       '--canonical', fileURLToPath(new URL('../../config/ecoConnections.ts', import.meta.url)), '--config', configPath],
-    { env, stdio: 'ignore' });
+    { env, stdio: ['ignore','ignore','pipe'] });
+    child.stderr.on('data', diagnosticReader(onDiagnostic));
     const interrupt = () => child.kill('SIGTERM');
     const cleanup = () => { process.removeListener('SIGTERM', interrupt); process.removeListener('SIGINT', interrupt); };
     process.once('SIGTERM', interrupt); process.once('SIGINT', interrupt);
@@ -94,7 +97,9 @@ export async function runGitHubBackup(env = process.env, { launch = runChild, lo
     directory = await mkdtemp(join(env.RUNNER_TEMP, 'eco-backup-config-'));
     const configPath = join(directory, 'config.json');
     await writeFile(configPath, JSON.stringify(config), { flag: 'wx', mode: 0o600 });
-    ok = await launch({ configPath, env: childEnv }) === 0;
+    ok = await launch({ configPath, env: childEnv, onDiagnostic:value => {
+      const line = publicDiagnostic(value); if (line) log(line);
+    } }) === 0;
   } catch { ok = false; }
   finally {
     if (directory) try { await rm(directory, { recursive: true, force: true, maxRetries: 3 }); } catch { ok = false; }

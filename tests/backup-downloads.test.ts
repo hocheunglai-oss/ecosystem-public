@@ -38,6 +38,34 @@ test('backup OIDC verifies real RSA signatures and both exact documented subject
   await assert.rejects(verifyTest('a'.repeat(17_000)), BackupAuthError);
 });
 
+test('GitHub ten-minute not-before backdating is accepted only within its documented bound', async () => {
+  // GitHub's example has iat=1632493567, nbf=1632492967 and exp=1632493867:
+  // https://docs.github.com/en/actions/concepts/security/openid-connect#understanding-the-oidc-token
+  // Shift those intervals to the fixture clock and keep real signature verification.
+  for (const backdate of [0, 30, 599, 600]) {
+    await verifyTest(token({ iat: now, nbf: now - backdate, exp: now + 300 }));
+  }
+  for (const backdate of [601, 3600, 86400]) {
+    await assert.rejects(verifyTest(token({ iat: now, nbf: now - backdate, exp: now + 300 })), BackupAuthError);
+  }
+});
+
+test('backdated not-before cannot extend issuance or expiry limits or bypass workflow identity and signature', async () => {
+  const backdated = { nbf: base.iat - 600 };
+  for (const changes of [
+    { ...backdated, exp: now },
+    { iat: now - 601, nbf: now - 1201, exp: now + 1 },
+    { iat: now + 31, nbf: now - 569, exp: now + 331 },
+    { ...backdated, exp: base.iat + 601 },
+    { ...backdated, nbf: now + 31 },
+    { ...backdated, environment: 'other' },
+    { ...backdated, ref: 'refs/heads/other' },
+    { ...backdated, repository_id: '999' },
+    { ...backdated, aud: `${base.aud}/other` },
+  ]) await assert.rejects(verifyTest(token(changes)), BackupAuthError);
+  await assert.rejects(verifyTest(token(backdated, {}, otherKeys.privateKey)), BackupAuthError);
+});
+
 test('same-name forks, foreign workflows, PRs, other branches and missing/changed authorization claims fail closed', async () => {
   const variants: Record<string, unknown>[] = [
     { repository_id: '999' }, { repository_owner_id: '999' }, { repository_id: Number(pins.githubRepositoryId) },
@@ -108,7 +136,7 @@ const request = (body: unknown = { objects: [item] }, authorization = token(), e
   new Request(base.aud, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authorization}`, ...extra }, body: JSON.stringify(body) });
 
 test('only an authenticated workflow receives the exact requested immutable PDF and short-lived GET URL', async () => {
-  const f = fixture(), response = await handleBackupDownloads(request(), f.storage, f.options);
+  const f = fixture(), response = await handleBackupDownloads(request(undefined, token({ nbf: base.iat - 600 })), f.storage, f.options);
   assert.equal(response.status, 200); assert.match(response.headers.get('cache-control')!, /private, no-store/);
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer'); assert.equal(response.headers.getSetCookie().length, 0);
   const result = await response.json();
@@ -120,6 +148,7 @@ test('only an authenticated workflow receives the exact requested immutable PDF 
 
 test('authorization precedes inventory lookup; disabled, forged and browser requests issue no links', async () => {
   for (const [req, enabled, status] of [[request(), false, 404], [request({}, 'not-a-token'), true, 401],
+    [request(undefined, token({ nbf: base.iat - 601 })), true, 401],
     [request(undefined, token({ repository_id: '999' })), true, 401], [request(undefined, token(), { Origin: ecoConnections.productionOrigin }), true, 403],
     [new Request(base.aud, { method: 'DELETE' }), true, 405], [new Request(base.aud + '?bucket=anything', { method: 'POST' }), true, 404]] as const) {
     const f = fixture(); const response = await handleBackupDownloads(req, f.storage, { ...f.options, enabled });

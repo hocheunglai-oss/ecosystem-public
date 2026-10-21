@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { validateConnection } from './capture-postgres.mjs';
 import { validateExecutionContext, validateRuntime, readPrivateFile, loadSecrets, runNightly,
-  superviseWorker, createGoogleAuthorizedFetch, publicStatus, writeManifest } from './nightly.mjs';
+  superviseWorker, createGoogleAuthorizedFetch, publicStatus, writeManifest,
+  safeDiagnostic, diagnosticLine, publicDiagnostic, diagnosticReader } from './nightly.mjs';
 
 const ref = 'abcdefghijklmnopqrst', password = 'SYNTHETIC_SECRET_DO_NOT_LOG', now = '2026-10-21T18:17:00.000Z';
 const target = { supabaseProjectRef:ref, githubRepository:'example/eco-source', identityMode:'independent-password', productionOrigin:'https://eco.example.test', supplierReportsBucket:'synthetic-reports' };
@@ -119,6 +120,48 @@ test('pre-verification failure never invokes retention and redacts underlying ex
     }finally{await rm(f.directory,{recursive:true,force:true});}
   });
 });
+test('failure stages are fixed enums and underlying provider errors never enter diagnostics',async()=>{
+  for(const [failAt,phase]of Object.entries({lock:'RUN_LOCK',target:'DRIVE_TARGET',find:'DRIVE_TARGET',capture:'DATABASE_CAPTURE',seal:'ENCRYPTION',alive:'RUN_LOCK',upload:'DRIVE_UPLOAD',retain:'RETENTION',close:'CLEANUP'})){
+    const f=await fixture({failAt}),diagnostics=[];f.deps.onDiagnostic=value=>diagnostics.push(value);
+    try{
+      await assert.rejects(runNightly(f.payload,f.deps));
+      assert.equal(diagnostics.at(-1).phase,phase);
+      assert.equal(diagnostics.at(-1).code,phase==='CLEANUP'?'CLEANUP_FAILED':'FAILED');
+      assert.ok(diagnostics.every(value=>safeDiagnostic(value)));
+      assert.doesNotMatch(JSON.stringify(diagnostics),/SYNTHETIC|provider|password|https:|SELECT/u);
+    }finally{await rm(f.directory,{recursive:true,force:true});}
+  }
+});
+test('nested storage authorization failure retains its stage and only an approved error code',async()=>{
+  for(const [code,expected]of [['AUTHORIZATION_RESPONSE_INVALID','AUTHORIZATION_FAILED'],['OIDC_TOKEN_INVALID','OIDC_TOKEN_INVALID'],['PRIVATE_TOKEN_WITH_SQL SELECT * FROM auth.users','FAILED']]){
+    const f=await fixture(),diagnostics=[],original=f.deps.capture;
+    f.deps.onDiagnostic=value=>diagnostics.push(value);
+    f.deps.capture=async options=>{await original(options);return options.captureObjects([],options.outputDir);};
+    f.deps.captureObjects=async()=>{throw Object.assign(new Error(password+' bearer token and provider response'),{code});};
+    try{
+      await assert.rejects(runNightly(f.payload,f.deps));
+      assert.equal(diagnostics.at(-1).phase,'STORAGE');assert.equal(diagnostics.at(-1).code,expected);
+      assert.equal(f.events.includes('seal'),false);assert.equal(f.events.includes('retain'),false);
+      assert.doesNotMatch(JSON.stringify(diagnostics),/SYNTHETIC|PRIVATE_TOKEN|SELECT|bearer|provider/u);
+    }finally{await rm(f.directory,{recursive:true,force:true});}
+  }
+});
+test('diagnostic protocol rejects arbitrary fields, strings, timing and oversized/partial stderr',()=>{
+  const valid={phase:'STORAGE',code:'FAILED',elapsedSeconds:3};
+  const invalid=[{...valid,phase:password},{...valid,code:password},{...valid,message:password},
+    {...valid,elapsedSeconds:password},{...valid,elapsedSeconds:-1},{...valid,elapsedSeconds:2701},
+    {...valid,elapsedSeconds:1.5},{phase:'STORAGE',code:'FAILED'},null,[],password];
+  for(const value of invalid){assert.equal(safeDiagnostic(value),null);assert.equal(diagnosticLine(value),null);assert.equal(publicDiagnostic(value),null);}
+  assert.equal(publicDiagnostic(valid),'ECO backup phase=STORAGE code=FAILED elapsed=3s.');
+  const seen=[],reader=diagnosticReader(value=>seen.push(value));
+  const text=password+'\n'+invalid.map(value=>'ECO_BACKUP_DIAGNOSTIC '+JSON.stringify(value)+'\n').join('')
+    +'x'.repeat(600)+'\n'+diagnosticLine(valid);
+  for(let i=0;i<text.length;i+=3)reader(Buffer.from(text.slice(i,i+3)));
+  assert.deepEqual(seen,[valid]);
+  reader(Buffer.from('ECO_BACKUP_DIAGNOSTIC '+JSON.stringify(valid)));assert.equal(seen.length,1);
+  const overflow=[],bounded=diagnosticReader(value=>overflow.push(value));bounded(Buffer.from('x'.repeat(16385)));bounded(Buffer.from(diagnosticLine(valid)));
+  assert.deepEqual(overflow,[]);
+});
 test('mismatched upload hash prevents retention',async()=>{
   const f=await fixture({wrongReceipt:true});try{await assert.rejects(runNightly(f.payload,f.deps));assert.equal(f.events.includes('retain'),false);}
   finally{await rm(f.directory,{recursive:true,force:true});}
@@ -183,6 +226,7 @@ const mode=${JSON.stringify(mode)};
 if(mode==='success'){process.stdout.write(JSON.stringify({schemaVersion:1,verified:true,environment:Object.keys(process.env)}));}
 else if(mode==='failure'){process.exitCode=7;}
 else if(mode==='noisy'){process.stdout.write('x'.repeat(70000));setInterval(()=>{},1000);}
+else if(mode==='diagnostic'){process.stderr.write('\\nECO_BACKUP_DIAGNOSTIC '+JSON.stringify({phase:'STORAGE',code:'AUTHORIZATION_FAILED',elapsedSeconds:777})+'\\nECO_BACKUP_DIAGNOSTIC '+JSON.stringify({phase:'STORAGE',code:'FAILED',elapsedSeconds:1,provider:'SYNTHETIC_SECRET_DO_NOT_LOG'})+'\\n');process.exitCode=7;}
 else {spawn(process.execPath,['-e',"require('fs').writeFileSync(process.argv[1],String(process.pid));setTimeout(()=>require('fs').writeFileSync(process.argv[2],'SURVIVED'),700);setInterval(()=>{},1000)",input.pidFile,input.markerFile],{stdio:'ignore'});setInterval(()=>{},1000);}
 `,{mode:0o600});return file;
 }
@@ -218,6 +262,16 @@ test('pre-cancelled worker is never started and allocated directory is removed',
   const parent=await root('eco-nightly-preabort-test-'),controller=new AbortController();controller.abort();
   try{await assert.rejects(superviseWorker({payload:{},workParent:parent,timeoutMs:1000,signal:controller.signal}));assert.deepEqual(await readdir(parent),[]);}
   finally{await rm(parent,{recursive:true,force:true});}
+});
+test('supervisor propagates only whitelisted stderr diagnostics with its own elapsed time',async()=>{
+  const parent=await root('eco-nightly-diagnostic-test-'),seen=[];
+  try{
+    const workerFile=await fakeWorker(parent,'diagnostic');
+    await assert.rejects(superviseWorker({payload:{},workParent:parent,timeoutMs:2000,workerFile,onDiagnostic:value=>seen.push(value)}));
+    assert.equal(seen.length,1);assert.equal(seen[0].phase,'STORAGE');assert.equal(seen[0].code,'AUTHORIZATION_FAILED');
+    assert.ok(seen[0].elapsedSeconds<2);assert.doesNotMatch(JSON.stringify(seen),/SYNTHETIC|provider/u);
+    assert.equal((await readdir(parent)).some(name=>name.startsWith('eco-nightly-')),false);
+  }finally{await rm(parent,{recursive:true,force:true});}
 });
 test('public status never reports a hosted restore and contains no secret or source metadata',()=>{
   assert.doesNotMatch(publicStatus(true),/restore|table|row|email|SYNTHETIC/iu);

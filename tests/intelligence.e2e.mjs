@@ -5,21 +5,27 @@ import { chromium, webkit, expect } from '@playwright/test';
 import { syntheticIntelligence } from './fixtures/intelligence.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 
 const base = process.env.ECO_INTELLIGENCE_ORIGIN || 'http://127.0.0.1:4398';
 const out = resolve(process.env.ECO_INTELLIGENCE_OUTPUT || 'output/intelligence-ui');
+const sessionLatency = Number(process.env.ECO_TEST_SESSION_LATENCY_MS || 0);
 const user = { id: '10000000-0000-4000-8000-000000000001', email: 'intelligence-admin@example.test', displayName: 'REFERENCE ADMIN', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1, capabilities: { appearancePreview: true, testWorkspace: true } };
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
 const results = [];
 await mkdir(out, { recursive: true });
 async function fixture(context) {
-  const state = { user: structuredClone(user), preview: null, snapshot: syntheticIntelligence(), status: 200, requests: 0, writes: [], hold: false, pending: [] };
+  const state = { user: structuredClone(user), preview: null, latency: 0, snapshot: syntheticIntelligence(), status: 200, requests: 0, writes: [], hold: false, pending: [] };
   await context.route('**/api/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); return route.fulfill({ status: 404, json: { message: 'Isolated fixture only' } }); });
   await installEmptyLiveInbox(context);
-  await context.route('**/api/access/**', route => {
+  await context.route('**/api/access/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
+    if (path === 'session') {
+      const response = { status: state.user ? 200 : 401, json: state.user ? structuredClone({ user: state.user, preview: state.preview }) : { message: 'Sign in required.' } };
+      if (state.latency > 0) await new Promise(resolve => setTimeout(resolve, state.latency));
+      return route.fulfill(response).catch(() => {});
+    }
     if (!state.user) return route.fulfill({ status: 401, json: { message: 'Sign in required.' } });
-    if (path === 'session') return route.fulfill({ json: { user: state.user, preview: state.preview } });
     if (path === 'phone-requests') return route.fulfill({ json: { requests: [] } });
     if (path === 'users') return route.fulfill({ json: { users: [state.user], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
     return route.fulfill({ status: 403, json: { message: 'No fixture mutation allowed' } });
@@ -106,16 +112,17 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await focus(page); await expect(ranking).toContainText('2026-01-01 – 2026-01-14');
       await ranking.evaluate(node => node.scrollIntoView({ block: 'start' })); await geometry(page, width); await shot('dated-period');
       state.snapshot = syntheticIntelligence();
+      state.latency = sessionLatency;
       state.hold = true; await focus(page); await expect.poll(() => state.pending.length).toBe(1);
       state.user = { ...user, capabilities: { appearancePreview: false, testWorkspace: false }, id: '20000000-0000-4000-8000-000000000001', email: 'second@example.test', displayName: 'REFERENCE TRADER', isAdmin: false, isSpcTrader: false };
       state.snapshot = { ...syntheticIntelligence(), suppliers: syntheticIntelligence().suppliers.map(item => ({ ...item, name: item.name.replace('SYNTHETIC', 'SECOND') })) };
-      await focus(page); await expect(page.getByText('REFERENCE TRADER', { exact: true }).first()).toBeVisible();
+      await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.getByText('REFERENCE TRADER', { exact: true }).first()).toBeVisible();
       state.pending.splice(0).forEach(done => done());
       dialog = await openPort(page); await expect(ranking).toContainText('SECOND SUPPLIER 12'); await expect(ranking).not.toContainText('SYNTHETIC SUPPLIER');
       state.user = { ...user }; state.preview = { role: 'trader', officeId: 'HONG KONG', officeName: 'HONG KONG', readOnly: true };
-      await focus(page); await expect(page.getByText(/Preview.*Read only/i).first()).toBeVisible();
+      await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.getByText(/Preview.*Read only/i).first()).toBeVisible();
       await openPort(page); await expect(ranking).toContainText('SECOND SUPPLIER 12');
-      state.user = null; state.preview = null; await focus(page); await expect(button(page, 'Sign in')).toBeVisible();
+      state.user = null; state.preview = null; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(button(page, 'Sign in')).toBeVisible();
       const signedOutRequests = state.requests; await focus(page); await page.waitForTimeout(100); assert.equal(state.requests, signedOutRequests, 'Signed-out does not fetch private references');
       await expect(ranking).toHaveCount(0); await shot('signed-out'); assert.deepEqual(errors, []); assert.deepEqual(state.writes, []);
       results.push({ engine, width, theme, passed: true });

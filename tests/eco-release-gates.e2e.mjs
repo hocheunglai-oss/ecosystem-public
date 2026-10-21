@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import { installTestWorkspacePolicy, activateTestWorkspace } from './fixtures/test-workspace.mjs';
 import assert from 'node:assert/strict';
@@ -107,16 +108,16 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       // Revoke administrator access while a buyer workspace is mounted. Cached
       // administrator panels must disappear before another person can use them.
       dialog = await open(page, 'Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible();
-      state.user = { ...admin, displayName: 'REAL TRADER', isAdmin: false, isSpcTrader: false }; await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await expect(page.locator('.hud-identity')).toContainText('REAL TRADER'); await expect(page.locator('.buyer-profile-directory')).toHaveCount(0);
+      state.user = { ...admin, displayName: 'REAL TRADER', isAdmin: false, isSpcTrader: false }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.locator('.hud-identity')).toContainText('REAL TRADER'); await expect(page.locator('.buyer-profile-directory')).toHaveCount(0);
       for (const [role] of roles) {
         state.user = { ...admin, displayName: `REAL ${role.toUpperCase()}`, isAdmin: false, isSpcTrader: role === 'spc-trader', isManager: role === 'manager', officeId: role === 'credit' ? 'CREDIT' : 'HONG KONG', officeName: role === 'credit' ? 'CREDIT' : 'HONG KONG' };
-        await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+        await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview });
         await expect(page.locator('.hud-identity')).toContainText(`REAL ${role.toUpperCase()}`);
         await expect(page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true })).toHaveCount(0);
         await expectDeferredHeading(page);
         for (const name of ['Buyer Profiles', 'Credit Requests']) { dialog = await openDeferred(page, name); await expect(dialog.locator('.release-notice:visible')).toHaveText(notice); await close(page); }
       }
-      state.user = { ...admin }; await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await expect(page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true })).toBeVisible();
+      state.user = { ...admin }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true })).toBeVisible();
       dialog = await open(page, 'Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible(); await close(page);
       assert.deepEqual(state.writes, [], 'release preview must not save profile data'); assert.deepEqual(errors, []);
       results.push({ engine, width, theme, passed: true, previewRoles: roles.map(([role]) => role), actualRoles: roles.map(([role]) => role) }); console.log(`PASS ${engine} ${width} ${theme}: admin, four previews, four actual roles, search, legacy links, enquiry, access revocation`);

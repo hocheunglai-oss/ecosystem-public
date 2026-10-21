@@ -1,0 +1,6 @@
+.privacy-details{max-width:76ch;margin:0 auto;padding:16px;color:var(--ink);overflow-wrap:anywhere;line-height:1.6}
+.privacy-details h2{font-size:var(--ui-text-section);margin:0 0 24px}
+.privacy-details h3{font-size:var(--ui-text-body);margin:0 0 12px}
+.privacy-details section{margin-bottom:24px}
+.privacy-details p{margin:0 0 12px}
+@media(max-width:760px){.privacy-details{padding:12px 0}}

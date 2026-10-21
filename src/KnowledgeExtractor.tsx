@@ -130,6 +130,10 @@ export default function KnowledgeExtractor({
     setError("");
     setSaveAttempted(false);
   }
+  function close() {
+    if ((text.trim() || source.trim() || sourceDate || proposals || busy) && !window.confirm('DISCARD UNSAVED CHANGES?')) return;
+    onClose?.();
+  }
   function save() {
     if (!proposals) return;
     setSaveAttempted(true);
@@ -256,7 +260,7 @@ export default function KnowledgeExtractor({
                   <button
                     type="button"
                     className="button secondary"
-                    onClick={onClose}
+                    onClick={close}
                   >
                     Cancel
                   </button>
@@ -341,7 +345,7 @@ export default function KnowledgeExtractor({
   return embedded ? (
     content
   ) : (
-    <Modal title="Information extractor" onClose={() => onClose?.()} wide>
+    <Modal title="Information extractor" onClose={close} wide>
       {content}
     </Modal>
   );

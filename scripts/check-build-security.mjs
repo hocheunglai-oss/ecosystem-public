@@ -2,6 +2,7 @@ import { readdir, readFile, stat, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, relative, join, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { pdfPreviewAssetPath } from './pdf-preview-assets.mjs';
 
 // Reports contain locations and rule identifiers, never matched text or secret values.
 const credentialPatterns = [
@@ -36,7 +37,7 @@ export function credentialFindings(content, environment = {}) {
 }
 
 export async function inspectBuild(directory, budgets, environment = {}) {
-  const metrics = { fileCount: 0, totalBuildBytes: 0, javaScriptGzipBytes: 0, cssGzipBytes: 0 };
+  const metrics = { fileCount: 0, totalBuildBytes: 0, javaScriptGzipBytes: 0, coreJavaScriptGzipBytes: 0, optionalPdfJavaScriptGzipBytes: 0, optionalPdfAssetBytes: 0, cssGzipBytes: 0 };
   const findings = [];
   async function walk(current) {
     for (const entry of await readdir(current, { withFileTypes: true })) {
@@ -48,24 +49,40 @@ export async function inspectBuild(directory, budgets, environment = {}) {
       if (entry.isDirectory()) { await walk(file); continue; }
       if (!entry.isFile()) continue;
       metrics.fileCount++;
-      metrics.totalBuildBytes += (await stat(file)).size;
+      const fileBytes = (await stat(file)).size;
+      metrics.totalBuildBytes += fileBytes;
+      if (name.startsWith(pdfPreviewAssetPath)) metrics.optionalPdfAssetBytes += fileBytes;
       const extension = extname(entry.name);
       if (extension === '.map') findings.push({ file: name, rule: 'public-source-map' });
       if (!textExtensions.has(extension)) continue;
       const bytes = await readFile(file);
       for (const rule of credentialFindings(bytes.toString('utf8'), environment)) findings.push({ file: name, rule });
-      if (extension === '.js' || extension === '.mjs') metrics.javaScriptGzipBytes += gzipSync(bytes, { level: 9 }).length;
+      if (extension === '.js' || extension === '.mjs') {
+        const size = gzipSync(bytes, { level: 9 }).length;
+        metrics.javaScriptGzipBytes += size;
+        // The pinned PDF renderer/worker/decoders are requested only on preview.
+        // They remain scanned above and counted in total bytes; the core ceiling
+        // stays unchanged instead of being increased for an optional reader.
+        if (name.startsWith(pdfPreviewAssetPath) && /^(?:pdf(?:\.worker)?\.min\.mjs|wasm\/(?:jbig2|openjpeg)_nowasm_fallback\.js)$/.test(name.slice(pdfPreviewAssetPath.length))) metrics.optionalPdfJavaScriptGzipBytes += size;
+        else metrics.coreJavaScriptGzipBytes += size;
+      }
       if (extension === '.css') metrics.cssGzipBytes += gzipSync(bytes, { level: 9 }).length;
     }
   }
   await walk(directory);
   if (!(await stat(join(directory, 'index.html'))).isFile()) throw new Error('Missing build entry');
   for (const [metric, limit] of [
-    ['javaScriptGzipBytes', 'maxJavaScriptGzipBytes'], ['cssGzipBytes', 'maxCssGzipBytes'], ['totalBuildBytes', 'maxTotalBuildBytes'],
+    ['coreJavaScriptGzipBytes', 'maxJavaScriptGzipBytes'], ['cssGzipBytes', 'maxCssGzipBytes'], ['totalBuildBytes', 'maxTotalBuildBytes'],
   ]) {
     if (!Number.isSafeInteger(budgets[limit]) || budgets[limit] <= 0) throw new Error('Invalid build budget');
-    if (metrics[metric] > budgets[limit]) findings.push({ file: 'dist', rule: `budget:${metric}` });
+    if (metrics[metric] > budgets[limit]) findings.push({ file: 'dist', rule: `budget:${metric === 'coreJavaScriptGzipBytes' ? 'javaScriptGzipBytes' : metric}` });
   }
+  const optionalLimit = budgets.maxOptionalPdfJavaScriptGzipBytes ?? 0;
+  if (!Number.isSafeInteger(optionalLimit) || optionalLimit < 0) throw new Error('Invalid optional PDF budget');
+  if (metrics.optionalPdfJavaScriptGzipBytes > optionalLimit) findings.push({ file: 'dist', rule: 'budget:optionalPdfJavaScriptGzipBytes' });
+  const optionalAssetsLimit = budgets.maxOptionalPdfAssetBytes ?? 0;
+  if (!Number.isSafeInteger(optionalAssetsLimit) || optionalAssetsLimit < 0) throw new Error('Invalid optional PDF assets budget');
+  if (metrics.optionalPdfAssetBytes > optionalAssetsLimit) findings.push({ file: 'dist', rule: 'budget:optionalPdfAssetBytes' });
   return { metrics, findings };
 }
 

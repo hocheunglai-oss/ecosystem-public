@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -84,8 +85,8 @@ for(const[engine,browserType]of[['chromium',chromium],['webkit',webkit]]){
         await resetPage();await expect(toggle(page)).toBeEnabled();await expect(toggle(page)).toHaveAttribute('aria-pressed','false');
         ({workspace,dialog}=await openPic(page));await expect.poll(()=>Boolean(state.releaseDetail)).toBe(true);
         const settled=state.detailSettled;
-        if(transition==='account'){state.user={...other};await focus(page);await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');}
-        else if(transition==='preview'){state.preview={role:'trader',officeId:'HONG KONG',officeName:'HONG KONG',readOnly:true};await focus(page);await expect(page.getByRole('status',{name:'Role preview'}).first()).toBeVisible();}
+        if(transition==='account'){state.user={...other};await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');}
+        else if(transition==='preview'){state.preview={role:'trader',officeId:'HONG KONG',officeName:'HONG KONG',readOnly:true};await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});await expect(page.getByRole('status',{name:'Role preview'}).first()).toBeVisible();}
         else{await dialog.getByRole('button',{name:'CANCEL',exact:true}).click();await workspace.getByRole('button',{name:'Close workspace',exact:true}).click();await toggle(page).click();await expect(toggle(page)).toHaveAttribute('aria-pressed','true');await toggle(page).click();await expect(toggle(page)).toHaveAttribute('aria-pressed','false');}
         await expect(dialog).toHaveCount(0);state.releaseDetail();await expect.poll(()=>state.detailSettled).toBe(settled+1);
         assert.equal(state.writes.length,0,`${transition}: stale detail callback must never POST`);
@@ -104,7 +105,7 @@ for(const[engine,browserType]of[['chromium',chromium],['webkit',webkit]]){
       await dialog.getByLabel('SUPPLIER PIC FOR FIXTURE',{exact:true}).selectOption('PENDING PIC EDIT');
       state.holdUpdate=true;state.releaseUpdate=null;const settled=state.updateSettled;
       await dialog.getByRole('button',{name:'CONTRIBUTE +1',exact:true}).click();await expect.poll(()=>Boolean(state.releaseUpdate)).toBe(true);
-      state.user={...other};await focus(page);await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');await expect(dialog).toHaveCount(0);
+      state.user={...other};await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');await expect(dialog).toHaveCount(0);
       state.releaseUpdate();await expect.poll(()=>state.updateSettled).toBe(settled+1);await page.waitForTimeout(100);
       assert.equal(await page.evaluate(()=>window.__supplierEvents),0,'Old completion must not publish refresh events after account change');
       // Switching workspace modes drops the open profile and its unsaved draft.

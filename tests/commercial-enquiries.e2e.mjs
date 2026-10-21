@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -159,13 +160,13 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
 
       // Revoking queue access on the same account also clears its previously loaded rows.
       state.user={...owner,isAdmin:false,isSpcTrader:false};
-      await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+      await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});
       await expect(page.getByRole('complementary',{name:'Your dashboard'})).not.toContainText('Admin');
       if(!await dialog.isVisible())dialog=await openEnquiry(page);
       await expect(dialog.getByRole('button',{name:'Singapore queue',exact:true})).toHaveCount(0);
       await expect(dialog.locator(`[data-commercial-id="${otherId}"]`)).toHaveCount(0);
       await expect(dialog.locator(`[data-commercial-id="${id}"]`)).toBeVisible();
-      state.user=owner;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+      state.user=owner;await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});
       await expect(page.getByRole('complementary',{name:'Your dashboard'})).toContainText('Admin');
       if(!await dialog.isVisible())dialog=await openEnquiry(page);
 
@@ -204,7 +205,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       state.holdDetail=()=>{detailStarted=true;return new Promise(resolve=>{releaseDetail=resolve;});};
       await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button').click();
       await expect.poll(()=>detailStarted).toBe(true);
-      state.user=other;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+      state.user=other;await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});
       await expect(page.getByRole('complementary',{name:'Your dashboard'})).toContainText('OTHER TRADER');
       dialog=await openEnquiry(page);
       await expect(dialog.locator(`[data-commercial-id="${otherId}"]`)).toBeVisible();

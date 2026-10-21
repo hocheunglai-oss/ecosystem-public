@@ -40,6 +40,5 @@ export function AccessLogin() {
     <button className="lime-control entry-submit" type="submit" disabled={busy || access.loading}>
       <span>{busy ? 'Signing in…' : access.loading ? 'Checking session…' : activation ? 'Set password' : 'Sign in'}</span><ArrowUpRight size={23} />
     </button>
-    <a className="ui-button" href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ justifySelf: 'center' }}>Privacy</a>
   </form>;
 }

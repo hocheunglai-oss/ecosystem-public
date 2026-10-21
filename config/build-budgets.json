@@ -1,6 +1,8 @@
 {
-  "description": "Regression ceilings for the current prototype, not performance targets or a latency guarantee. Lower these as business screens are split and media is optimized.",
+  "description": "Core ceilings remain unchanged. On-demand PDF.js renderer/worker/decoders: 700 KB gzip (668 KB measured). All PDF assets including fonts/CMaps/wasm: 5 MB raw (4.77 MB measured). Every asset remains scanned and counted in total build bytes. These are regression ceilings, not latency guarantees.",
   "maxJavaScriptGzipBytes": 280000,
+  "maxOptionalPdfJavaScriptGzipBytes": 700000,
+  "maxOptionalPdfAssetBytes": 5000000,
   "maxCssGzipBytes": 65000,
   "maxTotalBuildBytes": 150000000
 }

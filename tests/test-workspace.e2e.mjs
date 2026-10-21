@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -80,13 +81,13 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       assert.equal(await readState(page, testKey(g2)), null);
       state.policy = { enabled: true, generation: g2 }; await focus(page); await expect(control(page)).toBeEnabled();
       await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'true');
-      state.user = { ...otto, capabilities: { appearancePreview: true, testWorkspace: false } }; await focus(page);
+      state.user = { ...otto, capabilities: { appearancePreview: true, testWorkspace: false } }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview });
       await expect(control(page)).toHaveCount(0);
       assert.equal(JSON.stringify(await readState(page, liveKey)), liveBefore, 'Same-account capability revocation restores LIVE without touching its records');
-      state.user = { ...otto, id: '10000000-0000-4000-8000-000000000002', email: 'another@example.test', displayName: 'OTHER ADMIN', capabilities: { appearancePreview: false, testWorkspace: false } }; await focus(page);
+      state.user = { ...otto, id: '10000000-0000-4000-8000-000000000002', email: 'another@example.test', displayName: 'OTHER ADMIN', capabilities: { appearancePreview: false, testWorkspace: false } }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview });
       await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN'); await expect(control(page)).toHaveCount(0);
       const otherKey = `ecosystem.live.v1:${state.user.id}:state`; await expect.poll(async () => (await readState(page, otherKey))?.companies.length).toBe(0); await shot('other-admin');
-      state.user = null; await focus(page); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible(); await expect(control(page)).toHaveCount(0); await shot('signed-out');
+      state.user = null; await invalidateFixtureAuthority(page, { user: null, preview: state.preview }); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible(); await expect(control(page)).toHaveCount(0); await shot('signed-out');
       assert.equal(await page.evaluate(key => localStorage.getItem(key), legacyKey), '{"preserved":"LEGACY COMMERCIAL EDITS"}');
       assert.deepEqual(state.writes, []); assert.deepEqual(errors, []);
       results.push({ engine, width, theme, passed: true }); console.log(`PASS ${engine} ${width} ${theme}: live/test isolation, role preview, reload, error, rotation, revocation, other admin, signed out`);

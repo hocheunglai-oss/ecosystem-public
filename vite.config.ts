@@ -10,11 +10,13 @@ import { serveParser } from './server/parser/node.ts';
 import { serveInbox } from './server/inbox/node.ts';
 import { serveEmailSync } from './server/inbox-email/node.ts';
 import { serveIntelligence } from './server/intelligence/node.ts';
+// @ts-expect-error Build asset plugin intentionally runs as plain JavaScript.
+import { pdfPreviewAssets } from './scripts/pdf-preview-assets.mjs';
 export default defineConfig(({ mode }) => {
   // Load server-only ECO variables for the local API; none are injected into client code.
   const accessEnvironment = { ...process.env, ...loadEnv(mode, process.cwd(), 'ECO_'), ...loadEnv(mode, process.cwd(), 'OPENAI_') };
   return {
-  plugins: [react(), {
+  plugins: [react(), pdfPreviewAssets(), {
     name: 'eco-access-api',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {

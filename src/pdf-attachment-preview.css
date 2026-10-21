@@ -1,0 +1,11 @@
+.modal.window-dialog:has(>.pdf-preview){display:flex;flex-direction:column;overflow:hidden}
+.modal:has(>.pdf-preview) .eyebrow{overflow-wrap:anywhere}
+.pdf-preview{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;color:var(--ink)}
+.pdf-preview-toolbar,.pdf-preview-toolbar>div{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
+.pdf-preview-toolbar{padding:8px;border-bottom:1px solid var(--line);flex-shrink:0}
+.pdf-preview-toolbar span{min-width:84px;text-align:center;font-size:var(--ui-text-label)}
+.pdf-preview-pages{flex:1;min-height:120px;overflow:auto;padding:12px;overscroll-behavior:contain}
+.pdf-preview-pages canvas{display:block;margin:0 auto;max-width:none;background:#fff}
+.pdf-preview-pages canvas[hidden]{display:none}
+.pdf-preview-pages pre{white-space:pre-wrap;overflow-wrap:anywhere;text-transform:none;max-width:80ch;margin:auto;line-height:1.6}
+.pdf-preview-status{margin:4px 12px;font-size:var(--ui-text-label)}

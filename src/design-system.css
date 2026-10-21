@@ -30,6 +30,8 @@
   --ui-private-ink: #61477f;
   --ui-private-border: #c8b6dc;
   --ui-disabled-opacity: .55;
+  --ui-form-width: 720px;
+  --ui-editor-width: 1120px;
 }
 :root[data-theme="dark"] {
   --ui-control-hover: #294358;
@@ -191,7 +193,7 @@
   border-radius: var(--ui-radius-control);
 }
 #root :is(.workspace-window, .modal, .workspace-module) :is(.field > input, .field > select, .users-access-toolbar > input, .users-access-editor input:not([type="checkbox"]), .users-access-editor select) {
-  min-height: var(--ui-field-height); padding: 7px 10px;
+  min-height: var(--ui-field-height); height: var(--ui-field-height); padding: 7px 10px;
 }
 #root :is(.workspace-window, .modal) .users-access-editor select { padding-right: 34px; }
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(button, a, input, select, textarea, summary):focus-visible,
@@ -206,6 +208,18 @@
   border-color: var(--ui-primary-border); background: var(--ui-primary); color: var(--ui-primary-ink);
 }
 /* Personal details expands inside the dark harbour HUD in either page theme. */
+/* Expanded windows retain a compact working area for ordinary editing. */
+#root .modal.window-dialog > form:not(.knowledge-editor-focused) { width: 100%; max-width: var(--ui-form-width); margin-inline: auto; }
+#root .modal.window-dialog.wide > form:not(.knowledge-editor-focused),
+#root .modal.window-dialog > .knowledge-extractor { width: 100%; max-width: var(--ui-editor-width); margin-inline: auto; }
+#root .modal .form-grid { gap: 14px 16px; margin-bottom: 16px; }
+#root .modal .field { gap: 6px; }
+#root .modal .modal-actions { gap: 8px; margin-top: 18px; padding-top: 14px; }
+#root .shared-supplier-edit-grid { max-width: var(--ui-editor-width); margin-inline: auto; }
+#root .knowledge-block-detail:has(> .knowledge-text-canvas) > * { width: 100%; max-width: var(--ui-editor-width); margin-inline: auto; }
+#root .location-create .form-grid { grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr); }
+#root .location-create .field:first-child { grid-column: 1 / -1; }
+@media(max-width:480px) { #root .location-create .form-grid { grid-template-columns: minmax(0, 1fr); } }
 #root .profile-dropdown {
   font-family: var(--ui-font); font-size: var(--ui-text-body); line-height: 1.5;
 }

@@ -6,7 +6,7 @@ The current harbour uses a stationary Fratelli Cosulich bunker-barge illustratio
 
 - [Current barge artwork and generation provenance](cosulich-barge-assets.md)
 - [Barge artwork and official vessel references](cosulich-barge-assets.md)
-- [Gold and Hats Off rules](hats-and-gold.md)
+- [Contribution Activity and Hats](hats-and-gold.md)
 - [Harbour background provenance](oil-terminal-assets.md)
 - [Light and dark harbour modes](night-harbour-assets.md)
 

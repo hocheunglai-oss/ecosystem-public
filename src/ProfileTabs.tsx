@@ -5,6 +5,7 @@ import { dropDestination, dropEdge, type DropEdge } from './lib/dropPosition';
 import { KnowledgeEditor, type KnowledgeEditorTab } from './KnowledgeEditor';
 import { decodeProfileTabContent, encodeProfileTabContent, profileTabDocument, type ProfileContentBlock } from './lib/profileTabContent';
 import { isEmailText } from './lib/uppercase';
+import TextWithLinks from './TextWithLinks';
 import './profile-tabs.css';
 
 export interface ProfileTabDescriptor { id: string; title: string; visibility: 'shared' | 'private'; builtin?: string; entryCount?: number; content?: string; reorderGroup?: string }
@@ -102,12 +103,12 @@ export interface ProfileTabEditorNavigation {
 }
 function ProfileContentBlockView({ block }: { block: ProfileContentBlock }) {
   const [page, setPage] = useState(0);
-  if (block.type === 'text') return <article className="knowledge-block">{block.id !== 'legacy-text' && <header className="knowledge-block-head"><h4>{block.title}</h4></header>}<p className="knowledge-prose">{block.text || '—'}</p></article>;
+  if (block.type === 'text') return <article className="knowledge-block">{block.id !== 'legacy-text' && <header className="knowledge-block-head"><h4>{block.title}</h4></header>}<p className="knowledge-prose"><TextWithLinks text={block.text || '—'} /></p></article>;
   const index = Math.min(page, Math.max(0, Math.ceil(block.rows.length / 50) - 1));
   return <article className="knowledge-block"><header className="knowledge-block-head"><h4>{block.title}</h4></header>
     <div className="knowledge-table-wrap" role="region" aria-label={block.title} tabIndex={0}>
       <table style={{ minWidth: block.columns.reduce((sum, column) => sum + (column.width ?? 160), 0) }}><colgroup>{block.columns.map(column => <col key={column.id} style={{ width: column.width ?? 160 }} />)}</colgroup>
-        <thead><tr>{block.columns.map(column => <th key={column.id} scope="col">{column.name}</th>)}</tr></thead><tbody>{block.rows.slice(index * 50, index * 50 + 50).map(row => <tr key={row.id}>{row.cells.map((value, at) => <td key={block.columns[at].id} data-email-value={isEmailText(value) ? '' : undefined}>{value || '—'}</td>)}</tr>)}</tbody></table>
+        <thead><tr>{block.columns.map(column => <th key={column.id} scope="col">{column.name}</th>)}</tr></thead><tbody>{block.rows.slice(index * 50, index * 50 + 50).map(row => <tr key={row.id}>{row.cells.map((value, at) => <td key={block.columns[at].id} data-email-value={isEmailText(value) ? '' : undefined}><TextWithLinks text={value || '—'} /></td>)}</tr>)}</tbody></table>
     </div>{block.rows.length > 50 && <div className="knowledge-pagination"><button type="button" disabled={!index} onClick={() => setPage(index - 1)}>Previous</button><span>{index * 50 + 1}–{Math.min(index * 50 + 50, block.rows.length)} / {block.rows.length}</span><button type="button" disabled={(index + 1) * 50 >= block.rows.length} onClick={() => setPage(index + 1)}>Next</button></div>}
   </article>;
 }

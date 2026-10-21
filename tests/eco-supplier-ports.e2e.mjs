@@ -1,3 +1,4 @@
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -119,7 +120,7 @@ if(!process.env.ECO_TEST_ENGINE||process.env.ECO_TEST_ENGINE==='chromium'){
   await dialog.getByLabel('Official name',{exact:true}).fill('PENDING TOKYO SUPPLIER');await dialog.getByLabel('Short name',{exact:true}).fill('PENDING TOKYO');
   let release;state.createGate=new Promise(resolve=>{release=resolve;});await dialog.getByRole('button',{name:'Add supplier',exact:true}).click();await expect.poll(()=>Boolean(state.created)).toBe(true);
   state.actor.id='10000000-0000-4000-8000-000000000099';state.actor.email='second-supplier-fixture@example.test';state.actor.displayName='SECOND FIXTURE TRADER';
-  const refreshed=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/access/session');await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await refreshed;await expect(dialog).toHaveCount(0);
+  await invalidateFixtureAuthority(page,{user:state.actor,preview:null});await expect(dialog).toHaveCount(0);
   const completed=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/suppliers/create');release();await completed;
   await expect(page.locator('.shared-supplier-profile')).toHaveCount(0);await expect(page.getByRole('main',{name:'ECOSYSTEM workspace',exact:true})).toBeVisible();await expect(page.getByText('SECOND FIXTURE TRADER',{exact:true})).toBeVisible();
   results.push({engine:'chromium',scenario:'pending-create-account-switch',status:'passed'});console.log('PASS pending create account switch');

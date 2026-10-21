@@ -99,11 +99,13 @@ jobs:
             label: Administration
             scripts: |
               tests/administration.e2e.mjs
+              tests/auth-session-persistence.e2e.mjs
               tests/admin-health-refresh.e2e.mjs
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
             artifacts: |
               output/administration-ui
+              output/auth-session-ui
               output/shared-contribution-availability
               output/eco-release-gates-ui
           - group: suppliers
@@ -143,12 +145,16 @@ jobs:
             scripts: |
               tests/location-flattening.e2e.mjs
               tests/country-port-profiles.e2e.mjs
+              tests/editing-usability.e2e.mjs
+              tests/pdf-attachment-preview.e2e.mjs
               tests/private-profile-tabs.e2e.mjs
               tests/eco-supplier-ports.e2e.mjs
               tests/intelligence.e2e.mjs
             artifacts: |
               output/location-flattening-ui
               output/country-port-profiles-ui
+              output/editing-usability-ui
+              output/pdf-preview-ui
               output/private-profile-tabs-ui
               output/supplier-ports-ui
               output/intelligence-ui
@@ -171,6 +177,12 @@ jobs:
           ECO_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           ECO_ADMIN_UI_ORIGIN: http://127.0.0.1:4286
           ECO_ADMIN_UI_OUTPUT: output/administration-ui
+          ECO_AUTH_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_AUTH_UI_OUTPUT: output/auth-session-ui
+          ECO_EDITING_ORIGIN: http://127.0.0.1:4286
+          ECO_EDITING_OUTPUT: output/editing-usability-ui
+          ECO_PDF_PREVIEW_ORIGIN: http://127.0.0.1:4286
+          ECO_PDF_PREVIEW_OUTPUT: output/pdf-preview-ui
           ECO_RELEASE_UI_ORIGIN: http://127.0.0.1:4286
           ECO_TEST_OUTPUT: output/shared-contribution-availability
           ECO_SUPPLIER_UI_ORIGIN: http://127.0.0.1:4286
@@ -203,6 +215,9 @@ jobs:
           while IFS= read -r script; do
             if [[ -n "$script" ]]; then node "$script"; fi
           done <<< "$ECO_BROWSER_SCRIPTS"
+      - name: Verify action labels and case-sensitive link values
+        if: matrix.group == 'knowledge'
+        run: node --import tsx tests/uppercase-presentation.e2e.mjs
       - name: Validate and log browser verification evidence
         id: evidence
         if: always()

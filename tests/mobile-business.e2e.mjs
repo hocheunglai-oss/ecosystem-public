@@ -79,6 +79,8 @@ async function checkMobile(page) {
 }
 
 async function checkWindow(page, title) {
+  // These are full workspaces, which still open expanded. The compact default
+  // applies to small Modal forms, not to workspace windows.
   const pane = dialog(page, title);
   await expect(pane).toBeVisible();
   await expect(pane.getByRole('button', { name: 'Shrink window', exact: true })).toBeVisible();

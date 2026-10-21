@@ -7,6 +7,7 @@ import { ArrowUpRight, Check, FileText, History, Plus, Search, X } from "lucide-
 import { useDemo } from "./store";
 import { actors } from "./lib/model";
 import { isEmailText } from "./lib/uppercase";
+import TextWithLinks from './TextWithLinks';
 import { useIntelligence } from "./Intelligence";
 import { getLocationIntelligence, getSupplierIntelligence } from "./lib/intelligence";
 import { hatForEntry, type HatTarget } from "./lib/hats";
@@ -553,7 +554,7 @@ export function KnowledgeBlockView({
         </div>
       </header>
       {block.type === "text" ? (
-        <p className="knowledge-prose">{block.text}</p>
+        <p className="knowledge-prose"><TextWithLinks text={block.text} /></p>
       ) : block.type === "file" ? (
         <a href={block.url} target="_blank" rel="noreferrer">
           <FileText size={14} /> {block.title} ↗
@@ -593,7 +594,7 @@ export function KnowledgeBlockView({
                   <tr key={r.id}>
                     {r.cells.map((v, i) => (
                       <td key={block.columns[i].id} data-email-value={isEmailText(v) ? "" : undefined}>
-                        <span className="knowledge-cell-value">{v || "—"}</span>
+                        <span className="knowledge-cell-value"><TextWithLinks text={v || "—"} /></span>
                         {i === 0 && showUpdate && rowUpdates?.[r.id] && <span className="knowledge-row-attribution"><KnowledgeEntryAttribution label={`${block.title || "table"}, ${r.cells[0] || "row"}`} update={rowUpdates[r.id]} hatTarget={hatTarget ? { ...hatTarget, rowId: r.id } : undefined} /></span>}
                       </td>
                     ))}

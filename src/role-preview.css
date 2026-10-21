@@ -3,6 +3,9 @@
 .role-preview-options button { width:100%; justify-content:flex-start; }
 .role-preview-options button[aria-pressed="true"] { border-color:var(--ui-focus); background:var(--theme-raised,var(--surface)); }
 .role-preview-options p { margin:0; font-size:var(--ui-text-label); overflow-wrap:anywhere; }
+.role-preview-options { max-height:70vh; overflow:auto; }
+.role-preview-form, .role-preview-form label { display:grid; gap:6px; min-width:0; }
+.role-preview-form select { width:100%; min-width:0; }
 #root .home-display-controls .role-preview-controls > button { background:#082d45ed; color:#eff7fa; border-color:#d9faff70; }
 .personal-settings { display:grid; grid-template-columns:minmax(0,440px) minmax(0,440px); align-items:start; gap:32px; max-width:940px; }
 .personal-password h2 { font-size:var(--ui-text-section); margin:0 0 18px; }
@@ -24,7 +27,7 @@
 @media (max-width: 760px) { .role-preview-banner { padding: 9px 10px; } }
 
 .home-preview-banner { --muted: var(--theme-muted,#4c6279); font-family: var(--ui-font); font-size: var(--ui-text-body,13px); }
-@media (max-width:760px), (pointer:coarse) { .role-preview-form select { font-size:16px; } }
+@media (max-width:760px), (pointer:coarse) { .role-preview-form select { font-size:16px; height:44px; } }
 
 .home-preview-banner:empty, .workspace-preview-banner:empty { display:none; }
 

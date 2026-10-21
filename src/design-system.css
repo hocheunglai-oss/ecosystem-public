@@ -19,6 +19,7 @@
   --ui-control-border: var(--line, #91aabd);
   --ui-control-hover: #e5f1f4;
   --ui-focus: #158da4;
+  --ui-link: #175dcf;
   --ui-primary: #c5f574;
   --ui-primary-hover: #b9ed67;
   --ui-primary-border: #b7df75;
@@ -36,6 +37,7 @@
 :root[data-theme="dark"] {
   --ui-control-hover: #294358;
   --ui-focus: #78d9dd;
+  --ui-link: #83bbff;
   --ui-primary-border: #aace69;
   --ui-danger: #ffb4c0;
   --ui-danger-surface: #3b2736;
@@ -80,14 +82,14 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(th, td) { font-size: var(--ui-text-label); line-height: 1.5; }
 #root :is(.workspace-window, .modal, .workspace-module) th { font-weight: var(--ui-weight-label); }
 
-/* Actions: the existing Feedback button is the geometry and colour reference. */
-#root :is(.ui-button, .button),
+/* Ordinary actions stay neutral. Green is explicit contribution or entry semantics. */
+#root :is(.ui-button, .button, button.lime-control),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
   .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
   .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
   .knowledge-editor-actions > button, .knowledge-sheet-toolbar > button,
   .knowledge-pagination > button, .knowledge-related > button, .table-controls > button,
-  .center-lifecycle > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
+  .center-lifecycle > button, .enquiry-terms > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
   .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
   .supplier-information-actions > button, .location-recents button, .supplier-recents button
 ) {
@@ -115,23 +117,23 @@
   text-decoration: none;
   filter: none;
 }
-#root :is(.ui-button, .button):hover:not(:disabled),
+#root :is(.ui-button, .button, button.lime-control):hover:not(:disabled),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
   .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
   .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
   .knowledge-editor-actions > button, .knowledge-sheet-toolbar > button,
   .knowledge-pagination > button, .knowledge-related > button, .table-controls > button,
-  .center-lifecycle > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
+  .center-lifecycle > button, .enquiry-terms > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
   .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
   .supplier-information-actions > button, .location-recents button, .supplier-recents button
 ):hover:not(:disabled) { background: var(--ui-control-hover); border-color: var(--ui-focus); box-shadow: none; filter: none; }
-#root :is(.ui-button--primary, .button.primary),
-#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
-  .button.primary, .ui-button--primary, .lime-control, .knowledge-update-button, .ecosystem-feedback
+#root button:is(.ui-button--contribution, .ui-button--entry),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button:is(
+  .ui-button--contribution, .ui-button--entry
 ) { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
-#root :is(.ui-button--primary, .button.primary):hover:not(:disabled),
-#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
-  .button.primary, .ui-button--primary, .lime-control, .knowledge-update-button, .ecosystem-feedback
+#root button:is(.ui-button--contribution, .ui-button--entry):hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button:is(
+  .ui-button--contribution, .ui-button--entry
 ):hover:not(:disabled) { background: var(--ui-primary-hover); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
 #root :is(.ui-button--danger, .button.danger),
 #root :is(.workspace-window, .modal, .workspace-module) :is(.button.danger, .ui-button--danger) {
@@ -168,7 +170,10 @@
 #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(.button, .lime-control, .icon-button, .modal-close, .window-tool, .attachments-trigger) > svg,
 #root :is(.ui-button, .button, .icon-button) > svg { width: 16px; height: 16px; flex-shrink: 0; }
 
-/* Navigation keeps its existing selected state; only its shared type and geometry change. */
+#root :is(.workspace-window, .modal, .workspace-module) .enquiry-terms button[aria-pressed="true"] {
+  background:var(--ui-control-hover); color:var(--ui-control-ink); border-color:var(--ui-focus);
+}
+/* Navigation keeps its selected-state indication without contribution green. */
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .tabs > button, .center-tabs > button, .knowledge-tabs > button, .profile-tabs-list > button, .buyer-profile__tabs > button,
   .office-view-tabs [role="tab"], .segmented > button, .enquiry-terms > button,
@@ -185,6 +190,7 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(.text-button, .row-link) {
   font-family: var(--ui-font); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); line-height: 1.5;
 }
+#root :is(.workspace-window, .modal, .workspace-module, .access-login) input:is([type="checkbox"], [type="radio"]) { accent-color:var(--ui-focus); }
 #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
   font-family: var(--ui-font);
   font-size: var(--ui-text-body);

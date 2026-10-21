@@ -14,7 +14,7 @@ export type AccountPanel = {
 
 export function ProfileMenu({ onSignOut }: { onSignOut: () => void }) {
   return <div className="hud-personal-menu">
-    <button type="button" className="hud-profile-toggle" aria-label="Sign out" title="Sign out" onClick={onSignOut}>
+    <button type="button" className="hud-profile-toggle ui-button--entry" aria-label="Sign out" title="Sign out" onClick={onSignOut}>
       <LogOut size={18} />
     </button>
   </div>;

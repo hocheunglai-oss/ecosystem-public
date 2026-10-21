@@ -37,7 +37,7 @@ export function AccessLogin() {
     {activation && <p>At least 8 characters, including uppercase and lowercase letters and a number.</p>}
     {activation && <label>Confirm password<input type="password" autoComplete="new-password" value={confirm} onChange={event => setConfirm(event.target.value)} required disabled={busy} /></label>}
     {(error || access.error) && <p role="alert">{error || access.error}</p>}
-    <button className="lime-control entry-submit" type="submit" disabled={busy || access.loading}>
+    <button className="lime-control entry-submit ui-button--entry" type="submit" disabled={busy || access.loading}>
       <span>{busy ? 'Signing in…' : access.loading ? 'Checking session…' : activation ? 'Set password' : 'Sign in'}</span><ArrowUpRight size={23} />
     </button>
   </form>;

@@ -11,7 +11,8 @@ const base = process.env.ECO_READABILITY_ORIGIN || 'http://127.0.0.1:4398';
 const out = process.env.ECO_READABILITY_OUTPUT || '/private/tmp/eco-knowledge-readability-oct21';
 const user = { id:'10000000-0000-4000-8000-000000000001', email:'readability@example.test', displayName:'READABILITY FIXTURE', phone:'', officeId:'HONG KONG', officeName:'HONG KONG', isAdmin:true, isSpcTrader:true, isManager:false, isActive:true, activated:true, passwordChangeSuggested:false, revision:1 };
 const paragraph = 'OPERATING INFORMATION SHOULD REMAIN EASY TO READ WHEN AN ENTRY CONTAINS SEVERAL SENTENCES. KEEP THE TEXT AT A COMFORTABLE LINE LENGTH WHILE LETTING COMPARISON TABLES USE THE AVAILABLE SPACE. ';
-const text = Array(8).fill(paragraph).join('\n\n');
+const referenceUrl = 'https://Example.test/PortData?Key=AbC';
+const text = `REFERENCE ${referenceUrl}\n\n${Array(8).fill(paragraph).join('\n\n')}`;
 const btn = (scope, name) => scope.getByRole('button', {name, exact:true});
 const results = [];
 await mkdir(out, {recursive:true});
@@ -37,6 +38,22 @@ async function bordered(locator) {
   const style = await locator.evaluate(node => { const style=getComputedStyle(node); return {width:parseFloat(style.borderTopWidth),kind:style.borderTopStyle,color:style.borderTopColor,background:style.backgroundColor}; });
   assert.ok(style.width>=1 && style.kind==='solid' && style.color!=='rgba(0, 0, 0, 0)','Editable field/outline row has a persistent visible border');
   assert.notEqual(style.background,'rgba(0, 0, 0, 0)','Editable field/outline row has a visible surface');
+}
+async function readableBlueLink(locator) {
+  await expect(locator).toHaveText(referenceUrl);
+  await expect(locator).toHaveAttribute('href',referenceUrl);
+  const value=await locator.evaluate(node=>{
+    const rgb=value=>value.match(/[\d.]+/g).slice(0,3).map(Number),style=getComputedStyle(node);
+    let background;
+    for(let parent=node;parent;parent=parent.parentElement){const color=getComputedStyle(parent).backgroundColor;if(color!=='rgba(0, 0, 0, 0)'&&color!=='transparent'){background=rgb(color);break;}}
+    return {color:rgb(style.color),background,transform:style.textTransform,decoration:style.textDecorationLine};
+  });
+  assert.equal(value.transform,'none','URL text retains original case');
+  assert.ok(value.color[2]>value.color[0]+30&&value.color[2]>value.color[1]+15,'Text hyperlink is visibly blue');
+  assert.ok(value.decoration.includes('underline'),'Link is distinguishable without colour alone');
+  const luminance=channels=>channels.map(value=>{const n=value/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;}).reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0);
+  const foreground=luminance(value.color),background=luminance(value.background);
+  assert.ok((Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05)>=4.5,'Link contrast is at least4.5:1 on its reading surface');
 }
 for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
@@ -71,6 +88,8 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       const editAction=btn(workspace,/^EDIT$/i),hint=editAction.locator('.contribution-action-hint');
       await expect(editAction).toHaveAttribute('aria-description','CONTRIBUTION +1');
       await page.keyboard.press('Tab');await editAction.focus();await expect(hint).toBeVisible();await shot('edit-contribution-hint');
+      const buttonBox=await editAction.boundingBox(),hintBox=await hint.boundingBox();
+      assert.ok(hintBox.x>=buttonBox.x&&hintBox.y>=buttonBox.y&&hintBox.x+hintBox.width<=buttonBox.x+buttonBox.width&&hintBox.y+hintBox.height<=buttonBox.y+buttonBox.height,'Contribution hint replaces the label inside the button');
       const hintClipped = await hint.evaluate(node=>{if(node.matches(':popover-open'))return false;const box=node.getBoundingClientRect();for(let parent=node.parentElement;parent;parent=parent.parentElement){const style=getComputedStyle(parent),bounds=parent.getBoundingClientRect();if(/auto|scroll|hidden|clip/.test(style.overflowY)&&(box.top<bounds.top-1||box.bottom>bounds.bottom+1))return true;if(/auto|scroll|hidden|clip/.test(style.overflowX)&&(box.left<bounds.left-1||box.right>bounds.right+1))return true;}return false;});
       assert.equal(hintClipped,false,'Contribution hint remains within every clipping container');
       await editAction.evaluate(node=>node.blur());await page.mouse.move(0,0);
@@ -79,9 +98,15 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       const prose=workspace.locator('.knowledge-prose').filter({hasText:paragraph}).first();
       const measure=await prose.evaluate(node=>{const style=getComputedStyle(node),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');ctx.font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;return {width:node.getBoundingClientRect().width,ch:ctx.measureText('0').width};});
       if(width===1440)assert.ok(measure.width<=87*measure.ch,'Long prose is bounded to a readable line length');
+      await readableBlueLink(prose.getByRole('link'));
       await prose.evaluate(node=>node.scrollIntoView({block:'start'}));await shot('read-prose');
       const table=workspace.getByRole('region',{name:'COMPARISON',exact:true});
+      const textCard=await prose.evaluate(node=>{const box=node.closest('.knowledge-block').getBoundingClientRect();return {x:box.x,width:box.width};});
+      const tableCard=await table.evaluate(node=>{const box=node.closest('.knowledge-block').getBoundingClientRect();return {x:box.x,width:box.width};});
+      assert.ok(Math.abs(textCard.x-tableCard.x)<=1&&Math.abs(textCard.width-tableCard.width)<=1,'Text and table outer cards share the full content width');
+      if(width===1440)assert.ok(textCard.width>measure.width*1.25,'Full-width text card keeps its prose independently bounded');
       if(width===1440)assert.ok((await table.boundingBox()).width>measure.width,'Comparison table can use more width than prose');
+      await readableBlueLink(table.getByRole('link'));
       await table.evaluate(node=>node.scrollIntoView({block:'center'}));await shot('read-table');
       await btn(workspace,/^EDIT$/i).click();const editor=workspace.locator('.knowledge-editor');
       if(width<600){await expect(workspace.locator('.location-search')).toBeHidden();await expect(workspace.locator('.knowledge-profile-search')).toBeHidden();await expect(btn(workspace,'Back to Countries & Ports')).toBeVisible();assert.ok((await workspace.locator('.knowledge-content').boundingBox()).height>=500,'Focused phone editor has at least500px content viewport');}

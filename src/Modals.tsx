@@ -37,7 +37,6 @@ import {
   download,
 } from "./ui";
 import type { ModalSpec, OpenModal } from "./types";
-import { ResourceWallet, type ContributionDestination } from "./ResourceWallet";
 import SearchableSelect from "./SearchableSelect";
 import { useSupplierCatalog } from "./lib/supplierApi";
 import { productSupplierName } from "./lib/fixtureSuppliers";
@@ -641,12 +640,10 @@ export default function Modals({
   spec,
   close,
   open,
-  onContribute,
 }: {
   spec: ModalSpec;
   close: Close;
   open: OpenModal;
-  onContribute?: (destination: ContributionDestination) => void;
 }) {
   const buyerCreditAvailable = useBuyerCreditAvailable();
   if (!buyerCreditAvailable && isBuyerCreditModal(spec)) {
@@ -667,12 +664,6 @@ export default function Modals({
       return <ContributionReview id={spec.id} close={close} />;
     case "actual-volume":
       return <ActualVolumeForm id={spec.id} close={close} />;
-    case "resources":
-      return (
-        <Frame title="Contribution Activity" close={close} wide>
-          <ResourceWallet onContribute={onContribute} />
-        </Frame>
-      );
     case "enquiry-detail":
       return <EnquiryDetail id={spec.id} close={close} open={open} />;
   }

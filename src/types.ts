@@ -19,7 +19,6 @@ export type ModalSpec =
       targetId: string;
     }
   | { type: "actual-volume"; id: string }
-  | { type: "resources" }
   | { type: "enquiry-detail"; id: string }
   | { type: "review-contribution"; id: string };
 export type OpenModal = (modal: ModalSpec) => void;

@@ -22,31 +22,33 @@ export function HatsOffPanel({ preview = null, canPreview = false, onPreviewChan
   onPreviewChange?: (preview: HatsAppearancePreview | null) => void;
 }) {
   const { actor, state } = useDemo();
-  const { realUser } = useAccess();
-  const previewAllowed = canPreview && canPreviewAppearance(realUser);
+  const { realUser, previewPerson } = useAccess();
+  const viewed = previewPerson ? { id: previewPerson.id, name: previewPerson.name } : actor;
+  const previewAllowed = !previewPerson && canPreview && canPreviewAppearance(realUser);
   const displayedPreview = previewAllowed ? preview : null;
-  const count = displayedPreview ? hatsPreviewCounts[displayedPreview] : hatCount(state, actor.id);
+  const count = displayedPreview ? hatsPreviewCounts[displayedPreview] : hatCount(state, viewed.id);
   const contributor = (id: string) => {
-    const person = id === actor.id ? actor : actors.find(candidate => candidate.id === id);
+    const person = id === viewed.id ? viewed : id === actor.id ? actor : actors.find(candidate => candidate.id === id);
     const email = person ? undefined : state.profiles?.[id]?.email?.trim() || undefined;
     return { name: person?.name ?? email ?? "CONTRIBUTOR", email: Boolean(email) };
   };
   const ranking = displayedPreview ? [
     { actorId: "sample-trader-a", count: 8, name: "SAMPLE TRADER A", email: false },
-    ...(displayedPreview === "received" ? [{ actorId: actor.id, count: 5, name: "YOU (PREVIEW)", email: false }] : []),
+    ...(displayedPreview === "received" ? [{ actorId: viewed.id, count: 5, name: "YOU (PREVIEW)", email: false }] : []),
     { actorId: "sample-trader-b", count: 3, name: "SAMPLE TRADER B", email: false },
   ] : hatRanking(state).map(entry => ({ ...entry, ...contributor(entry.actorId) }));
   const recent = displayedPreview === "received" ? ["A", "B", "C", "A", "A"].map((letter, index) => ({
     id: `sample-hat-${index}`, name: `SAMPLE TRADER ${letter}`, email: false,
     awardedAt: new Date(Date.now() - index * 86_400_000).toISOString(),
-  })) : displayedPreview ? [] : recentHatsReceived(state, actor.id).map(award => ({
+  })) : displayedPreview ? [] : recentHatsReceived(state, viewed.id).map(award => ({
     id: award.id, ...contributor(award.readerId), awardedAt: award.awardedAt,
   }));
-  const standing = hatStanding(ranking, actor.id);
+  const standing = hatStanding(ranking, viewed.id);
   const hasTies = new Set(ranking.map(entry => entry.count)).size < ranking.length;
   let displayedRank = 0;
 
   return <div className="hats-off-panel" data-appearance-preview={Boolean(displayedPreview)}>
+    {previewPerson && <p className="hats-off-preview-note" role="status">VIEW AS · {viewed.name}{previewPerson.fictional ? ' (FICTIONAL)' : ''} · HATS IN THIS WORKSPACE</p>}
     {displayedPreview && <p className="hats-off-preview-note" role="status">PREVIEW · SAMPLE HATS AND PEOPLE</p>}
     <section className="hats-off-hero" aria-label="Your Hats standing" data-has-hats={count > 0}>
       <div className="hats-off-hero-top">
@@ -73,11 +75,11 @@ export function HatsOffPanel({ preview = null, canPreview = false, onPreviewChan
       {ranking.length ? <ol className="hats-off-ranking-list" aria-label="Hats ranking" data-size={Math.min(ranking.length, 3)}>
         {ranking.map((entry, index) => {
           if (!index || entry.count !== ranking[index - 1].count) displayedRank = index + 1;
-          return <li key={entry.actorId} data-current-user={entry.actorId === actor.id || undefined} data-place={displayedRank <= 3 ? displayedRank : undefined}>
+          return <li key={entry.actorId} data-current-user={entry.actorId === viewed.id || undefined} data-place={displayedRank <= 3 ? displayedRank : undefined}>
             <span className="hats-off-rank" aria-label={`Rank ${displayedRank}`}>{displayedRank}</span>
             <span className="hats-off-name" data-email-value={entry.email ? "" : undefined}>{entry.name}</span>
             <strong aria-label={`${number(entry.count)} Hats`}><ResourceIcon kind="hat" size={16} />{number(entry.count)}</strong>
-            {entry.actorId === actor.id && <span className="hats-off-you">YOU</span>}
+            {entry.actorId === viewed.id && <span className="hats-off-you">YOU</span>}
           </li>;
         })}
       </ol> : <div className="hats-off-first"><span aria-hidden="true"><ResourceIcon kind="hat" size={38} /></span>

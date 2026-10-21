@@ -3,6 +3,7 @@ import type { AccessUser, AccessSession, PreviewInput, RolePreview } from '../sh
 import { projectPreviewUser } from '../shared/rolePreview';
 import { assertPreviewWritable, setPreviewReadOnly, setSessionUnavailable } from './lib/previewGuard';
 import { assertLiveDataWritable } from './lib/testWorkspaceGuard';
+import { personPreviewOptions, selectedPreviewPerson, type PreviewPerson } from '../shared/personPreview';
 
 export async function accessRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   if (body !== undefined) {
@@ -25,15 +26,17 @@ export async function accessRequest<T>(path: string, body?: unknown, signal?: Ab
   if (!response.ok) throw Object.assign(new Error(result.message ?? 'Sign in required.'), { status: response.status, ...(['failed', 'pending'].includes(result.operationState) ? { operationState: result.operationState as 'failed' | 'pending' } : {}) });
   return result as T;
 }
-type Access = { user: AccessUser | null; realUser: AccessUser | null; preview: RolePreview | null; loading: boolean; error: string; refresh(): Promise<void>;
+type Access = { user: AccessUser | null; realUser: AccessUser | null; preview: RolePreview | null; previewPerson: PreviewPerson | null; loading: boolean; error: string; refresh(): Promise<void>;
   signIn(email: string, password: string): Promise<void>; activate(tokenHash: string, password: string, type: 'invite' | 'recovery'): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>; dismissPasswordPrompt(): Promise<void>;
-  startPreview(input: PreviewInput): Promise<void>; endPreview(): Promise<void>; signOut(): Promise<void> };
+  startPreview(input: PreviewInput): Promise<void>; loadPreviewPeople(): Promise<PreviewPerson[]>; startPersonPreview(id: string): Promise<void>; endPreview(): Promise<void>; signOut(): Promise<void> };
 const Context = createContext<Access | null>(null);
 export function AccessProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<{ user: AccessUser | null; realUser: AccessUser | null; preview: RolePreview | null }>({ user: null, realUser: null, preview: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [previewPerson, setPreviewPerson] = useState<PreviewPerson | null>(null);
+  const previewPeople = useRef<{ owner: string; people: PreviewPerson[] } | null>(null);
   const generation = useRef(0);
   const mutating = useRef(false);
   const refreshAfterMutation = useRef(false);
@@ -47,10 +50,13 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     const next = { realUser: result.user, user: projectPreviewUser(result.user, preview), preview };
     const previous = sessionRef.current.preview;
     const viewChanged = previous?.role !== preview?.role || previous?.officeId !== preview?.officeId;
+    if (sessionRef.current.realUser?.id !== result.user.id || !result.user.isAdmin) previewPeople.current = null;
+    if (!preview || viewChanged || sessionRef.current.realUser?.id !== result.user.id || !result.user.isAdmin) setPreviewPerson(null);
     setSessionUnavailable(false); setPreviewReadOnly(Boolean(preview)); sessionRef.current = next; setSession(next);
     if (viewChanged) requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
   }
   function clearSession() {
+    previewPeople.current = null; setPreviewPerson(null);
     const next = { user: null, realUser: null, preview: null };
     setSessionUnavailable(false); setPreviewReadOnly(false); sessionRef.current = next; setSession(next);
   }
@@ -115,6 +121,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       // Cross-tab messages carry no identity, roles or permissions. Only a fresh
       // authenticated server response can restore access after invalidation.
       setPreviewReadOnly(true);
+      setPreviewPerson(null);
       generation.current++;
       stopRefresh();
       if (mutating.current) refreshAfterMutation.current = true;
@@ -156,6 +163,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     if (mutating.current) throw new Error('Wait for the current request to finish.');
     // Freeze local mutations before a server preview transition can take effect.
     setPreviewReadOnly(true);
+    setPreviewPerson(null);
     try { await authenticate(input ? 'preview' : 'preview/end', input ?? {}); channel.current?.postMessage('refresh-needed'); }
     catch (failure) {
       // An uncertain response may already have changed the server session. Refresh
@@ -165,7 +173,28 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       throw failure;
     }
   }
-  return <Context.Provider value={{ ...session, loading, error, refresh,
+  async function loadPreviewPeople() {
+    const owner = sessionRef.current.realUser;
+    if (!owner?.isAdmin || !owner.isActive || !owner.activated) throw new Error('Access denied.');
+    if (sessionRef.current.preview) {
+      if (previewPeople.current?.owner === owner.id) return previewPeople.current.people;
+      return personPreviewOptions([], owner);
+    }
+    const result = await accessRequest<{ users: AccessUser[] }>('users');
+    if (sessionRef.current.realUser?.id !== owner.id || !sessionRef.current.realUser.isAdmin || sessionRef.current.preview) throw new Error('Account view changed. Try again.');
+    const people = personPreviewOptions(result.users, owner);
+    previewPeople.current = { owner: owner.id, people };
+    return people;
+  }
+  async function startPersonPreview(id: string) {
+    const owner = sessionRef.current.realUser;
+    if (!owner?.isAdmin || !owner.isActive || !owner.activated) throw new Error('Access denied.');
+    const options = previewPeople.current?.owner === owner.id ? previewPeople.current.people : personPreviewOptions([], owner);
+    const person = selectedPreviewPerson(options, id);
+    await changePreview({ role: person.role, officeId: person.officeId });
+    if (sessionRef.current.realUser?.id === owner.id && sessionRef.current.preview?.role === person.role && sessionRef.current.preview.officeId === person.officeId) setPreviewPerson(person);
+  }
+  return <Context.Provider value={{ ...session, previewPerson: session.preview ? previewPerson : null, loading, error, refresh, loadPreviewPeople, startPersonPreview,
     signIn: (email, password) => authenticate('login', { email, password }),
     changePassword: (currentPassword, newPassword) => { assertPreviewWritable(); return authenticate('password', { currentPassword, newPassword }); },
     dismissPasswordPrompt: () => { assertPreviewWritable(); return authenticate('password-prompt', {}); },

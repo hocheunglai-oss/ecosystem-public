@@ -110,17 +110,15 @@ function Login() {
 
 function TraderHud({
   onOpen,
-  open,
   onSignOut,
   mobile,
 }: {
   mobile: boolean;
   onOpen: (id: WorkspaceId) => void;
-  open: OpenModal;
   onSignOut: () => void;
 }) {
   const { actor, state } = useDemo();
-  const { user, realUser } = useAccess();
+  const { user, realUser, previewPerson } = useAccess();
   const [accountPanel, setAccountPanel] = useState<"inbox" | "hats" | "activity" | null>(null);
   const [contributionPreview, setContributionPreview] = useState<ContributionStatusKey | null>(null);
   const [hatsPreview, setHatsPreview] = useState<HatsAppearancePreview | null>(null);
@@ -152,11 +150,11 @@ function TraderHud({
   const activity = { ...localActivity, total: localActivity.total + (sharedFeedback?.count ?? 0) };
   const showContribution = user?.officeId !== "CREDIT";
   const visiblePreview = canPreview && accountPanel === "activity" ? contributionPreview : null;
-  const visibleHatsPreview = canPreview && accountPanel === "hats" ? hatsPreview : null;
+  const visibleHatsPreview = canPreview && !previewPerson && accountPanel === "hats" ? hatsPreview : null;
   const contributionTier = contributionStatus(visiblePreview ? contributionPreviewCounts[visiblePreview] : activity.total);
   const contributionIncomplete = !visiblePreview && sharedFeedbackStatus !== 'ready';
   const contributionLabel = contributionIncomplete ? sharedFeedbackStatus === 'loading' ? 'CHECKING' : 'UNAVAILABLE' : contributionTier.label;
-  const hats = visibleHatsPreview ? hatsPreviewCounts[visibleHatsPreview] : hatCount(state, actor.id);
+  const hats = visibleHatsPreview ? hatsPreviewCounts[visibleHatsPreview] : hatCount(state, previewPerson?.id ?? actor.id);
   const team = teamForActor(actor);
   const admin = isAdmin(actor);
   const utilityActions = <>
@@ -234,12 +232,8 @@ function TraderHud({
         {showContribution && accountPanel === "activity" && <section ref={activityPanel} tabIndex={-1} id="hud-contribution-activity" className="hud-inline-section" aria-label="Contribution activity panel"
           onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); closePanel(); } }}>
           <header className="hud-inline-heading"><h2>Contribution</h2><button aria-label="Close contribution activity" onClick={closePanel}><X size={16} /></button></header>
-          <div className="hud-inline-scroll"><ResourceWallet compact statusPreview={visiblePreview}
-            onStatusPreviewChange={canPreview ? setContributionPreview : undefined} onContribute={destination => {
-            setAccountPanel(null);
-            if (destination === "feedback") open({ type: "contribute", targetType: "feedback", targetId: "ecosystem" });
-            else onOpen(destination);
-          }} /></div>
+          <div className="hud-inline-scroll"><ResourceWallet statusPreview={visiblePreview}
+            onStatusPreviewChange={canPreview ? setContributionPreview : undefined} /></div>
         </section>}
       </div>
     </aside>
@@ -486,7 +480,7 @@ function Workspace() {
                     key={group.name}
                   >
                     <button
-                      className="lime-control launcher-toggle"
+                      className="lime-control launcher-toggle ui-button--entry"
                       aria-label={group.name}
                       aria-expanded={expanded}
                       aria-controls={menuId}
@@ -520,7 +514,6 @@ function Workspace() {
           </div>
           <div className="home-hud-stack">
             <TraderHud
-              open={setModal}
               key={actor.id}
               mobile={mobile}
               onOpen={openWorkspace}
@@ -540,10 +533,7 @@ function Workspace() {
             onClose={() => { if (!pendingAdminRequest) setActive(null); }}
           />
           {modal && (
-            <Modals spec={modal} close={closeModal} open={setModal} onContribute={destination => {
-              if (destination === "feedback") setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" });
-              else { closeModal(); openWorkspace(destination); }
-            }} />
+            <Modals spec={modal} close={closeModal} open={setModal} />
           )}
         </main>
       )}
@@ -587,11 +577,11 @@ export default function App() {
 
 function AuthenticatedWorkspace() {
   const { namespace } = useTestWorkspace();
-  const { user, realUser, preview } = useAccess();
+  const { user, realUser, preview, previewPerson } = useAccess();
   // Drop mounted dialogs, cached administrator tables, selections and in-flight
   // effects whenever the effective view or real access authority changes.
   const viewKey = realUser ? [realUser.id, realUser.isAdmin, realUser.isManager, realUser.isSpcTrader, realUser.officeId,
-    preview?.role ?? 'real', preview?.officeId ?? ''].join(':') : 'signed-out';
+    preview?.role ?? 'real', preview?.officeId ?? '', previewPerson?.id ?? ''].join(':') : 'signed-out';
   return (
     <DemoProvider key={namespace} user={user}>
       <IntelligenceProvider>

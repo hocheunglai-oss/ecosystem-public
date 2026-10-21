@@ -492,19 +492,21 @@ function PortCurrentTime({ port }: { port: Port }) {
 
 export function KnowledgeEntryAttribution({ update, label = "information", hatTarget }: { update?: KnowledgeEntryUpdate; label?: string; hatTarget?: HatTarget }) {
   const { state, actor, run } = useDemo();
+  const { preview, previewPerson } = useAccess();
+  const viewer = previewPerson ? { id: previewPerson.id, name: previewPerson.name } : actor;
   if (!update?.updatedBy.trim() || !Number.isFinite(Date.parse(update.updatedAt))) return null;
   const contributorLabel = (id: string) => {
-    const person = id === actor.id ? actor : actors.find(candidate => candidate.id === id);
+    const person = id === viewer.id ? viewer : id === actor.id ? actor : actors.find(candidate => candidate.id === id);
     const email = person ? undefined : state.profiles?.[id]?.email?.trim() || undefined;
     return { text: person?.name ?? email ?? "CONTRIBUTOR", email: Boolean(email) };
   };
   const updatedBy = contributorLabel(update.updatedBy);
   const formattedDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(update.updatedAt));
   const shortDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(update.updatedAt));
-  const award = hatTarget ? hatForEntry(state, hatTarget, actor.id) : undefined;
+  const award = hatTarget ? hatForEntry(state, hatTarget, viewer.id) : undefined;
   const awarded = Boolean(award && !award.undoneAt);
   const knownAuthor = actors.some(person => person.id === update.updatedBy) || Object.hasOwn(state.profiles ?? {}, update.updatedBy);
-  const eligible = Boolean(hatTarget && knownAuthor && update.updatedBy !== actor.id && (!award || award.recipientId === update.updatedBy));
+  const eligible = Boolean(hatTarget && knownAuthor && update.updatedBy !== viewer.id && (!award || award.recipientId === update.updatedBy));
   const recipient = awarded ? contributorLabel(award!.recipientId) : updatedBy;
   const action = `Hats Off to ${recipient.text}`;
   const attribution = <span className="knowledge-attribution-stamp">
@@ -521,10 +523,11 @@ export function KnowledgeEntryAttribution({ update, label = "information", hatTa
         className={`knowledge-audit-trigger${awarded ? " knowledge-hat-awarded" : ""}`}
         aria-label={`${action} for ${label}`}
         aria-pressed={awarded}
-        title={awarded ? "HAT GIVEN · CLICK AGAIN TO REMOVE" : `${action} · ${formattedDate}`}
+        aria-disabled={Boolean(preview)}
+        title={preview ? "PREVIEW IS READ ONLY" : awarded ? "HAT GIVEN · CLICK AGAIN TO REMOVE" : `${action} · ${formattedDate}`}
         onClick={(event) => {
           event.stopPropagation();
-          if (hatTarget) run({ type: "set-hat", target: hatTarget, expectedUpdate: update, active: !awarded });
+          if (hatTarget && !preview) run({ type: "set-hat", target: hatTarget, expectedUpdate: update, active: !awarded });
         }}
         onDoubleClick={(event) => event.stopPropagation()}
       >

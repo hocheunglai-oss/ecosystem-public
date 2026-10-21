@@ -1,0 +1,11 @@
+/* Text links stay recognisable in both themes; action controls keep their own treatment. */
+#root a[href]:not(.button, .ui-button, .credit-action, [role="button"], [href^="#"]) {
+  color: var(--ui-link, #175dcf);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#root a[href]:not(.button, .ui-button, .credit-action, [role="button"], [href^="#"]):is(:hover, :focus-visible) {
+  text-decoration-thickness: 2px;
+}

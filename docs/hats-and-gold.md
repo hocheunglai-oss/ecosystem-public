@@ -14,9 +14,11 @@ The Hat engine recognizes known legacy actors and signed-in profile IDs for both
 
 The contributor/date stamp reveals the Hats action on mouse hover or keyboard focus. Touch layouts expose the action directly. Awarded entries show a checkmark; clicking again removes an accidental award without a separate undo label. History remains available in the profile header. The HATS OFF account panel always shows the all-time ranking from active awards. At zero personal Hats it explains earning Hats through useful contributions; otherwise it shows the five most recent valid givers and their award dates. Empty rankings contain no invented awards. Achievements and Office Performance entry points are removed.
 
+VIEW AS may inspect another active directory member or an explicitly fictional person. It first enters the server-backed read-only preview, then uses a separate temporary person selection for Hats standing and self/other attribution. Keep the real signed-in actor and storage owner unchanged; never read another person’s private tabs or inbox. The selection clears on reload, account change, cross-tab access invalidation or leaving preview. Counts reflect only the Hats already available in the current workspace, not a shared company-wide ledger. No awards are invented or published by previewing.
+
 ## Contribution Activity
 
-The account contribution status covers today and the previous six Hong Kong calendar days. Opening it shows its count, encouragement, thresholds and counting method. The control is hidden for the effective CREDIT office. Counts refresh on publications, every minute, and when returning to the tab.
+The account contribution status covers today and the previous six Hong Kong calendar days. Opening it shows its count, thresholds and a short guide to contributing by updating information or sending feedback. Do not show EDIT or FEEDBACK shortcuts, timezone wording or detailed counting mechanics in this popup. The control is hidden for the effective CREDIT office. Counts refresh on publications, every minute, and when returning to the tab.
 
 ### Status and contribution guide
 
@@ -50,7 +52,7 @@ Stationary Fratelli Cosulich bunker barges are decorative harbour artwork. They 
 
 The profile-header search covers all tabs in the current country, port or supplier profile, including inherited country information and generated price/fixture data. Fixture searching uses the existing actor-filtered index. Results are grouped by source tab; selecting a group opens that tab, and clearing search retains the earlier selected tab. It does not search other location or supplier profiles.
 
-Compact coloured title rows distinguish the profile and information sections. Key Info has a transparent body with bold facts. Each shared tab has one green EDIT action; its editor uses green SAVE. These controls show CONTRIBUTION +1 on hover or keyboard focus and use the shared compact style in both themes. Private saves remain neutral and do not promise contributions.
+Compact coloured title rows distinguish the profile and information sections. Key Info has a transparent body with bold facts. Each shared tab has one green EDIT action; its editor uses green SAVE. These controls replace their visible label with CONTRIBUTION +1 inside the button on hover or keyboard focus, without a separate tooltip and use the shared compact style in both themes. Private saves remain neutral and do not promise contributions.
 
 Every knowledge block requires a nonblank title. Existing untitled content receives a section-based title, preserving IDs, contents, attribution, Hats, sources and immutable history. This migration does not create a revision or reward. Drafts opened before the migration retain compatible fallback titles, while new entries and edits cannot save blank titles. AI extraction uses the same fallback for untitled text or tables.
 

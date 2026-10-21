@@ -416,13 +416,31 @@ async function verifyNavigationDiscard(page, state, shot) {
 }
 
 async function verifyGates(page, state, shot) {
+  const refreshAuthority = async () => {
+    const expected = structuredClone({ user: state.user, preview: state.preview });
+    const response = page.waitForResponse(async response => {
+      if (new URL(response.url()).pathname !== '/api/access/session') return false;
+      if (!expected.user) return response.status() === 401;
+      if (response.status() !== 200) return false;
+      const session = await response.json().catch(() => null);
+      return session?.user?.id === expected.user.id && JSON.stringify(session.preview) === JSON.stringify(expected.preview);
+    });
+    // Authority changes invalidate pending refreshes; focus remains appropriate
+    // for the data-only refresh cases elsewhere in this suite.
+    await page.evaluate(() => {
+      const channel = new BroadcastChannel('eco-access-invalidation');
+      channel.postMessage('refresh-needed');
+      channel.close();
+    });
+    assert.equal(await (await response).finished(), null);
+  };
   let profile = await openProfile(page, 'country');
   await (await tab(profile, privateTitle('country'))).click();
   await button(profile.locator('.profile-tab-content'), 'EDIT').click();
   await profile.getByLabel('Block 1 text').fill('UNSAVED OWNER SECRET');
   const beforeWrites = state.requests.length + state.supplierWrites.length;
   state.preview = { role: 'trader', officeId: 'HONG KONG', officeName: 'HONG KONG', readOnly: true };
-  await focus(page);
+  await refreshAuthority();
   await expect(page.getByRole('status', { name: 'Role preview' }).first()).toBeVisible();
   profile = await openProfile(page, 'country');
   await expect(await tab(profile, privateTitle('country'))).toHaveCount(0);
@@ -430,18 +448,18 @@ async function verifyGates(page, state, shot) {
   await expect(profile.getByText('UNSAVED OWNER SECRET', { exact: true })).toHaveCount(0);
   await expect(profile.getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
   await shot('preview-country');
-  state.preview = null; await focus(page);
+  state.preview = null; await refreshAuthority();
   await expect(page.getByRole('status', { name: 'Role preview' })).toHaveCount(0);
   profile = await openProfile(page, 'country');
   await button(profile, 'Manage tabs').click();
   state.user = { ...user, capabilities: { testWorkspace: false, appearancePreview: false }, id: '10000000-0000-4000-8000-000000000002', email: 'another@example.test', displayName: 'OTHER ADMIN' };
-  await focus(page);
+  await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');
   await expect(manager(page)).toHaveCount(0);
   profile = await openProfile(page, 'country');
   await expect(await tab(profile, privateTitle('country'))).toHaveCount(0);
   await shot('other-admin');
-  state.user = structuredClone(user); await focus(page);
+  state.user = structuredClone(user); await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('FIXTURE ADMIN');
   await closeWorkspace(page);
   const testToggle = page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true });
@@ -455,7 +473,7 @@ async function verifyGates(page, state, shot) {
   await closeWorkspace(page); await testToggle.click();
   await expect(testToggle).toHaveAttribute('aria-pressed', 'false');
   state.user = { ...user, capabilities: { testWorkspace: false, appearancePreview: false }, id: '10000000-0000-4000-8000-000000000003', email: 'trader@example.test', displayName: 'NORMAL TRADER', isAdmin: false, isSpcTrader: false };
-  await focus(page);
+  await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('NORMAL TRADER');
   profile = await openProfile(page, 'supplier');
   await expect(profile.getByRole('button', { name: 'CONTRIBUTE +1', exact: true })).toHaveCount(0);
@@ -464,7 +482,7 @@ async function verifyGates(page, state, shot) {
   await expect(manager(page).getByRole('button', { name: 'Add tab', exact: true })).toHaveCount(0);
   await button(manager(page), 'Cancel').click();
   await shot('trader-supplier');
-  state.user = null; await focus(page);
+  state.user = null; await refreshAuthority();
   await expect(button(page, 'Sign in')).toBeVisible();
   await expect(page.locator('.profile-tab-content')).toHaveCount(0);
   await expect(manager(page)).toHaveCount(0);

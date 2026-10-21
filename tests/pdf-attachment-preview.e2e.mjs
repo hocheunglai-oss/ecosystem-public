@@ -10,6 +10,19 @@ const base = process.env.ECO_PDF_PREVIEW_ORIGIN || 'http://127.0.0.1:4326';
 const out = resolve(process.env.ECO_PDF_PREVIEW_OUTPUT || '/private/tmp/eco-pdf-preview');
 const user = { id: '10000000-0000-4000-8000-000000000001', email: 'pdf@example.test', displayName: 'PDF FIXTURE ADMIN', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
+async function invalidateChangedSession(page, userId) {
+  const response = page.waitForResponse(async response => {
+    if (new URL(response.url()).pathname !== '/api/access/session') return false;
+    if (!userId) return response.status() === 401;
+    return response.status() === 200 && (await response.json()).user?.id === userId;
+  });
+  // An account change invalidates any older in-flight refresh, like another tab.
+  await page.evaluate(() => {
+    const channel = new BroadcastChannel('eco-access-invalidation');
+    channel.postMessage('refresh-needed'); channel.close();
+  });
+  await (await response).finished();
+}
 const bytes = syntheticPdf(), results = [];
 await mkdir(out, { recursive: true });
 
@@ -144,11 +157,11 @@ for (const engine of engines) {
       preview = page.getByRole('dialog', { name: 'PDF PREVIEW', exact: true });
       await expect(preview.getByRole('img', { name: 'PDF page 1' })).toBeVisible();
       state.user = { ...user, id: '20000000-0000-4000-8000-000000000002', displayName: 'SECOND FIXTURE USER' };
-      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await invalidateChangedSession(page, state.user.id);
       await expect(preview).toHaveCount(0);
       await expect.poll(() => page.evaluate(() => window.__pdfLifecycle.urls.size)).toBe(0);
       await expect.poll(() => page.evaluate(() => window.__pdfLifecycle.workers - window.__pdfLifecycle.terminated)).toBe(0);
-      state.user = null; await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      state.user = null; await invalidateChangedSession(page, null);
       await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toHaveCount(0);
       await expect(page.getByRole('dialog', { name: 'Attachments', exact: true })).toHaveCount(0);
       await shot('signed-out');

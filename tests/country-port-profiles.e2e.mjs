@@ -265,13 +265,31 @@ async function verifyHolidays(page, workspace, width, shot) {
 }
 
 async function verifyPrivacy(page, workspace, state, shot) {
+  const refreshAuthority = async () => {
+    const expected = structuredClone({ user: state.user, preview: state.preview });
+    const response = page.waitForResponse(async response => {
+      if (new URL(response.url()).pathname !== '/api/access/session') return false;
+      if (!expected.user) return response.status() === 401;
+      if (response.status() !== 200) return false;
+      const session = await response.json().catch(() => null);
+      return session?.user?.id === expected.user.id && JSON.stringify(session.preview) === JSON.stringify(expected.preview);
+    });
+    // A changed server authority invalidates pending refreshes; ordinary focus
+    // intentionally reuses them and is not a synthetic account-change signal.
+    await page.evaluate(() => {
+      const channel = new BroadcastChannel('eco-access-invalidation');
+      channel.postMessage('refresh-needed');
+      channel.close();
+    });
+    assert.equal(await (await response).finished(), null);
+  };
   let profile = await openFromIndex(workspace, 'country', 'Netherlands');
   await chooseTab(profile, privateTitles[0]);
   await btn(profile.locator('.profile-tab-content'), 'EDIT').click();
   await profile.getByLabel('Block 1 text').fill('UNSAVED INHERITED SECRET');
   const before = state.requests.length;
   state.preview = { role: 'trader', officeId: 'HONG KONG', officeName: 'HONG KONG', readOnly: true };
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await refreshAuthority();
   await expect(page.getByRole('status', { name: 'Role preview' }).first()).toBeVisible();
   workspace = await openWorkspace(page);
   profile = await openFromIndex(workspace, 'country', 'Netherlands');
@@ -282,13 +300,13 @@ async function verifyPrivacy(page, workspace, state, shot) {
   await shot('preview-combined-profile');
   state.preview = null;
   state.user = { ...user, id: '10000000-0000-4000-8000-000000000002', displayName: 'OTHER LOCATION ADMIN' };
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('OTHER LOCATION ADMIN');
   workspace = await openWorkspace(page);
   profile = await openFromIndex(workspace, 'country', 'Netherlands');
   for (const title of [...privateTitles, 'DUPLICATE OWNER NOTE']) await expect(profile.getByRole('tab').filter({ hasText: title })).toHaveCount(0);
   state.user = null;
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await refreshAuthority();
   await expect(page.getByRole('button', { name: /Sign in/i })).toBeVisible();
   await expect(page.getByRole('tab')).toHaveCount(0);
   await shot('signed-out');

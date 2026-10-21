@@ -4,22 +4,42 @@ import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 const base = process.env.ECO_TEST_UI_ORIGIN || 'http://127.0.0.1:4395';
 const out = resolve(process.env.ECO_TEST_UI_OUTPUT || 'output/shared-inbox-ui');
+const sessionLatency = Number(process.env.ECO_TEST_SESSION_LATENCY_MS || 0);
 const otto = { capabilities: { appearancePreview: true, testWorkspace: true }, id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'SAMPLE TRADER', phone: '+6591815902', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const other = { ...otto, capabilities: undefined, id: '10000000-0000-4000-8000-000000000002', email: 'other@example.test', displayName: 'OTHER TRADER', isAdmin: false, isSpcTrader: false };
 const generation = '10000000-0000-4000-8000-000000000010';
 const record = (n, owner = otto.id) => ({ id: `20000000-0000-4000-8000-${String(n).padStart(12, '0')}`, providerMessageId: `fixture-${n}`, owner, channel: n % 2 ? 'email' : 'whatsapp', sender: n % 2 ? 'trader@example.test' : '+6591815902', subject: 'Enquiry', rawText: `Vessel: FIXTURE ${n}\nPort: Singapore\nETA: 20 OCT 2026\nVLSFO: 300 MT`, receivedAt: '2026-10-15T08:30:00.000Z', read: false, dismissed: false });
 const count = data => data.filter(item => !item.read && !item.dismissed).length;
 const focus = page => page.evaluate(() => dispatchEvent(new Event('focus')));
+async function invalidateSession(page, userId) {
+  // Synthetic account changes must use the same cross-tab signal as login or
+  // logout. Focus deliberately deduplicates an older in-flight session check.
+  const response = page.waitForResponse(async result => {
+    if (new URL(result.url()).pathname !== '/api/access/session') return false;
+    if (userId === null) return result.status() === 401;
+    if (result.status() !== 200) return false;
+    return (await result.json().catch(() => null))?.user?.id === userId;
+  });
+  await page.evaluate(() => {
+    const channel = new BroadcastChannel('eco-access-invalidation');
+    channel.postMessage('refresh-needed'); channel.close();
+  });
+  await response;
+}
 const control = page => page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true });
 const panel = page => page.getByRole('region', { name: 'Notifications', exact: true });
 async function openInbox(page) { const toggle = page.getByRole('button', { name: 'Notifications', exact: true }); if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click(); return panel(page); }
 async function fixture(context, shared) {
-  const session = { user: { ...otto }, preview: null, getError: false, failWrite: false, hold: null, holdWrite: null, calls: [], writes: [] };
-  await context.route('**/api/access/**', route => {
+  const session = { user: { ...otto }, preview: null, latency: 0, getError: false, failWrite: false, hold: null, holdWrite: null, calls: [], writes: [] };
+  await context.route('**/api/access/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
     if (path === 'preview') { const input = route.request().postDataJSON(); session.preview = { ...input, officeName: input.officeId, readOnly: true }; }
     if (path === 'preview/end') session.preview = null;
-    if (['session', 'preview', 'preview/end'].includes(path)) return route.fulfill({ status: session.user ? 200 : 401, json: session.user ? { user: session.user, preview: session.preview } : { message: 'Sign in required.' } });
+    if (['session', 'preview', 'preview/end'].includes(path)) {
+      const response = { status: session.user ? 200 : 401, json: session.user ? structuredClone({ user: session.user, preview: session.preview }) : { message: 'Sign in required.' } };
+      if (path === 'session' && session.latency > 0) await new Promise(resolve => setTimeout(resolve, session.latency));
+      return route.fulfill(response).catch(() => {});
+    }
     return route.fulfill({ json: { requests: [], users: [session.user], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
   });
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: true, generation } }));
@@ -163,9 +183,10 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true }).click(); await page.locator('.home-display-controls').getByRole('button', { name: 'Normal trader', exact: true }).click(); await expect(page.getByRole('status', { name: 'Role preview' }).first()).toBeVisible(); const previewCalls = session.calls.length;
       await openInbox(page); await expect(panel(page).locator('.inbox-notification-row')).toHaveCount(0); await expect(page.locator('.inbox-count')).toHaveCount(0); await focus(page); assert.equal(session.calls.length, previewCalls); await shot('preview');
       await page.getByRole('button', { name: 'Back to SAMPLE TRADER', exact: true }).first().click(); await expect(page.locator('.inbox-count')).toHaveText('1');
+      session.latency = sessionLatency;
       let release; let started; const pending = new Promise(resolve => { started = resolve; }); session.hold = () => { started(); return new Promise(resolve => { release = resolve; }); }; await focus(page); await pending;
-      shared.items.push(record(99, other.id)); session.user = { ...other }; await focus(page); await expect(page.locator('.hud-identity')).toContainText('OTHER TRADER'); release(); await openInbox(page); await expect(panel(page)).toContainText('FIXTURE 99'); await expect(panel(page)).not.toContainText('FIXTURE 54'); await expect(panel(page)).not.toContainText('FIXTURE 55'); await shot('other-user');
-      session.user = null; await focus(page); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible(); await expect(page.locator('.inbox-count')).toHaveCount(0); await shot('signed-out');
+      shared.items.push(record(99, other.id)); session.user = { ...other }; await invalidateSession(page, other.id); await expect(page.locator('.hud-identity')).toContainText('OTHER TRADER'); release(); await openInbox(page); await expect(panel(page)).toContainText('FIXTURE 99'); await expect(panel(page)).not.toContainText('FIXTURE 54'); await expect(panel(page)).not.toContainText('FIXTURE 55'); await shot('other-user');
+      session.user = null; await invalidateSession(page, null); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible(); await expect(page.locator('.inbox-count')).toHaveCount(0); await shot('signed-out');
       const local = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes(':inbox'))); assert.ok(local.every(([key, value]) => key.includes('ecosystem.test.') || value.includes('LEGACY PRIVATE MESSAGE'))); assert.deepEqual(errors, []);
       results.push({ engine, width, theme, passed: true }); console.log(`PASS ${engine} ${width} ${theme}: server pagination, parser selection, cross-device read, reload, retry receipt, TEST, preview, late read/write, 5s single-flight polling/backoff/visibility/online, signed out`);
     } catch (failure) { await shot('failure'); throw failure; } finally { await context.close(); await device2.close(); }

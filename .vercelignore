@@ -6,6 +6,7 @@ docs
 output
 scripts/*
 !scripts/generate-system-information.mjs
+!scripts/pdf-preview-assets.mjs
 tests
 .env*
 .vercel

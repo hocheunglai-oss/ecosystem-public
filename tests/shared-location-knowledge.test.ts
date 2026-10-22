@@ -4,6 +4,7 @@ import { actorFromAccess } from '../src/lib/accessActor';
 import type { AccessUser } from '../shared/access';
 import type { DemoState } from '../src/lib/model';
 import { actors } from '../src/lib/model';
+import { historicalSupplierFixtures } from '../src/lib/historicalSupplierFixtures';
 import { createLiveState } from '../src/lib/testWorkspace';
 import { emptyIntelligenceKeyInfo } from '../src/lib/intelligenceFields';
 import { personalResources } from '../src/lib/economy';
@@ -305,4 +306,39 @@ test('compact facts reject raw payload mixtures and full details stay bounded', 
   assert.throws(() => parseLocationContribution({ ...split.contributions[0], historicalImport: false }));
   const oversized = edit(); oversized.document.sections.at(-1)!.blocks = Array.from({ length: 50 }, (_, i) => ({ id: `large-${i}`, title: 'NOTE', type: 'text', text: 'x'.repeat(30000) }));
   await assert.rejects(() => applyCurrentLocationAction(initialLocationSnapshot(), { type: 'save-knowledge', change: oversized, reason: 'Synthetic oversize' }, actor, now), /too large/);
+});
+
+function retiredImportFixture() {
+  const local = createLiveState(), document = knowledgeDocument(local, {kind:'port',id:'port-singapore'});
+  document.version = 5;
+  document.sections.push({id:'retirement-suppliers',title:'Suppliers',blocks:[
+    {id:'supplier-comparison',type:'table',title:'Supplier comparison',columns:[{id:'supplier',name:'Supplier'},{id:'remarks',name:'Remarks'}],rows:[
+      ...historicalSupplierFixtures.map(item=>({id:item.id,cells:[item.name,'Retired example']})),
+      {id:'retired-alias',cells:[historicalSupplierFixtures[0].aliases[0],'Retired alias']},
+      {id:'user-real-row',cells:['Real supplier user row','Keep user delivery details']},
+      {id:'similar-name',cells:[historicalSupplierFixtures[0].name+' International','Keep distinct company']},
+    ]},
+    {id:'independent-note',type:'text',title:'User port note',text:'Keep this independent operational note.'},
+  ]});
+  local.knowledgeRecords={'port:port-singapore':document};
+  local.knowledgeHistory=[{target:{kind:'port',id:'port-singapore'},version:5,at:now,by:actor.id,reason:'Preserved original archive',before:structuredClone(document),after:structuredClone(document)}];
+  local.supplierRetirementVersion=1; // stale marker must not bypass the current-view import policy
+  return local;
+}
+test('reviewed legacy import excludes exact retired supplier examples but preserves raw bytes and full history',()=>{
+  const local=retiredImportFixture(),raw=JSON.stringify(local),parsed=readLegacyLocationCandidate({ownerId:'member-a',namespace:'ecosystem.live.v1:member-a',raw});
+  assert.ok(parsed);const blocks=parsed.snapshot.knowledgeRecords['port:port-singapore'].sections.flatMap(section=>section.blocks),table=blocks.find(block=>block.id==='supplier-comparison');
+  assert.equal(table?.type,'table');if(table?.type!=='table')throw new Error('Expected table');
+  assert.deepEqual(table.rows.map(row=>row.id),['user-real-row','similar-name']);
+  assert.equal(blocks.find(block=>block.id==='independent-note')?.type,'text');
+  assert.deepEqual(parsed.snapshot.knowledgeHistory,local.knowledgeHistory);
+  assert.equal(JSON.stringify(local),raw);assert.ok(raw.includes(historicalSupplierFixtures[0].name));
+});
+test('server import also applies retirement to current records without rewriting historical versions or the incoming snapshot',async()=>{
+  const local=retiredImportFixture(),incoming=locationSnapshotFromState(local),original=structuredClone(incoming);
+  const result=await mergeCurrentLocationSnapshot(initialLocationSnapshot(),incoming);
+  assert.deepEqual(result.conflicts,[]);const table=result.snapshot.knowledgeRecords['port:port-singapore'].sections.flatMap(section=>section.blocks).find(block=>block.id==='supplier-comparison');
+  assert.equal(table?.type,'table');if(table?.type!=='table')throw new Error('Expected table');
+  assert.deepEqual(table.rows.map(row=>row.id),['user-real-row','similar-name']);assert.deepEqual(result.history,local.knowledgeHistory);
+  assert.deepEqual(incoming,original);assert.ok(JSON.stringify(result.history).includes(historicalSupplierFixtures[0].name));
 });

@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -27,6 +28,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    if(path.startsWith('/api/admin/'))return route.fulfill({json:{count:0,previousCount:0,items:[],periodStart:'2026-10-15T16:00:00Z',periodEnd:'2026-10-22T16:00:00Z',timeZone:'Asia/Hong_Kong',source:'shared-feedback'}});
    return route.fulfill({json:{items:[],nextCursor:null,unreadCount:0,total:0,page:1,pageSize:100}});
   });
+  await installSharedLocations(context,{user:()=>user,preview:()=>preview});
   await context.addInitScript(theme=>localStorage.setItem('ecosystem.theme.v1',theme),theme);
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   const contribution=page.getByRole('combobox',{name:'Contribution appearance preview',exact:true});
@@ -40,12 +42,12 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   }
   try {
    await page.goto(base);await expect(page.locator('.hud-identity')).toContainText(owner.displayName);await expect(testControl).toBeEnabled();
-   const storageKey=`ecosystem.live.v1:${owner.id}:state`;
+   const storageKey=`ecosystem.live.v1:${owner.id}:state:v2`;
    const readState=()=>page.evaluate(key=>localStorage.getItem(key),storageKey);
    await expect.poll(readState).not.toBeNull();const before=await readState();
    await page.locator('.hud-resource-activity').click();await expect(contribution).toBeVisible();
    for(const status of ['inactive','active','outstanding']){
-    await contribution.selectOption(status);await expect(page.locator('#hud-contribution-activity')).toContainText('PREVIEW ONLY');
+    await contribution.selectOption(status);await expect(page.locator('#hud-contribution-activity .activity-preview-label')).toHaveText('PREVIEW');
     await expect(page.locator('#hud-contribution-activity .activity-tier-heading .contribution-tier')).toHaveText(status.toUpperCase());
    }
    await shot('contribution-owner',page.locator('#hud-contribution-activity'));
@@ -64,7 +66,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    await page.locator('.hud-resource-hats').click();await expect(hats).toHaveCount(0);await shot('other-admin',page.locator('#hud-hats-off'));
    user=null;preview=null;await invalidateFixtureAuthority(page,{user,preview});await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
    await expect(testControl).toHaveCount(0);await expect(contribution).toHaveCount(0);await expect(hats).toHaveCount(0);await shot('signed-out');
-   assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: owner capabilities, revocation, other admin, read-only preview and signed out`);
+   assert.deepEqual(writes,[]);assert.deepEqual(sharedLocations(page).requests,[],'Appearance controls never publish shared location data');assert.deepEqual(errors,[]);results.push({engine,width,theme,passed:true});console.log(`PASS ${engine} ${width} ${theme}: owner capabilities, revocation, other admin, read-only preview and signed out`);
   }catch(error){await page.screenshot({path:`${out}/${engine}-${width}-${theme}-failure.png`,fullPage:true});throw error;}finally{await context.close();}
  }}finally{await browser.close();}
 }

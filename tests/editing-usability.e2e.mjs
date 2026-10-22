@@ -50,15 +50,16 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: viewport overflow`);
       };
       try {
-        await page.goto(base);
-        await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-        sharedLocations(page).seed((state, { link }) => {
+        // Prepare server data before navigation instead of interrupting initial
+        // authenticated requests with a fixture-only reload.
+        sharedLocations(context).seed((state, { link }) => {
           state.knowledgeRecords['country:Japan'] = { version: 7, layoutVersion: 2, sections: [{ id: 'links', title: 'LINK FIXTURE', blocks: [
             { id: 'prose', type: 'text', title: 'WEB REFERENCE', text: `READ (${link}).` },
             { id: 'table', type: 'table', title: 'WEB TABLE', columns: [{ id: 'url', name: 'SOURCE', width: 200 }], rows: [{ id: 'row', cells: [link] }] },
           ] }] };
         }, { link });
-        await page.reload();
+        await page.goto(base);
+        await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
         const workspace = await open(page, 'Countries & Ports');
         await expect(workspace.locator('.knowledge-extractor')).toHaveCount(0);
         const controls = await workspace.locator('.location-toolbar-actions button').evaluateAll(buttons => buttons.map(button => {

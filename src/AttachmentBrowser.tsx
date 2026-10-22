@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Download, ExternalLin
 import { useDemo } from './store';
 import { useIntelligence } from './Intelligence';
 import { actors, uid } from './lib/model';
-import { activeAttachmentCatalog, attachmentFolderId, attachmentLink, attachmentName, buildAttachmentFolders, folderAncestors, insideFolder, legacyAttachmentItems, type AttachmentFolder, type AttachmentItem, type AttachmentScope } from './lib/attachments';
+import { activeAttachmentCatalog, attachmentFolderId, attachmentLink, attachmentName, attachmentSupplierReferences, buildAttachmentFolders, folderAncestors, insideFolder, legacyAttachmentItems, type AttachmentFolder, type AttachmentItem, type AttachmentScope } from './lib/attachments';
 import { addAttachmentItems, attachmentBlob, deleteAttachmentItem, saveAttachmentFolder, updateAttachmentItem, useAttachmentCatalog, canWriteSharedAttachment, importOwnedLocalAttachments, refreshAttachments } from './lib/attachmentStorage';
 import { date, Modal } from './ui';
 import { useAccess } from './auth';
@@ -22,10 +22,10 @@ export default function AttachmentBrowser({ scope, onClose }: { scope: Attachmen
   const { state, actor } = useDemo();
   const { realUser, preview } = useAccess();
   const supplierCatalog = useSupplierCatalog(Boolean(realUser));
-  const { snapshot: intelligence, loading: intelligenceLoading } = useIntelligence();
-  const references = useMemo(() => ({ suppliers: intelligence?.suppliers }), [intelligence]);
+  const { snapshot: intelligence } = useIntelligence();
   const catalog = useAttachmentCatalog();
   const activeCatalog = useMemo(() => activeAttachmentCatalog({ items: [...catalog.items, ...legacyAttachmentItems(state)], folders: catalog.folders }), [catalog.items, catalog.folders, state.companies, state.requests]);
+  const references = useMemo(() => ({ suppliers: attachmentSupplierReferences(supplierCatalog.data?.items ?? [], activeCatalog, intelligence?.suppliers, scope) }), [supplierCatalog.data, activeCatalog, intelligence, scope]);
   const items = activeCatalog.items;
   const folders = useMemo(() => buildAttachmentFolders(state, activeCatalog, scope, references), [state, activeCatalog, scope, references]);
   const initial = rootId(scope);
@@ -126,7 +126,7 @@ export default function AttachmentBrowser({ scope, onClose }: { scope: Attachmen
           <header className="attachment-folder-header"><h3>{query ? 'Search attachments' : current.name}</h3><div className="attachment-actions"><button type="button" className="button secondary small" disabled={!canUpload} onClick={() => input.current?.click()}><Upload size={14} />Upload files</button><button type="button" className="button secondary small" disabled={!canUpload} onClick={() => begin('link')}><Link size={14} />Add link</button><button type="button" className="button secondary small" disabled={!canUpload} onClick={() => begin('folder')}><FolderPlus size={14} />New folder</button></div></header>
           <input ref={input} className="attachment-file-input" type="file" multiple aria-label="Upload attachments" disabled={!canUpload} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void upload(files); }} />
           {dropTarget && <div className="attachment-drop-indicator" role="status">{dropKind === 'move' ? `Move ${selected?.name ?? 'attachment'}` : 'Upload files'} to {breadcrumb(dropTarget)} · A–Z</div>}
-          {(current.id === "suppliers" || scope.target.kind === "supplier") && !intelligence && <p className="attachment-error" role="status">{intelligenceLoading ? "Loading supplier data…" : "Supplier data unavailable"}</p>}
+          {(current.id === "suppliers" || current.scope?.target.kind === "supplier") && !supplierCatalog.data && <p className="attachment-error" role="status">{supplierCatalog.loading ? "Loading supplier data…" : "Supplier data unavailable"}</p>}
           {(error || catalog.error) && <p className="attachment-error" role="alert">{error || catalog.error}</p>}
           {form && <form className="attachment-form" onSubmit={event => { event.preventDefault(); void perform(async () => {
             if (form === 'folder' && current.scope) { const validName = attachmentName(name); if (childFolders.some(folder => folder.name.toLowerCase() === validName.toLowerCase())) throw new Error('A folder with this name already exists.'); await saveAttachmentFolder({ id: uid('folder'), parentId: folderId, name: validName, scope: current.scope, custom: true }); }

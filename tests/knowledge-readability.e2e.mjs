@@ -67,8 +67,8 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
     page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.stack||error.message));
     const shot=async name=>{await page.screenshot({path:`${out}/${engine}-${width}-${theme}-${name}.png`});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No viewport overflow');};
     try {
-      await page.goto(base);await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();
-      const portId=sharedLocations(page).seed((saved,{text})=>{
+      // Seed the synthetic server before the first authenticated page load.
+      const portId=sharedLocations(context).seed((saved,{text})=>{
         saved.knowledgeRecords['country:Japan']={version:7,layoutVersion:2,sections:[{id:'readability',title:'READABILITY FIXTURE',blocks:[
           {id:'paragraph',type:'text',title:'OPERATING BACKGROUND',text},
           {id:'comparison',type:'table',title:'COMPARISON',columns:[{id:'one',name:'PORT',width:240},{id:'two',name:'DETAILS',width:240},{id:'three',name:'REFERENCE',width:240}],rows:[{id:'first',cells:['CHIBA','CONFIRMED','https://Example.test/PortData?Key=AbC']}]}]}]};
@@ -78,7 +78,7 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
         saved.knowledgeRecords[`port:${port.id}`]={version:7,layoutVersion:2,sections:[{id:'port-info',title:'PORT INFORMATION',role:'port-information',blocks:[{id:'port-note',type:'text',title:'PORT OPERATIONS',text:'ORIGINAL PORT NOTE'}]}]};
         return port.id;
       },{text});
-      await page.reload();
+      await page.goto(base);await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();
       const nav=page.getByRole('navigation',{name:'Workspace navigation'});
       if(await btn(nav,'Ports & Suppliers').getAttribute('aria-expanded')!=='true')await btn(nav,'Ports & Suppliers').click();
       await btn(nav,'Countries & Ports').click();

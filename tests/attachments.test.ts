@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSeedState } from '../src/lib/seed';
-import { attachmentFolderId, attachmentLink, attachmentName, buildAttachmentFolders, folderAncestors, insideFolder, legacyAttachmentItems, type AttachmentScope } from '../src/lib/attachments';
+import { attachmentFolderId, attachmentLink, attachmentName, attachmentSupplierReferences, buildAttachmentFolders, folderAncestors, insideFolder, legacyAttachmentItems, type AttachmentScope } from '../src/lib/attachments';
 
 test('Country and port identities stay separate when both are named Singapore', () => {
   const state = createSeedState();
@@ -46,4 +46,33 @@ test('supplier attachment folders use explicit authenticated references without 
   const supplier = folders.find(folder => folder.scope?.target.id === 'synthetic-reference-supplier');
   assert.equal(supplier?.name, 'SYNTHETIC REFERENCE SUPPLIER');
   assert.equal(supplier?.id, 'supplier:synthetic-reference-supplier');
+});
+
+test('active supplier masters provide writable folders without intelligence or fixture history', () => {
+  const catalog = { items: [], folders: [] }, id = '90000000-0000-4000-8000-000000000001';
+  const suppliers = attachmentSupplierReferences([{ id, legalName: 'CURRENT SUPPLIER PTE. LTD.' }], catalog,
+    [{ id: 'old-import-key', name: 'OUTDATED INTELLIGENCE NAME' }]);
+  const folders = buildAttachmentFolders(createSeedState(), catalog, undefined, { suppliers });
+  assert.equal(folders.filter(folder => folder.parentId === 'suppliers').length, 1);
+  const current = folders.find(folder => folder.id === `supplier:${id}`)!;
+  assert.equal(current.scope?.target.id, id);
+  assert.equal(current.name, 'CURRENT SUPPLIER PTE LTD');
+  assert.equal(current.localOnly, undefined);
+  assert.equal(folders.some(folder => folder.id === 'supplier:old-import-key'), false);
+});
+
+test('retained legacy supplier paths remain read-only and are never silently remapped to a master', () => {
+  const scope = { target: { kind: 'supplier' as const, id: 'old-import-key' } }, folderId = attachmentFolderId(scope);
+  const catalog = { items: [{ id: 'preserved', folderId, scope, name: 'Original source', type: 'link' as const, mime: '', size: 0,
+    createdAt: '2026-10-15T00:00:00Z', createdBy: 'owner', url: 'https://example.test/original', localOnly: true }], folders: [] };
+  const original = structuredClone(catalog);
+  const references = { suppliers: attachmentSupplierReferences([{ id: 'canonical-id', legalName: 'CURRENT SUPPLIER' }], catalog,
+    [{ id: 'old-import-key', name: 'ORIGINAL SOURCE LABEL' }]) };
+  const folders = buildAttachmentFolders(createSeedState(), catalog, undefined, references);
+  assert.equal(folders.find(folder => folder.id === folderId)?.localOnly, true);
+  assert.equal(folders.find(folder => folder.id === folderId)?.name, 'ORIGINAL SOURCE LABEL');
+  assert.deepEqual(catalog, original);
+  assert.deepEqual(attachmentSupplierReferences([], catalog, references.suppliers), [{ id: 'old-import-key', name: 'ORIGINAL SOURCE LABEL', localOnly: true }],
+    'A missing supplier service cannot create writable fallback identities');
+  assert.equal(attachmentSupplierReferences([], { items: [{ ...catalog.items[0], scope: { target: { kind: 'supplier', id: 'supplier-meridian' } } }], folders: [] }).length, 0);
 });

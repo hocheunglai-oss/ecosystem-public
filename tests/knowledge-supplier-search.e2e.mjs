@@ -59,14 +59,16 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
     const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png` }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)); };
     try {
-      await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-      sharedLocations(page).seed(saved => {
+      // Prepare server data before navigation so fixture setup never interrupts
+      // the workspace's initial authenticated activity request.
+      sharedLocations(context).seed(saved => {
         saved.knowledgeRecords['port:port-singapore'] = { version: 1, layoutVersion: 2, sections: [
           { id: 'operations', title: 'OPERATIONS', blocks: [{ id: 'standards', type: 'text', title: 'BUNKERING STANDARD', text: 'SS 600 PROCEDURES REMAIN AVAILABLE IN SEARCH.' }] },
           { id: 'suppliers', role: 'suppliers', title: 'SUPPLIERS', blocks: [] },
         ] };
       });
-      await page.reload(); const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
+      await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+      const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
       await btn(nav, 'Ports & Suppliers').click(); await btn(nav, 'Countries & Ports').click();
       const workspace = page.getByRole('dialog', { name: 'Countries & Ports', exact: true });
       await btn(workspace, 'Port Index').click(); await workspace.getByLabel('Country or port', { exact: true }).fill('Singapore');

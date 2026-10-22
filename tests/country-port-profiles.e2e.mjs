@@ -97,8 +97,6 @@ async function seed(page) {
     };
     value.locationHierarchyVersion = 1;
   }, { country: document('COUNTRY'), port: document('PORT') });
-  await page.reload();
-  await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
 }
 
 async function verifyPortCountries(workspace, shot) {
@@ -347,9 +345,11 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: no document overflow`);
       };
       try {
+        // Seed the server before navigation; reloading during the initial activity
+        // fetch produces a WebKit navigation error unrelated to this profile flow.
+        await seed(page);
         await page.goto(base);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-        await seed(page);
         const workspace = await openWorkspace(page);
         await verifyPortCountries(workspace, shot);
         await verifyCombinedSources(page, workspace, state, shot);

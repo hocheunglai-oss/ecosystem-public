@@ -6,6 +6,7 @@ import { knowledgeDocument, validateKnowledge, type KnowledgeChange, type Knowle
 import { intelligenceFields, validateIntelligenceKeyInfo } from './intelligenceFields';
 import { locationCountries, type LegacyLocationArea, type LocationCountry } from './locations';
 import { flattenLocationHierarchy } from './locationMigration';
+import { retireFictionalSupplierRecords } from './supplierRetirement';
 
 /** Only shared location data crosses this boundary. Private notes, buyers, hats,
  * commercial records, identities and prototype state never form part of it. */
@@ -303,11 +304,18 @@ function referencePort(value: Port): boolean {
   return !value.summary && !value.leadTime && !value.notes.length && !value.tags.length && !value.updatedAt &&
     (!value.intelligenceKeyInfo || Object.values(value.intelligenceKeyInfo).every(item => item === null)) && !Object.keys(value.intelligenceEntryUpdates ?? {}).length;
 }
+/** Apply the established retirement policy only to the imported current view.
+ * Raw browser bytes and immutable before/after records remain untouched. A legacy
+ * retirement marker cannot make a stale imported table active again. */
+function retiredImportView(snapshot: LocationSnapshot): LocationSnapshot {
+  const retired = retireFictionalSupplierRecords({ ...emptyState(), knowledgeRecords: snapshot.knowledgeRecords });
+  return { ...snapshot, knowledgeRecords: retired.knowledgeRecords ?? {} };
+}
 /** Import is an all-or-nothing merge. Timestamps and browser versions are not a
  * global ordering and never authorize replacement of different server content. */
 export function mergeLegacyLocationSnapshot(current: LocationSnapshot, legacy: LocationSnapshot): { snapshot: LocationSnapshot; conflicts: LocationConflict[] } { return mergeLocationSnapshots(current, legacy, true); }
 function mergeLocationSnapshots(current: LocationSnapshot, legacy: LocationSnapshot, enforceTotal: boolean): { snapshot: LocationSnapshot; conflicts: LocationConflict[] } {
-  const original = parseSnapshot(current, enforceTotal), incoming = parseLocationSnapshot(legacy);
+  const original = parseSnapshot(current, enforceTotal), incoming = retiredImportView(parseLocationSnapshot(legacy));
   if (incoming.contributions.some(item => item.locationPublication)) throw new Error('Import the original contribution archive, not a summary.');
   const merged = structuredClone(original), conflicts: LocationConflict[] = [];
   const conflict = (target: KnowledgeTarget, reason: LocationConflict['reason']) => { if (!conflicts.some(item => equal(item.target, target) && item.reason === reason)) conflicts.push({ target, reason }); };
@@ -377,7 +385,7 @@ export function readLegacyLocationCandidate(input: { ownerId: string; namespace:
   if (input.raw === null) return null;
   const state = object(JSON.parse(input.raw));
   if (state.version !== 1 || state.demoScenarioVersion !== undefined || !['companies', 'ports', 'enquiries', 'requests', 'outcomes', 'contributions', 'audit', 'drops', 'goals'].every(key => Array.isArray(state[key]))) throw new Error('This archive is not an eligible live workspace.');
-  const snapshot = locationSnapshotFromState(state as unknown as DemoState), initial = initialLocationSnapshot();
+  const snapshot = retiredImportView(locationSnapshotFromState(state as unknown as DemoState)), initial = initialLocationSnapshot();
   const stateForDefaults = locationStateWithSnapshot(emptyState(), snapshot);
   const candidateCount = snapshot.ports.filter(item => !initial.ports.some(value => equal(value, item))).length + snapshot.locationCountries.filter(item => !initial.locationCountries.some(value => equal(value, item))).length +
     Object.entries(snapshot.knowledgeRecords).filter(([key, value]) => {

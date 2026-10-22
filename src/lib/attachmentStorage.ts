@@ -6,6 +6,7 @@ import type {AccessUser} from '../../shared/access';
 import {attachmentMaxBytes,isSharedAttachmentScope,type SharedAttachmentCatalog} from '../../shared/attachments';
 import {ecoConnections} from '../../config/ecoConnections';
 import type {AttachmentCatalog,AttachmentFolder,AttachmentItem} from './attachments';
+import {activeAttachmentCatalog} from './attachments';
 import {decodeAttachmentBytes,encodeAttachmentBytes} from './attachmentBytes';
 import {assertPreviewWritable} from './previewGuard';
 export {isSharedAttachmentScope,canWriteSharedAttachment} from '../../shared/attachments';
@@ -47,10 +48,11 @@ function localOwned():AttachmentItem[]{
 }
 export async function inspectLocalAttachments(user?:Pick<AccessUser,'id'>):Promise<LocalAttachmentSummary>{
  const owner=ensure(user?.id??actor?.id).id,result=emptySummary(),present=new Set([...shared.items.map(item=>item.id),...(shared.retainedIds??[])]);
+ const activeIds=new Set(activeAttachmentCatalog({items:localOwned(),folders:legacy.folders}).items.map(item=>item.id));
  result.unassigned=legacy.items.filter(item=>item.createdBy!==owner).length;
  for(const item of localOwned()){
   if(present.has(item.id)){result.imported++;continue;}
-  if(!isSharedAttachmentScope(item.scope)||item.legacy||!shared.targetKeys?.includes(`${item.scope.target.kind}:${item.scope.target.id}`)){result.unsupported++;continue;}
+  if(!activeIds.has(item.id)||!isSharedAttachmentScope(item.scope)||item.legacy||!shared.targetKeys?.includes(`${item.scope.target.kind}:${item.scope.target.id}`)){result.unsupported++;continue;}
   if(item.type==='file'){const blob=await localBlob(item.id);if(!blob){result.missing++;continue;}if(blob.size>attachmentMaxBytes){result.oversized++;continue;}}
   result.eligible++;
  }return result;
@@ -129,7 +131,7 @@ export async function attachmentBlob(id:string):Promise<Blob>{
 }
 export async function importOwnedLocalAttachments(user?:Pick<AccessUser,'id'>):Promise<LocalAttachmentSummary>{
  const owner=writable(user?.id??actor?.id).id;await load(owner);
- const originals=localOwned().filter(item=>isSharedAttachmentScope(item.scope)&&shared.targetKeys?.includes(`${item.scope.target.kind}:${item.scope.target.id}`)&&!item.legacy&&!shared.items.some(s=>s.id===item.id)&&!shared.retainedIds?.includes(item.id));
+ const originals=activeAttachmentCatalog({items:localOwned(),folders:legacy.folders}).items.filter(item=>isSharedAttachmentScope(item.scope)&&shared.targetKeys?.includes(`${item.scope.target.kind}:${item.scope.target.id}`)&&!item.legacy&&!shared.items.some(s=>s.id===item.id)&&!shared.retainedIds?.includes(item.id));
  const doneFolders=new Set(shared.folders.map(f=>f.id));
  async function importFolder(id:string,seen=new Set<string>()){
   if(doneFolders.has(id))return;if(seen.has(id))throw Error('Browser folder hierarchy needs review.');seen.add(id);

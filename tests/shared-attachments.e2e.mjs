@@ -35,6 +35,10 @@ for(const engine of (process.env.ECO_SHARED_ATTACHMENTS_ENGINES||'chromium,webki
    const first=[...fixture.uploads.values()][0];await files.getByRole('button',{name:'IMPORT MY ATTACHMENTS',exact:true}).click();
    await expect.poll(()=>fixture.items.size).toBe(1);assert.equal(fixture.uploads.size,1);assert.equal(fixture.putCount,1);assert.equal(fixture.sha256(first.item.id),hash);assert.ok(!fixture.uploads.has('oversized-local-original'),'an oversized original does not block a valid import or request a cloud allocation');
    const prepares=fixture.requests.filter(r=>r.route.endsWith('/prepare'));assert.equal(prepares[0].body.requestId,prepares[1].body.requestId,'uncertain response resumes exact durable operation');
+   // The server commit precedes the client's import refresh. Wait for the UI to
+   // finish before selecting another file; setInputFiles can bypass a disabled input.
+   await expect(files.locator('.attachment-footer [role="status"]')).toHaveText('Attachments imported. Browser originals retained.');
+   await expect(files.getByLabel('Upload attachments',{exact:true})).toBeEnabled();
    fixture.corruptUploadOnce=true;await files.getByLabel('Upload attachments',{exact:true}).setInputFiles({name:'Checksum original.txt',mimeType:'text/plain',buffer:bytes});
    await expect(files.getByText('Uploaded file checksum does not match.',{exact:true})).toBeVisible();assert.equal(fixture.items.size,1);
    const bad=[...fixture.uploads.values()].find(u=>u.item.name==='Checksum original.txt'),unchanged=Buffer.from(bad.bytes);await files.getByRole('button',{name:'IMPORT MY ATTACHMENTS',exact:true}).click();

@@ -5,14 +5,33 @@ import { retiredSupplierIds, retiredSupplierTarget } from './supplierRetirement'
 
 export type AttachmentTarget = KnowledgeTarget | { kind: 'credit'; id: string };
 export interface AttachmentScope { target: AttachmentTarget; section?: { id: string; name: string } }
-export interface AttachmentFolder { id: string; parentId: string | null; name: string; scope?: AttachmentScope; custom?: boolean }
+export interface AttachmentFolder { id: string; parentId: string | null; name: string; scope?: AttachmentScope; custom?: boolean; revision?: number; localOnly?: boolean }
 export interface AttachmentItem {
   id: string; folderId: string; scope: AttachmentScope; name: string; type: 'file' | 'link';
   mime: string; size: number; createdAt: string; createdBy: string; url?: string;
   /** Existing request documents stay owned by the credit workflow. */
   legacy?: boolean;
+  revision?: number;
+  localOnly?: boolean;
 }
 export interface AttachmentCatalog { items: AttachmentItem[]; folders: AttachmentFolder[] }
+export interface AttachmentSupplierReference { id: string; name: string; localOnly?: boolean }
+type AttachmentReferences = Omit<KnowledgeReferences, 'suppliers'> & { suppliers?: readonly AttachmentSupplierReference[] };
+/** Current supplier identities come from the active master. Legacy source IDs
+ * remain readable only when this user's retained files need their original path. */
+export function attachmentSupplierReferences(suppliers: readonly { id: string; legalName: string }[], catalog: AttachmentCatalog,
+  legacy: readonly { id: string; name: string }[] = [], current?: AttachmentScope): AttachmentSupplierReference[] {
+  const result: AttachmentSupplierReference[] = suppliers.filter(supplier => !retiredSupplierIds.has(supplier.id)).map(supplier => ({ id: supplier.id, name: supplier.legalName.replace(/\./g, ' ').replace(/\s+/g, ' ').trim() }));
+  const active = activeAttachmentCatalog(catalog);
+  const scopes = [...active.items.map(item => item.scope), ...active.folders.flatMap(folder => folder.scope ? [folder.scope] : []), ...(current ? [current] : [])];
+  for (const scope of scopes) {
+    if (scope.target.kind !== 'supplier' || retiredSupplierTarget(scope.target) || result.some(supplier => supplier.id === scope.target.id)) continue;
+    const name = legacy.find(supplier => supplier.id === scope.target.id)?.name
+      ?? active.folders.find(folder => folder.id === attachmentFolderId({ target: scope.target }))?.name ?? 'Supplier';
+    result.push({ id: scope.target.id, name, localOnly: true });
+  }
+  return result;
+}
 export const attachmentFolderId = (scope: AttachmentScope) => `${scope.target.kind}:${encodeURIComponent(scope.target.id)}${scope.section ? `:section:${encodeURIComponent(scope.section.id)}` : ''}`;
 export function attachmentLink(value: string): string {
   let url: URL;
@@ -43,7 +62,7 @@ export function activeAttachmentCatalog(catalog: AttachmentCatalog): AttachmentC
   while (changed) { changed = false; for (const folder of catalog.folders) if (folder.parentId && hidden.has(folder.parentId) && !hidden.has(folder.id)) { hidden.add(folder.id); changed = true; } }
   return { folders: catalog.folders.filter(folder => !hidden.has(folder.id)), items: catalog.items.filter(item => !retiredSupplierTarget(item.scope.target) && !retiredPath(item.folderId) && !hidden.has(item.folderId)) };
 }
-export function buildAttachmentFolders(state: DemoState, catalog: AttachmentCatalog, current?: AttachmentScope, references: KnowledgeReferences = {}): AttachmentFolder[] {
+export function buildAttachmentFolders(state: DemoState, catalog: AttachmentCatalog, current?: AttachmentScope, references: AttachmentReferences = {}): AttachmentFolder[] {
   catalog = activeAttachmentCatalog(catalog);
   const folders: AttachmentFolder[] = [
     { id: 'home', parentId: null, name: 'Home' },
@@ -79,7 +98,7 @@ export function buildAttachmentFolders(state: DemoState, catalog: AttachmentCata
     add({ id: attachmentFolderId({ target: { kind: 'port', id: port.id } }), parentId: attachmentFolderId({ target: { kind: 'country', id: country?.id ?? countryName } }), name: `${port.name} (Port)`, scope: { target: { kind: 'port', id: port.id } } });
   }
   for (const buyer of state.companies) for (const kind of ['company', 'credit'] as const) add({ id: attachmentFolderId({ target: { kind, id: buyer.id } }), parentId: kind === 'company' ? 'buyers' : 'credit', name: buyer.name, scope: { target: { kind, id: buyer.id } } });
-  for (const supplier of references.suppliers ?? []) add({ id: attachmentFolderId({ target: { kind: 'supplier', id: supplier.id } }), parentId: 'suppliers', name: supplier.name, scope: { target: { kind: 'supplier', id: supplier.id } } });
+  for (const supplier of references.suppliers ?? []) add({ id: attachmentFolderId({ target: { kind: 'supplier', id: supplier.id } }), parentId: 'suppliers', name: supplier.name, scope: { target: { kind: 'supplier', id: supplier.id } }, ...(supplier.localOnly ? { localOnly: true } : {}) });
   const scopes = [...catalog.items.map(item => item.scope), ...catalog.folders.flatMap(folder => folder.scope ? [folder.scope] : []), ...(current ? [current] : [])];
   for (const scope of scopes) {
     if (retiredSupplierTarget(scope.target)) continue;

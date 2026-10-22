@@ -1,4 +1,4 @@
-import type { Company, CreditRequest, DemoState } from './model';
+import type { Company, CreditRequest, DemoState } from './model.ts';
 
 export interface TemporaryCredit {
   id: string;
@@ -83,7 +83,7 @@ export function nextCreditRequestNumber(requests: CreditRequest[], at: string): 
   return `${prefix}${String(sequence).padStart(4, '0')}`;
 }
 
-export { creditAttentionRequestIds, creditRequestRecipients, companyLifecycle, possibleBuyerDuplicates } from './creditWorkflow';
+export { creditAttentionRequestIds, creditRequestRecipients, companyLifecycle, possibleBuyerDuplicates } from './creditWorkflow.ts';
 
 /** Additive legacy bootstrap: preserve the existing text and credit position, once per buyer. */
 export function initializeCreditRemarkHistory(state: DemoState, at = new Date().toISOString()): void {

@@ -53,6 +53,9 @@ import type { Port } from "./lib/model";
 import CountryPublicHolidays from "./CountryPublicHolidays";
 import OfficialFuelTable, { officialTableMatches, useOfficialFuelTable } from './OfficialFuelTable';
 import { isOfficialNotes, officialNotes } from './lib/officialTableNotes';
+import LocationStorageStatus from './LocationStorageStatus';
+import { useLocationHistory } from './lib/useLocationHistory';
+import { useTestWorkspace } from './TestWorkspace';
 
 const keyInfoFields = [
   ["qualityClaim", "30 days quality claim period"],
@@ -94,6 +97,7 @@ export function KnowledgePage({
   if (!current) return null;
   return (
     <div className="knowledge-page">
+      <LocationStorageStatus />
       <div className="knowledge-record-picker">
         <SearchableSelect
           label={kind === "port" ? "Port record" : "Country record"}
@@ -141,10 +145,10 @@ export function KnowledgePanel({
   onDirtyChange?: (dirty: boolean) => void;
   onOpenPort?: (portId: string) => void;
 }) {
-  const { state, actor } = useDemo();
+  const { state, actor, locations } = useDemo();
   const { realUser, preview } = useAccess();
   const { snapshot: intelligence } = useIntelligence();
-  const canEdit = Boolean(realUser?.isActive && realUser.activated && !preview);
+  const canEdit = Boolean(realUser?.isActive && realUser.activated && !preview && (!['country', 'port', 'area'].includes(target.kind) || locations.ready));
   const tabId = useId();
   const content = useRef<HTMLDivElement>(null);
   const actual = canonicalTarget(state, locationProfileTarget(state, target));
@@ -199,10 +203,15 @@ export function KnowledgePanel({
   const [revision, setRevision] = useState<KnowledgeRevision>();
   const [managing, setManaging] = useState(false);
   const countryKey = countryTarget ? knowledgeKey(state, countryTarget) : undefined;
-  const history = (state.knowledgeHistory ?? []).filter((item) => {
+  const { namespace } = useTestWorkspace();
+  const sharedHistory = useLocationHistory(countryTarget ? [actual, countryTarget] : [actual],
+    locations.enabled && isLocation && panel === 'history', locations.data?.revision ?? 0, namespace);
+  const localHistory = (state.knowledgeHistory ?? []).filter((item) => {
     const itemKey = knowledgeKey(state, item.target);
     return itemKey === key || itemKey === countryKey;
   }).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const history = locations.enabled && isLocation ? sharedHistory.page?.items ?? [] : localHistory;
+  const historyTotal = locations.enabled && isLocation ? sharedHistory.page?.total : history.length;
   const activePrivateEntry = privateEntries.find(entry => entry.id === sectionId);
   const activePrivate = activePrivateEntry?.tab;
   const active = profileSections.find((section) => section.id === sectionId) ?? profileSections[0];
@@ -338,7 +347,7 @@ export function KnowledgePanel({
             onClick={() => leaveEditor(() => setPanel(panel === "history" ? null : "history"))}
             aria-pressed={panel === "history"}
           >
-            <History size={14} /> History <small>{history.length}</small>
+            <History size={14} /> History {historyTotal !== undefined && <small>{historyTotal}</small>}
           </button>}
         </div>
       </header>
@@ -403,6 +412,8 @@ export function KnowledgePanel({
                 <h3>History</h3>
                 <button aria-label="Close information panel" onClick={() => setPanel(null)}><X size={16} /></button>
               </header>
+              {locations.enabled && isLocation && sharedHistory.loading && <p role="status">Loading history…</p>}
+              {locations.enabled && isLocation && sharedHistory.error && <div role="alert">{sharedHistory.error} <button className="button secondary small" onClick={sharedHistory.refresh}>Retry</button></div>}
               {history.length ? history.map((item) => (
                 <button className="knowledge-history-row" key={`${knowledgeKey(state, item.target)}:${item.version}:${item.at}`} onClick={() => setRevision(item)}>
                   <span>
@@ -411,7 +422,8 @@ export function KnowledgePanel({
                   </span>
                   <span>{date(item.at)} · v{item.version}</span>
                 </button>
-              )) : <p className="knowledge-empty">No changes</p>}
+              )) : !(locations.enabled && isLocation && (sharedHistory.loading || sharedHistory.error)) && <p className="knowledge-empty">No changes</p>}
+              {locations.enabled && isLocation && sharedHistory.page?.nextCursor && <button className="button secondary small" disabled={sharedHistory.loading} onClick={() => void sharedHistory.loadMore()}>Load more</button>}
             </>
           ) : searching ? (
             <>

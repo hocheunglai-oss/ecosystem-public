@@ -127,7 +127,7 @@ async function command(bin, name, args, connection) {
   });
 }
 
-export async function capturePostgres({ bin, connection, expectedProjectRef, expectedSourceRole = 'postgres', supplierReportsBucket = 'eco-supplier-reports', outputDir, captureObjects }) {
+export async function capturePostgres({ bin, connection, expectedProjectRef, expectedSourceRole = 'postgres', supplierReportsBucket = 'eco-supplier-reports', profileAttachmentsBucket, outputDir, captureObjects }) {
   validateConnection(connection, expectedProjectRef, expectedSourceRole);
   if (typeof supplierReportsBucket !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,99}$/.test(supplierReportsBucket)) throw new Error('Invalid reports bucket');
   if (!isAbsolute(bin) || !isAbsolute(outputDir)) throw new Error('Absolute private paths required');
@@ -158,6 +158,8 @@ export async function capturePostgres({ bin, connection, expectedProjectRef, exp
     const objects = await session.rows('SELECT id,bucket_id,name,metadata,updated_at,version FROM storage.objects ORDER BY bucket_id,name');
     const buckets = await session.rows('SELECT * FROM storage.buckets ORDER BY id');
     const reports = await session.rows('SELECT object_path,sha256,size_bytes FROM eco_private.supplier_reports ORDER BY object_path');
+    const attachments = profileAttachmentsBucket ? await session.rows('SELECT object_path,state,sha256,size_bytes,expected_mime,storage_object_id,storage_version FROM eco_private.profile_attachment_uploads ORDER BY object_path') : [];
+    validateAttachmentInventory(objects, attachments, profileAttachmentsBucket);
     const [safety] = await session.rows("SELECT (SELECT count(*) FROM vault.secrets)::int AS vault_secrets, (SELECT count(subdbid) FROM pg_subscription)::int AS subscriptions");
     if (safety.vault_secrets || safety.subscriptions) throw new Error('Recovery requires an explicit Vault/subscription procedure');
     for (const report of reports) {
@@ -178,9 +180,9 @@ export async function capturePostgres({ bin, connection, expectedProjectRef, exp
     const current = new SqlSession({ bin, connection });
     try {
       const latest = await current.rows('SELECT id,bucket_id,name,metadata,updated_at,version FROM storage.objects ORDER BY bucket_id,name');
-      if (JSON.stringify(latest) !== JSON.stringify(objects.map(({expectedSha256, ...o}) => o))) throw new Error('Storage changed during capture; retry the complete set');
+      if (JSON.stringify(latest) !== JSON.stringify(objects.map(({expectedSha256, attachmentState, ...o}) => o))) throw new Error('Storage changed during capture; retry the complete set');
     } finally { await current.close(); }
-    const inventory = { schemaVersion: 1, sourceProjectRef: expectedProjectRef, source, schemas, extensions, roles, memberships, tables, functions, triggers, policies, migrationHistory, buckets, storage, safety };
+    const inventory = { schemaVersion: 1, sourceProjectRef: expectedProjectRef, source, schemas, extensions, roles, memberships, tables, functions, triggers, policies, migrationHistory, buckets, storage, safety, attachmentUploads: attachments, attachmentBucket: profileAttachmentsBucket };
     await writeFile(join(outputDir, 'database-inventory.json'), JSON.stringify(inventory, null, 2), { flag: 'wx', mode: 0o600 });
     await assertSnapshotAlive(session, source);
     complete = true;
@@ -188,4 +190,21 @@ export async function capturePostgres({ bin, connection, expectedProjectRef, exp
   } finally {
     try { await session.close(); } finally { if (!complete) await rm(outputDir, { recursive: true, force: true }); }
   }
+}
+
+/** Validate known pending bytes and every active reference against the same DB snapshot. */
+export function validateAttachmentInventory(objects, uploads, bucket) {
+  if (!bucket) return;
+  if (typeof bucket !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,99}$/.test(bucket)) throw Error('Invalid attachments bucket');
+  const byPath = new Map();
+  for (const upload of uploads) {
+    if (byPath.has(upload.object_path) || !['pending','active'].includes(upload.state)) throw Error('Attachment inventory invalid');
+    byPath.set(upload.object_path,upload);
+    const object=objects.find(o=>o.bucket_id===bucket && o.name===upload.object_path);
+    if (upload.state === 'active' && (!object || object.id !== upload.storage_object_id || object.version !== upload.storage_version
+      || Number(object.metadata?.size) !== Number(upload.size_bytes) || object.metadata?.mimetype !== upload.expected_mime
+      || !/^[a-f0-9]{64}$/.test(upload.sha256))) throw Error('Published attachment missing or changed');
+    if (object) { object.attachmentState=upload.state; if (upload.state==='active') object.expectedSha256=upload.sha256; }
+  }
+  for (const object of objects) if (object.bucket_id===bucket && !byPath.has(object.name)) throw Error('Unrecognized attachment object');
 }

@@ -126,3 +126,21 @@ test('an aborted backup cancels outbound authorization and leaves no partial dir
     assert.equal(f.calls.length, 1);
   });
 });
+
+test('mixed protected reports and managed general pending/active originals are captured and checksummed',async()=>{
+ await directory(async output=>{
+  const expanded={...target,profileAttachmentsBucket:'eco-profile-attachments'};
+  const general={...makeObject(2),bucket_id:expanded.profileAttachmentsBucket,name:'22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333.bin',attachmentState:'active',metadata:{size:bytes.length,mimetype:'application/pdf'}};
+  const f=fixture();const capture=createStorageCapture({target:expanded,secrets,now,fetchImpl:f.fetchImpl});
+  const result=await capture([makeObject(),general],output);assert.equal(result.objects.length,2);
+ });
+ await directory(async output=>{
+  const expanded={...target,profileAttachmentsBucket:'eco-profile-attachments'},general={...makeObject(2),bucket_id:expanded.profileAttachmentsBucket,name:'22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333.bin',attachmentState:'pending'};delete general.expectedSha256;
+  const f=fixture({mutateManifest:entry=>({schemaVersion:1,projectRef:target.supabaseProjectRef,objects:[{...entry,sha256:null}]})});
+  const result=await createStorageCapture({target:expanded,secrets,now,fetchImpl:f.fetchImpl})([general],output);assert.equal(result.objects[0].sha256,digest);
+ });
+ for(const state of [undefined,'active','unknown']){
+  const expanded={...target,profileAttachmentsBucket:'eco-profile-attachments'},general={...makeObject(2),bucket_id:expanded.profileAttachmentsBucket,name:'22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333.bin',attachmentState:state};delete general.expectedSha256;
+  const f=fixture();await assert.rejects(createStorageCapture({target:expanded,secrets,now,fetchImpl:f.fetchImpl})([general],'/unused'));assert.equal(f.calls.length,0);
+ }
+});

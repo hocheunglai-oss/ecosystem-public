@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AccessOffice, AccessUser } from "../shared/access";
 import { accessRequest, useAccess } from "./auth";
-import { contributionActivity, contributionStatus, type ContributionPeriod, type ContributionStatusKey } from "./lib/contributionActivity";
+import { contributionActivity, mergeLocationActivity, contributionStatus, type ContributionPeriod, type ContributionStatusKey } from "./lib/contributionActivity";
 import { ActivityHistory, ActivityPeriodFilter, ActivityStatus, ActivitySummary, ActivityWeeks, useActivityNow } from "./ResourceWallet";
+import { useLocationActivity } from './lib/useLocationActivity';
 import { useDemo } from "./store";
 import { resourceNumber as number } from "./ui";
 import "./contribution-performance.css";
@@ -10,7 +11,7 @@ import "./contribution-performance.css";
 /** The directory is shared; prototype publications are still isolated to this account/browser. */
 export function ContributionPerformance() {
   const { user } = useAccess();
-  const { state, actor } = useDemo();
+  const { state, actor, locations } = useDemo();
   const [users, setUsers] = useState<AccessUser[]>([]);
   const [offices, setOffices] = useState<AccessOffice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,21 +35,27 @@ export function ContributionPerformance() {
   }, [user?.id, user?.isAdmin, retry]);
   const directory = users.length ? users : user ? [user] : [];
   const knownIds = directory.map(person => person.id);
+  const shared = useLocationActivity(knownIds, period, now, knownIds, Boolean(user?.isAdmin));
+  const selectedShared = useLocationActivity(selectedId, period, now, knownIds, Boolean(user?.isAdmin && selectedId));
   const rows = useMemo(() => directory.map(person => {
     const observed = person.id === actor.id || state.contributions.some(item => item.author === person.id)
       || (state.hats ?? []).some(item => item.recipientId === person.id);
-    const activity = observed ? contributionActivity(state, person.id, period, now, knownIds) : null;
+    const projection = shared.byActor?.[person.id];
+    const local = contributionActivity(state, person.id, period, now, knownIds);
+    const activity = projection && shared.status === 'ready' ? mergeLocationActivity(local, projection) : !locations.enabled && observed ? local : null;
     return { person, activity, status: activity ? contributionStatus(activity.total) : null };
-  }), [users, user, state, actor.id, period, now]);
+  }), [users, user, state, actor.id, period, now, shared.byActor, shared.status, locations.enabled]);
   if (!user?.isAdmin) return null;
   const search = query.trim().toLocaleLowerCase();
   const filtered = rows.filter(({ person, status }) => (!officeId || person.officeId === officeId)
     && `${person.displayName} ${person.email}`.toLocaleLowerCase().includes(search)
     && (!statusFilter || (statusFilter === "unavailable" ? !status : status?.key === statusFilter)));
-  const selected = filtered.find(row => row.person.id === selectedId);
+  const selectedRow = filtered.find(row => row.person.id === selectedId);
+  const selected = selectedRow ? { ...selectedRow, activity: selectedShared.status === 'ready' ? selectedShared.activity : null } : undefined;
   return <section className="card contribution-performance contribution-activity" aria-label="User contribution performance">
     <header className="contribution-performance-heading"><h2>USER CONTRIBUTION PERFORMANCE</h2><ActivityPeriodFilter period={period} onChange={setPeriod} /></header>
-    <p className="contribution-data-scope" role="note"><strong>LOCAL RECORDS ONLY</strong> USER DETAILS COME FROM THE SHARED DIRECTORY. CONTRIBUTION RECORDS ARE CURRENTLY SAVED IN THIS ACCOUNT AND BROWSER. UNAVAILABLE RECORDS ARE NOT ZERO CONTRIBUTIONS.</p>
+    <p className="contribution-data-scope" role="note"><strong>COUNTRY &amp; PORT CONTRIBUTIONS ARE SHARED.</strong> OTHER LOCAL RECORDS REMAIN LIMITED TO THIS ACCOUNT AND BROWSER. UNAVAILABLE RECORDS ARE NOT ZERO CONTRIBUTIONS.</p>
+    {shared.error && <p role="alert">{shared.error} <button className="button secondary small" onClick={shared.refresh}>RETRY</button></p>}
     {error && <div className="contribution-directory-error" role="alert"><span>{error}</span><button type="button" className="button secondary small" onClick={() => setRetry(value => value + 1)}>RETRY DIRECTORY</button></div>}
     <div className="contribution-performance-filters">
       <label>OFFICE<select aria-label="Contribution office" value={officeId} onChange={event => setOfficeId(event.target.value)}>
@@ -77,7 +84,8 @@ export function ContributionPerformance() {
       <header className="activity-section-heading"><h3>{selected.person.displayName} · {selected.person.officeName}</h3></header>
       <div className="contribution-performance-summary"><ActivityStatus activity={selected.activity} /><div><ActivitySummary activity={selected.activity} period={period} /><ActivityWeeks activity={selected.activity} period={period} /></div></div>
       <header className="activity-section-heading"><h3>CONTRIBUTION RECORDS · {selected.activity.periodLabel}</h3></header>
-      <ActivityHistory key={`${selected.person.id}:${period}`} entries={selected.activity.entries} publications={state.contributions} />
+      <ActivityHistory key={`${selected.person.id}:${period}`} period={period} entries={selected.activity.entries} publications={state.contributions} hasMore={selectedShared.hasMore} loading={selectedShared.loading} onLoadMore={selectedShared.loadMore} />
+      {selectedShared.error && <p role="alert">{selectedShared.error} <button className="button secondary small" onClick={selectedShared.refresh}>RETRY</button></p>}
     </section>}
   </section>;
 }

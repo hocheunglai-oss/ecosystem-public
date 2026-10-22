@@ -1,8 +1,8 @@
-import type { IntelligenceSnapshot, IntelligenceSupplier } from '../../shared/intelligence';
-export type { IntelligenceSupplier } from '../../shared/intelligence';
-import type { Port, DemoState } from './model';
-import { emptyIntelligenceKeyInfo } from './intelligenceFields';
-export type { IntelligenceKeyInfo } from './intelligenceFields';
+import type { IntelligenceSnapshot, IntelligenceSupplier } from '../../shared/intelligence.ts';
+export type { IntelligenceSupplier } from '../../shared/intelligence.ts';
+import type { Port, DemoState } from './model.ts';
+import { emptyIntelligenceKeyInfo } from './intelligenceFields.ts';
+export type { IntelligenceKeyInfo } from './intelligenceFields.ts';
 
 export interface RefineryInfo {
   name: string;

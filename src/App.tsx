@@ -1,3 +1,4 @@
+import { useLocationActivity } from './lib/useLocationActivity';
 import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useBuyerCreditAvailable } from './ReleaseGate';
 import { ECO_2_RELEASE_NOTICE, isBuyerCreditWorkspace } from '../shared/ecoRelease';
@@ -145,14 +146,16 @@ function TraderHud({
     setAccountPanel(current => current === panel ? null : panel);
   };
   const activityNow = useActivityNow();
-  const localActivity = contributionActivity(state, actor.id, "7d", activityNow);
-  const { summary: sharedFeedback, status: sharedFeedbackStatus } = useSharedFeedback();
+  const sharedLocations = useLocationActivity(actor.id, "7d", activityNow);
+  const localActivity = sharedLocations.activity;
+  const { summary: sharedFeedback, status: feedbackStatus } = useSharedFeedback();
+  const sharedFeedbackStatus = feedbackStatus === 'unavailable' || sharedLocations.status === 'unavailable' ? 'unavailable' : feedbackStatus === 'loading' || sharedLocations.status === 'loading' ? 'loading' : 'ready';
   const activity = { ...localActivity, total: localActivity.total + (sharedFeedback?.count ?? 0) };
   const showContribution = user?.officeId !== "CREDIT";
   const visiblePreview = canPreview && accountPanel === "activity" ? contributionPreview : null;
   const visibleHatsPreview = canPreview && !previewPerson && accountPanel === "hats" ? hatsPreview : null;
   const contributionTier = contributionStatus(visiblePreview ? contributionPreviewCounts[visiblePreview] : activity.total);
-  const contributionIncomplete = !visiblePreview && sharedFeedbackStatus !== 'ready';
+  const contributionIncomplete = !visiblePreview && (sharedFeedbackStatus !== 'ready' || sharedLocations.status !== 'ready');
   const contributionLabel = contributionIncomplete ? sharedFeedbackStatus === 'loading' ? 'CHECKING' : 'UNAVAILABLE' : contributionTier.label;
   const hats = visibleHatsPreview ? hatsPreviewCounts[visibleHatsPreview] : hatCount(state, previewPerson?.id ?? actor.id);
   const team = teamForActor(actor);
@@ -197,7 +200,7 @@ function TraderHud({
         {showContribution && <button
           className="hud-resource hud-resource-activity"
           data-resource="activity"
-          aria-label={`Contribution: ${contributionLabel}${visiblePreview ? ". Appearance preview" : contributionIncomplete ? `. ${number(localActivity.total)} local contributions in the last 7 days. Shared feedback count ${sharedFeedbackStatus === 'loading' ? 'pending' : 'unavailable'}` : `. ${number(activity.total)} in the last 7 days`}`}
+          aria-label={`Contribution: ${contributionLabel}${visiblePreview ? ". Appearance preview" : contributionIncomplete ? `. ${number(localActivity.total)} local contributions in the last 7 days. Shared contribution count ${sharedFeedbackStatus === 'loading' ? 'pending' : 'unavailable'}` : `. ${number(activity.total)} in the last 7 days`}`}
           title="CONTRIBUTION ACTIVITY"
           aria-expanded={accountPanel === "activity"}
           aria-controls={accountPanel === "activity" ? "hud-contribution-activity" : undefined}

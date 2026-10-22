@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
+import { installSharedLocations } from './fixtures/shared-locations.mjs';
 import { syntheticPdf } from './fixtures/pdf-document.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
@@ -54,6 +56,8 @@ async function fixture(context, theme) {
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: false } }));
   await context.route('**/api/profile-tabs/**', route => route.fulfill({ json: { shared: { revision: 0, tabs: [] }, private: { revision: 0, tabs: [] } } }));
   await context.route('**/api/suppliers/**', route => route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 100 } }));
+  state.attachments = await installSharedAttachments(context, {user:()=>state.user});
+  await installSharedLocations(context, {user:()=>state.user});
   return state;
 }
 
@@ -73,7 +77,7 @@ for (const engine of engines) {
     page.on('request', request => { if (request.url().includes('/pdf-preview/')) pdfRequests.push(request.url()); });
     const shot = async label => page.screenshot({ path: `${out}/${name}-${label}.png` });
     try {
-      await page.goto(base);
+      await page.goto(base);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
       await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
       const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
       await button(nav, 'Ports & Suppliers').click(); await button(nav, 'Countries & Ports').click();
@@ -134,20 +138,18 @@ for (const engine of engines) {
         // Old browser records keep their Blob shape; no migration may destroy
         // or rewrite those bytes. WebKit's current test runtime rejects writing
         // old Blob records, which is the reason for the new byte format.
-        await page.evaluate(async data => {
+        await page.evaluate(async ({data, original}) => {
           const database = await new Promise((resolve, reject) => { const request = indexedDB.open('ecosystem.attachments.v1', 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
           await new Promise((resolve, reject) => {
             const transaction = database.transaction(['items', 'blobs'], 'readwrite');
-            const request = transaction.objectStore('items').getAll();
-            request.onsuccess = () => {
-              const original = request.result.find(item => item.name === 'Synthetic report.PDF');
+            {
               transaction.objectStore('items').put({ ...original, id: 'legacy-blob-fixture', name: 'Legacy Blob.pdf' });
               transaction.objectStore('blobs').put({ id: 'legacy-blob-fixture', blob: new Blob([new Uint8Array(data)], { type: 'application/pdf' }) });
             };
             transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error);
           });
           database.close(); const channel = new BroadcastChannel('ecosystem.attachments.v1'); channel.postMessage('changed'); channel.close();
-        }, [...bytes]);
+        }, {data:[...bytes],original:[...state.attachments.items.values()].find(item=>item.name==='Synthetic report.PDF')});
         await files.locator('.attachment-file-tile').filter({ hasText: 'Legacy Blob.pdf' }).click();
         const legacyPreview = page.getByRole('dialog', { name: 'PDF PREVIEW', exact: true });
         await expect(legacyPreview.getByRole('img', { name: 'PDF page 1' })).toBeVisible();

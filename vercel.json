@@ -50,6 +50,9 @@
     }
   ],
   "functions": {
+    "api/attachments/complete.ts": {
+      "maxDuration": 180
+    },
     "api/official-tables/refresh.ts": {
       "maxDuration": 120
     },

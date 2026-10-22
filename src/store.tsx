@@ -22,11 +22,16 @@ import type { AccessUser } from '../shared/access';
 import { actorFromAccess } from './lib/accessActor';
 import { assertPreviewWritable, isPreviewReadOnly } from './lib/previewGuard';
 import { assertLocalCommercialAction } from './lib/commercialLocalGuard';
+import { isLocationAction, useSharedLocationKnowledge } from './lib/useSharedLocationKnowledge';
+import { initialLocationSnapshot, locationStateWithSnapshot, readLegacyLocationCandidate } from './lib/sharedLocationKnowledge';
+import { locationKnowledgeApi, type LocationKnowledgeEnvelope } from './lib/locationKnowledgeApi';
 type Toast = { message: string; error?: boolean };
 type Store = {
   state: DemoState;
   actor: Actor;
   run: (action: Action, success?: string, references?: ActionReferences) => boolean;
+  runKnowledge: (action: Action, success?: string, references?: ActionReferences) => Promise<boolean>;
+  locations: ReturnType<typeof useSharedLocationKnowledge> & { migrationError: string };
   notify: (message: string, error?: boolean) => void;
   toast: Toast | null;
   storageWarning: boolean;
@@ -35,10 +40,20 @@ const Context = createContext<Store | null>(null);
 export function DemoProvider({ children, user }: { children: ReactNode; user?: AccessUser | null }) {
   const { realUser } = useAccess();
   const { namespace, dataMode, policy } = useTestWorkspace();
-  const KEY = `${namespace}:state`;
+  // The original LIVE state remains untouched as a recovery source. New local
+  // state excludes the authoritative location slice, which is loaded per session.
+  const legacyKey = `${namespace}:state`;
+  const KEY = dataMode === 'live' ? `${namespace}:state:v2` : legacyKey;
+  const [legacy] = useState(() => {
+    if (dataMode !== 'live' || !realUser) return { candidate: null, error: '' };
+    try {
+      const raw = localStorage.getItem(legacyKey);
+      return { candidate: readLegacyLocationCandidate({ ownerId: realUser.id, namespace, raw }), error: '' };
+    } catch (error) { return { candidate: null, error: error instanceof Error ? error.message : 'Browser data could not be read. The original is retained.' }; }
+  });
   const [state, setState] = useState<DemoState>(() => {
     let raw: string | null = null;
-    try { raw = localStorage.getItem(KEY); } catch { /* Storage is optional for reading. */ }
+    try { raw = localStorage.getItem(KEY) ?? localStorage.getItem(legacyKey); } catch { /* Storage is optional for reading. */ }
     return withProfile(readWorkspaceState(raw, dataMode, realUser, policy));
   });
   function withProfile(value: DemoState): DemoState {
@@ -51,10 +66,19 @@ export function DemoProvider({ children, user }: { children: ReactNode; user?: A
   const actor: Actor = user ? actorFromAccess(user) : { id: 'signed-out', name: '', role: 'trader' };
   const [toast, setToast] = useState<Toast | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
+  function acceptLocations(value: LocationKnowledgeEnvelope) {
+    const next = locationStateWithSnapshot(ref.current, value.snapshot);
+    ref.current = next; setState(next);
+  }
+  const locations = useSharedLocationKnowledge({ enabled: dataMode === 'live', namespace, user: realUser, accept: acceptLocations,
+    legacy: legacy.candidate?.snapshot ?? null, notify });
+  function persisted(value: DemoState) {
+    return JSON.stringify(dataMode === 'live' ? locationStateWithSnapshot(value, initialLocationSnapshot()) : value);
+  }
   useEffect(() => {
     if (!realUser || !isCurrentWorkspace(namespace) || isPreviewReadOnly()) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify(state));
+      localStorage.setItem(KEY, persisted(state));
       setStorageWarning(false);
     } catch {
       setStorageWarning(true);
@@ -74,11 +98,12 @@ export function DemoProvider({ children, user }: { children: ReactNode; user?: A
       if (!isCurrentWorkspace(namespace)) throw new Error('Workspace changed. Try again.');
       if (!accessRef.current?.isActive || !accessRef.current.activated) throw new Error('Sign in with an active account.');
       assertLocalCommercialAction(action, dataMode);
+      if (dataMode === 'live' && isLocationAction(action, ref.current)) throw new Error('Use the shared save for country and port information.');
       assertReleaseActionAvailable(action, ref.current, accessRef.current);
       const next = applyAction(ref.current, action, actor, undefined, references);
       // Persist requests and attachments before their forms report success.
       try {
-        localStorage.setItem(KEY, JSON.stringify(next));
+        localStorage.setItem(KEY, persisted(next));
         setStorageWarning(false);
       } catch {
         setStorageWarning(true);
@@ -96,12 +121,25 @@ export function DemoProvider({ children, user }: { children: ReactNode; user?: A
       return false;
     }
   }
+  async function runKnowledge(action: Action, success?: string, references?: ActionReferences): Promise<boolean> {
+    let shared = isLocationAction(action, ref.current);
+    if (dataMode === 'live' && action.type === 'review-contribution' && !ref.current.contributions.some(item => item.id === action.id)) {
+      try { const { item } = await locationKnowledgeApi.contribution(action.id); shared = ['country', 'port', 'area'].includes(item.targetType); }
+      catch (cause) { notify(cause instanceof Error ? cause.message : 'Update unavailable.', true); return false; }
+    }
+    if (dataMode !== 'live' || !shared) return run(action, success, references);
+    const saved = await locations.write(action);
+    if (saved && success) notify(success);
+    return saved;
+  }
   return (
     <Context.Provider
       value={{
         state,
         actor,
         run,
+        runKnowledge,
+        locations: { ...locations, migrationError: legacy.error },
         notify,
         toast,
         storageWarning,

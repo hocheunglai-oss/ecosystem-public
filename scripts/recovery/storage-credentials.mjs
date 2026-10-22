@@ -3,6 +3,7 @@ import { captureStorage, StorageCaptureError } from './capture-storage.mjs';
 // GitHub supplies these short-lived request credentials to this job only. They
 // are passed by the launcher, never read from a stored connector/session token.
 const PATH = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/([a-f0-9]{64})\.pdf$/u;
+const ATTACHMENT_PATH = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.bin$/u;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u;
 const fail = code => { throw new StorageCaptureError(code); };
 const check = (condition, code) => { if (!condition) fail(code); };
@@ -66,18 +67,25 @@ export function createStorageCapture({ target, secrets, signal, fetchImpl = fetc
       check(Array.isArray(objects), 'INVALID_OBJECT_LIST');
       const sources = new Map();
       const copied = objects.map(object => {
-        check(object && typeof object === 'object' && object.bucket_id === target.supplierReportsBucket
-          && typeof object.name === 'string' && PATH.test(object.name) && UUID.test(object.id ?? '')
-          && Number.isSafeInteger(object.metadata?.size) && object.metadata.size >= 5 && object.metadata.size <= 20 * 1024 * 1024
-          && object.metadata.mimetype === 'application/pdf'
-          && (object.version === null || (typeof object.version === 'string' && /^[A-Za-z0-9_.-]{1,200}$/u.test(object.version))), 'UNEXPECTED_STORAGE_INVENTORY');
-        const hash = PATH.exec(object.name)[1];
-        check(object.expectedSha256 === undefined || object.expectedSha256 === hash, 'INVENTORY_CHECKSUM_MISMATCH');
+        check(object && typeof object==='object','UNEXPECTED_STORAGE_INVENTORY');
+        const report=object.bucket_id===target.supplierReportsBucket;
+        const attachment=typeof target.profileAttachmentsBucket==='string' && object.bucket_id===target.profileAttachmentsBucket;
+        check((report || attachment) && typeof object.name==='string' && (report ? PATH.test(object.name) : ATTACHMENT_PATH.test(object.name))
+          && UUID.test(object.id ?? '') && Number.isSafeInteger(object.metadata?.size)
+          && object.metadata.size >= (report ? 5 : 0) && object.metadata.size <= (report ? 20 : 50)*1024*1024
+          && (report ? object.metadata.mimetype==='application/pdf' : typeof object.metadata.mimetype==='string'
+            && /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(object.metadata.mimetype)
+            && ['pending','active'].includes(object.attachmentState))
+          && (object.version===null || typeof object.version==='string' && /^[A-Za-z0-9_.-]{1,200}$/.test(object.version)), 'UNEXPECTED_STORAGE_INVENTORY');
+        const hash=report ? PATH.exec(object.name)[1] : object.attachmentState==='active' ? object.expectedSha256 : undefined;
+        check((hash===undefined || typeof hash==='string' && /^[a-f0-9]{64}$/.test(hash))
+          && (object.expectedSha256===undefined || object.expectedSha256===hash)
+          && (!attachment || object.attachmentState!=='active' || typeof hash==='string'), 'INVENTORY_CHECKSUM_MISMATCH');
         const url = `${sourceOrigin}/storage/v1/object/authenticated/${object.bucket_id}/${object.name}`;
         check(!sources.has(url), 'DUPLICATE_OBJECT');
         const snapshot = JSON.parse(JSON.stringify({ ...object, expectedSha256: hash }));
         sources.set(url, { id: snapshot.id, bucketId: snapshot.bucket_id, path: snapshot.name,
-          size: snapshot.metadata.size, version: snapshot.version });
+          size: snapshot.metadata.size, version: snapshot.version, expectedHash: hash });
         return snapshot;
       });
       return await captureStorage({ projectRef: target.supabaseProjectRef, expectedProjectRef: target.supabaseProjectRef,
@@ -86,7 +94,7 @@ export function createStorageCapture({ target, secrets, signal, fetchImpl = fetc
         serviceKey: 'signed-download-transport', objects: copied, outputDir,
         async fetchImpl(input, init) {
           check(typeof input === 'string' && sources.has(input) && init?.method === 'GET', 'UNEXPECTED_STORAGE_REQUEST');
-          const item = sources.get(input), authSignal = requestSignal(init.signal);
+          const {expectedHash,...item} = sources.get(input), authSignal = requestSignal(init.signal);
           const response = await fetchImpl(endpoint, { method: 'POST', redirect: 'error', signal: authSignal,
             headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ objects: [item] }) });
           const result = await jsonResponse(response, endpoint);
@@ -94,7 +102,7 @@ export function createStorageCapture({ target, secrets, signal, fetchImpl = fetc
             && Array.isArray(result.objects) && result.objects.length === 1, 'BACKUP_MANIFEST_INVALID');
           const entry = result.objects[0];
           check(entry && ['id', 'bucketId', 'path', 'size', 'version'].every(key => entry[key] === item[key])
-            && entry.sha256 === PATH.exec(item.path)[1] && typeof entry.url === 'string'
+            && (expectedHash ? entry.sha256===expectedHash : entry.sha256===null || typeof entry.sha256==='string' && /^[a-f0-9]{64}$/.test(entry.sha256)) && typeof entry.url === 'string'
             && Date.parse(entry.expiresAt) > now() && Date.parse(entry.expiresAt) <= now() + 305_000, 'BACKUP_MANIFEST_INVALID');
           const signed = new URL(entry.url);
           check(signed.origin === sourceOrigin && !signed.username && !signed.password && !signed.hash

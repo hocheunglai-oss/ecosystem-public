@@ -1,3 +1,5 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -7,7 +9,7 @@ const base = process.env.ECO_TEST_UI_ORIGIN || process.env.ECO_TEST_WORKSPACE_OR
 const out = resolve(process.env.ECO_TEST_UI_OUTPUT || 'output/test-workspace-ui');
 const otto = { id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'OWNER FIXTURE', phone: '+6591815902', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1, capabilities: { appearancePreview: true, testWorkspace: true } };
 const g1 = '10000000-0000-4000-8000-000000000010', g2 = '10000000-0000-4000-8000-000000000011';
-const liveKey = `ecosystem.live.v1:${otto.id}:state`, testKey = generation => `ecosystem.test.v1:${otto.id}:${generation}:state`;
+const liveKey = `ecosystem.live.v1:${otto.id}:state:v2`, testKey = generation => `ecosystem.test.v1:${otto.id}:${generation}:state`;
 const legacyKey = `ecosystem.prototype.v2:${otto.id}`;
 const results = [];
 await mkdir(out, { recursive: true });
@@ -26,6 +28,8 @@ async function fixture(context) {
   await context.route('**/api/admin/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); return route.fulfill({ json: { count: 0, items: [], periodStart: '2026-10-09T00:00:00Z', periodEnd: '2026-10-16T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } }); });
   await context.route('**/api/suppliers/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); return route.fulfill({ json: { items: [], page: 1, pageSize: 100, total: 0 } }); });
   await context.route('**/api/profile-tabs/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); const url = new URL(route.request().url()); return route.fulfill({ json: { target: { kind: url.searchParams.get('kind'), id: url.searchParams.get('id') }, shared: { revision: 0, tabs: [] }, private: { revision: 0, tabs: [] } } }); });
+  await installSharedLocations(context,{user:()=>state.user,preview:()=>state.preview});
+  state.attachments = await installSharedAttachments(context,{user:()=>state.user,preview:()=>state.preview});
   return state;
 }
 const readState = (page, key) => page.evaluate(value => JSON.parse(localStorage.getItem(value)), key);
@@ -86,10 +90,12 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       assert.equal(JSON.stringify(await readState(page, liveKey)), liveBefore, 'Same-account capability revocation restores LIVE without touching its records');
       state.user = { ...otto, id: '10000000-0000-4000-8000-000000000002', email: 'another@example.test', displayName: 'OTHER ADMIN', capabilities: { appearancePreview: false, testWorkspace: false } }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview });
       await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN'); await expect(control(page)).toHaveCount(0);
-      const otherKey = `ecosystem.live.v1:${state.user.id}:state`; await expect.poll(async () => (await readState(page, otherKey))?.companies.length).toBe(0); await shot('other-admin');
+      const otherKey = `ecosystem.live.v1:${state.user.id}:state:v2`; await expect.poll(async () => (await readState(page, otherKey))?.companies.length).toBe(0); await shot('other-admin');
       state.user = null; await invalidateFixtureAuthority(page, { user: null, preview: state.preview }); await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible(); await expect(control(page)).toHaveCount(0); await shot('signed-out');
       assert.equal(await page.evaluate(key => localStorage.getItem(key), legacyKey), '{"preserved":"LEGACY COMMERCIAL EDITS"}');
-      assert.deepEqual(state.writes, []); assert.deepEqual(errors, []);
+      assert.deepEqual(state.writes, []); assert.deepEqual(sharedLocations(page).requests, [], 'TEST data and previews never write shared LIVE location records');
+      assert.deepEqual(state.attachments.requests.filter(request => request.body !== undefined), [], 'TEST data and previews never mutate shared LIVE attachments');
+      assert.equal(state.attachments.putCount, 0, 'TEST data and previews never upload shared LIVE attachment bytes'); assert.deepEqual(errors, []);
       results.push({ engine, width, theme, passed: true }); console.log(`PASS ${engine} ${width} ${theme}: live/test isolation, role preview, reload, error, rotation, revocation, other admin, signed out`);
     } catch (error) { await shot('failure'); throw error; } finally { await context.close(); }
   } } finally { await browser.close(); }

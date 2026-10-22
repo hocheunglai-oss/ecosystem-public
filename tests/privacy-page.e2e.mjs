@@ -1,3 +1,4 @@
+import { installSharedLocations } from './fixtures/shared-locations.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -31,6 +32,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       if (path.startsWith('/api/admin/')) return route.fulfill({ json: { items: [], count: 0, nextCursor: null, periodStart: '2026-10-15T00:00:00Z', periodEnd: '2026-10-22T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } });
       unexpected.push(path); return route.fulfill({ status: 503, json: { message: 'Unmatched fixture request.' } });
     });
+    const locations = await installSharedLocations(context,{user:()=>signedIn?member:null});
     const page = await context.newPage(); page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(value => localStorage.setItem('ecosystem.theme.v1', value), theme);
@@ -43,7 +45,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
       await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Privacy', exact: true })).toHaveCount(0);
-      assert.equal(privacyReads, 0);
+      assert.equal(privacyReads, 0); assert.equal(locations.reads,0,'Signed-out page never reads shared location data');
       await expect(page.locator('[data-artwork-ready]').first()).toHaveAttribute('data-artwork-ready', 'true');
       await page.evaluate(() => document.fonts.ready); await shot(page, 'sign-in');
       const publicPage = await context.newPage(), requests = [];
@@ -79,7 +81,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       signedIn = false; await invalidateFixtureAuthority(page, { user: null, preview: null });
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
       await expect(page.getByRole('article', { name: 'Privacy', exact: true })).toHaveCount(0);
-      assert.deepEqual(writes, []); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+      assert.deepEqual(writes, []); assert.deepEqual(locations.requests, [], 'Privacy displays never write shared location records'); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
       results.push({ engine, width, theme, ok: true }); console.log(`PASS ${engine} ${width} ${theme}`);
     } catch (error) { await shot(page, 'failure').catch(() => {}); throw error; }
     finally { await context.close(); }

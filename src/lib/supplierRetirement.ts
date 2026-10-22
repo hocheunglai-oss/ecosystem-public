@@ -1,6 +1,6 @@
-import type { KnowledgeBlock } from './knowledge';
-import type { DemoState } from './model';
-import { historicalSupplierFixtures } from './historicalSupplierFixtures';
+import type { KnowledgeBlock } from './knowledge.ts';
+import type { DemoState } from './model.ts';
+import { historicalSupplierFixtures } from './historicalSupplierFixtures.ts';
 
 export const retiredSupplierIds = new Set(historicalSupplierFixtures.map(item => item.id));
 const names = new Set(historicalSupplierFixtures.flatMap(item => [item.name, ...item.aliases]).map(name => name.trim().toLocaleLowerCase('en-US')));

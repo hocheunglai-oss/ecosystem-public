@@ -1,5 +1,5 @@
-import type { KnowledgeTarget } from "./knowledge";
-import type { DemoState, Port } from "./model";
+import type { KnowledgeTarget } from "./knowledge.ts";
+import type { DemoState, Port } from "./model.ts";
 
 export interface LocationCountry {
   id: string;

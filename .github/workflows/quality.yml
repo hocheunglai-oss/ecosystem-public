@@ -36,7 +36,11 @@ jobs:
       - run: pnpm build
       - run: pnpm security:build
       - run: pnpm security:inventory
-      - run: pnpm audit --audit-level high
+      - run: node --test scripts/dependency-audit.test.mjs
+      - name: Audit every locked dependency
+        run: node scripts/dependency-audit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       # Logged evidence is mandatory; downloadable archives are supplementary.
       # This keeps artifact storage outages separate from actual quality failures.
       - name: Validate and log non-secret build evidence
@@ -84,7 +88,7 @@ jobs:
             --mount "type=bind,source=$(command -v node),target=/usr/local/bin/node,readonly" \
             --workdir /workspace \
             --env ECO_NATIVE_PG_BIN=/usr/lib/postgresql/17/bin \
-            postgres:17-bookworm node --test tests/access-sql.test.mjs tests/admin-sql.test.mjs tests/suppliers-sql.test.mjs tests/supplier-ports-sql.test.mjs tests/parser-sql.test.mjs tests/inbox-sql.test.mjs tests/commercial-enquiries-sql.test.mjs tests/intelligence-sql.test.mjs tests/official-tables-sql.test.mjs
+            postgres:17-bookworm node --test tests/access-sql.test.mjs tests/admin-sql.test.mjs tests/suppliers-sql.test.mjs tests/supplier-ports-sql.test.mjs tests/parser-sql.test.mjs tests/inbox-sql.test.mjs tests/commercial-enquiries-sql.test.mjs tests/intelligence-sql.test.mjs tests/official-tables-sql.test.mjs tests/location-knowledge-sql.test.mjs tests/profile-attachments-sql.test.mjs
 
 
   recovery:
@@ -170,6 +174,8 @@ jobs:
           - group: knowledge
             label: Knowledge and private profiles
             scripts: |
+              tests/shared-location-storage.e2e.mjs
+              tests/shared-attachments.e2e.mjs
               tests/location-flattening.e2e.mjs
               tests/country-port-profiles.e2e.mjs
               tests/public-holidays.e2e.mjs
@@ -184,6 +190,8 @@ jobs:
               tests/intelligence.e2e.mjs
               tests/backup-privacy-page.e2e.mjs
             artifacts: |
+              output/shared-location-ui
+              output/shared-attachments-ui
               output/location-flattening-ui
               output/country-port-profiles-ui
               output/holiday-status
@@ -240,6 +248,10 @@ jobs:
           ECO_LOCATION_UI_OUTPUT: output/location-flattening-ui
           ECO_COUNTRY_PORT_ORIGIN: http://127.0.0.1:4286
           ECO_COUNTRY_PORT_OUTPUT: output/country-port-profiles-ui
+          ECO_SHARED_LOCATION_ORIGIN: http://127.0.0.1:4286
+          ECO_SHARED_LOCATION_OUTPUT: output/shared-location-ui
+          ECO_SHARED_ATTACHMENTS_ORIGIN: http://127.0.0.1:4286
+          ECO_SHARED_ATTACHMENTS_OUTPUT: output/shared-attachments-ui
           ECO_HOLIDAY_ORIGIN: http://127.0.0.1:4286
           ECO_HOLIDAY_OUTPUT: output/holiday-status
           ECO_TABLE_PASTE_ORIGIN: http://127.0.0.1:4286

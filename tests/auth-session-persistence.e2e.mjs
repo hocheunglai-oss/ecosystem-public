@@ -3,6 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
+import { installSharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 const base = process.env.ECO_AUTH_UI_ORIGIN || 'http://127.0.0.1:4396';
 const out = resolve(process.env.ECO_AUTH_UI_OUTPUT || 'output/auth-session-ui');
 const member = { id: '10000000-0000-4000-8000-000000000001', email: 'trader@example.test', displayName: 'SAMPLE TRADER', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: false, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
@@ -44,6 +46,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       if (path.startsWith('/api/admin/')) return route.fulfill({ json: { items: [], count: 0, nextCursor: null, periodStart: '2026-10-15T00:00:00Z', periodEnd: '2026-10-22T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } });
       unexpected.push(path); return route.fulfill({ status: 503, json: { message: 'Unmatched fixture request.' } });
     });
+    const locationsFixture = await installSharedLocations(context, { user: () => mode === 'revoked' ? null : member });
+    const attachmentsFixture = await installSharedAttachments(context, { user: () => mode === 'revoked' ? null : member });
     const page = await context.newPage(); page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
     const focus = () => page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -134,7 +138,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.equal(requests, before + 1, 'overlapping refresh triggers share one server check');
       await committedSession(async () => { mode = 'valid'; await held.fulfill({ json: session() }); }); held = null;
       await expect(draft).toHaveValue('Unsaved Fixture 8');
-      // The browser-local knowledge store also rejects changes during a session outage.
+      // Shared location writes also reject changes during a session outage.
       await page.getByRole('button', { name: 'Close workspace', exact: true }).click();
       const navigation = page.getByRole('navigation', { name: 'Workspace navigation' });
       const group = navigation.getByRole('button', { name: 'Ports & Suppliers', exact: true });
@@ -145,17 +149,20 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const form = page.getByRole('dialog', { name: 'Add location', exact: true });
       await form.getByLabel('Name', { exact: true }).fill('SESSION FIXTURE PORT');
       await form.getByLabel('Country', { exact: true }).selectOption({ label: 'Japan' });
-      const key = `ecosystem.live.v1:${member.id}:state`;
-      const portsBefore = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).ports.length, key);
+      const locationsBefore = locationsFixture.envelope();
+      const sharedWritesBefore = locationsFixture.requests.length;
       await failedSession('unavailable');
       await form.getByRole('button', { name: 'Add location', exact: true }).click();
       await expect(form.getByRole('alert')).toContainText('SESSION TO RECONNECT');
-      assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).ports.length, key), portsBefore);
+      assert.deepEqual(locationsFixture.envelope(), locationsBefore, 'unverified session leaves shared location records unchanged');
+      assert.equal(locationsFixture.requests.length, sharedWritesBefore, 'unverified session cannot dispatch a shared location write');
       await expect(form.getByLabel('Name', { exact: true })).toHaveValue('SESSION FIXTURE PORT');
       await committedSession(async () => { mode = 'valid'; await focus(); });
       await form.getByRole('button', { name: 'Add location', exact: true }).click();
       await expect(form).toHaveCount(0);
-      assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).ports.length, key), portsBefore + 1);
+      assert.equal(locationsFixture.envelope().revision, locationsBefore.revision + 1);
+      assert.equal(locationsFixture.snapshot().ports.length, locationsBefore.snapshot.ports.length + 1);
+      assert.equal(locationsFixture.requests.length, sharedWritesBefore + 1, 'verified recovery publishes the draft once');
       await locations.getByRole('button', { name: 'Close workspace', exact: true }).click();
       // A definitive revocation still clears the UI and its unsaved account form.
       mode = 'revoked'; await focus();
@@ -177,10 +184,12 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await stale.fulfill({ json: session() }).catch(() => {});
       await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toHaveCount(0);
       assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+      assert.equal(locationsFixture.requests.length, 1, 'only the explicitly recovered location draft is published');
+      assert.deepEqual(attachmentsFixture.requests.filter(request => request.body), [], 'session checks never modify shared attachments');
       assert.deepEqual(mutations, ['/api/access/password', '/api/access/login', '/api/access/logout', '/api/access/login']);
       results.push({ engine, width, theme, ok: true }); console.log(`PASS ${engine} ${width} ${theme}`);
     } catch (error) { await shot('failure').catch(() => {}); throw error; }
     finally { await context.close(); }
   } } finally { await browser.close(); }
 }
-await writeFile(resolve(out, 'results.json'), JSON.stringify({ base, results, checked: 'Initial 503 permits credential login/invite/recovery and automatic recovery, background 503/network preserves unsaved form and blocks writes until verified recovery, online recovery, single-flight refresh, definitive 401, logout race, cross-tab invalidation.', limits: 'Isolated browsers and synthetic API responses; cookie expiry/rotation/revocation also covered by real Supabase SDK adapter unit tests.' }, null, 2));
+await writeFile(resolve(out, 'results.json'), JSON.stringify({ base, results, checked: 'Initial 503 permits credential login/invite/recovery and automatic recovery, background 503/network preserves unsaved form and blocks account/shared-location writes until verified recovery, one recovered shared-location publication, no attachment mutations, online recovery, single-flight refresh, definitive 401, logout race, cross-tab invalidation.', limits: 'Isolated browsers and synthetic API responses; cookie expiry/rotation/revocation also covered by real Supabase SDK adapter unit tests. Physical devices and native Safari were not tested.' }, null, 2));

@@ -1,3 +1,5 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -15,9 +17,18 @@ const button = (scope, name) => scope.getByRole('button', { name, exact: true })
 const results = [];
 await mkdir(out, { recursive: true });
 async function fixture(context) {
-  const state = { user: structuredClone(user), preview: null, latency: 0, snapshot: syntheticIntelligence(), status: 200, requests: 0, writes: [], hold: false, pending: [] };
+  const suppliers = syntheticIntelligence().suppliers.map((item, index) => ({
+    id: `90000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, legacyIds: [item.id], sourceKey: `CANONICAL ${index + 1}`,
+    legalName: `CANONICAL SUPPLIER ${String(index + 1).padStart(2, '0')} PTE. LTD.`, shortName: `CANONICAL ${index + 1}`, aliases: [item.name],
+    countryCode: 'SG', countryName: 'Singapore', portName: 'Singapore', nameStatus: 'verified', legalNameSourceId: null,
+    info: { paymentTerms: '', qualityClaimBar: '', supplierTrader: '', availableGrade: item.grades.join(', '), foBdn: '', goBdn: '' },
+    contactCount: 0, bargeCount: 0, revision: 1, updatedAt: '2026-01-15T00:00:00Z',
+  }));
+  const state = { user: structuredClone(user), preview: null, latency: 0, snapshot: syntheticIntelligence(), status: 200, requests: 0, supplierStatus: 200, supplierRequests: 0, suppliers, writes: [], hold: false, pending: [] };
   await context.route('**/api/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); return route.fulfill({ status: 404, json: { message: 'Isolated fixture only' } }); });
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
+  state.attachments = await installSharedAttachments(context, { user: () => state.user, preview: () => state.preview });
   await context.route('**/api/access/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
     if (path === 'session') {
@@ -38,7 +49,13 @@ async function fixture(context) {
   });
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: true, generation: '10000000-0000-4000-8000-000000000010' } }));
   await context.route('**/api/profile-tabs/list?**', route => { const url = new URL(route.request().url()); return route.fulfill({ json: { target: { kind: url.searchParams.get('kind'), id: url.searchParams.get('id') }, shared: { revision: 0, tabs: [] }, private: { revision: 0, tabs: [] } } }); });
-  await context.route('**/api/suppliers/**', route => route.fulfill({ json: { items: [], page: 1, pageSize: 50, total: 0 } }));
+  await context.route('**/api/suppliers/list?**', route => {
+    state.supplierRequests++; assert.equal(route.request().method(), 'GET');
+    if (!state.user) return route.fulfill({ status: 401, json: { message: 'Sign in required.' } });
+    if (state.supplierStatus !== 200) return route.fulfill({ status: state.supplierStatus, json: { message: 'Supplier data unavailable' } });
+    const query = new URL(route.request().url()).searchParams, page = Number(query.get('page') || 1), pageSize = Number(query.get('limit') || 50);
+    return route.fulfill({ json: { items: state.suppliers.slice((page - 1) * pageSize, page * pageSize), page, pageSize, total: state.suppliers.length } });
+  });
   await context.route('**/api/admin/**', route => route.fulfill({ json: { count: 0, items: [], periodStart: '2026-01-08T00:00:00Z', periodEnd: '2026-01-15T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } }));
   return state;
 }
@@ -93,8 +110,16 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       const attachments = page.getByRole('dialog', { name: 'Attachments', exact: true });
       await attachments.getByRole('navigation', { name: 'Attachment folders' }).getByRole('button', { name: 'Suppliers', exact: true }).click();
       await expect(attachments.locator('.attachment-folder-tile')).toHaveCount(12); await shot('attachment-references');
+      await expect(attachments.locator('.attachment-folder-tile').first()).toContainText('CANONICAL SUPPLIER 01 PTE LTD');
+      await expect(attachments.locator('.attachment-files')).not.toContainText('SYNTHETIC SUPPLIER');
       state.snapshot = null; await focus(page);
+      await expect(ranking).toContainText('Fixture data unavailable');
+      await expect(attachments.locator('.attachment-folder-tile')).toHaveCount(12);
+      await expect(attachments).not.toContainText('Supplier data unavailable');
+      state.supplierStatus = 503; await focus(page);
       await expect(attachments).toContainText('Supplier data unavailable'); await expect(attachments.locator('.attachment-folder-tile')).toHaveCount(0);
+      state.supplierStatus = 200; await focus(page); await expect(attachments.locator('.attachment-folder-tile')).toHaveCount(12);
+      await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(value => value.includes('SYNTHETIC SUPPLIER') || value.includes('CANONICAL SUPPLIER')))).toBe(false);
       await button(attachments, 'Close dialog').click();
       await button(dialog, 'Close workspace').click();
       const control = page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true });
@@ -123,8 +148,11 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.getByText(/Preview.*Read only/i).first()).toBeVisible();
       await openPort(page); await expect(ranking).toContainText('SECOND SUPPLIER 12');
       state.user = null; state.preview = null; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(button(page, 'Sign in')).toBeVisible();
-      const signedOutRequests = state.requests; await focus(page); await page.waitForTimeout(100); assert.equal(state.requests, signedOutRequests, 'Signed-out does not fetch private references');
+      const signedOutRequests = state.requests, signedOutSupplierRequests = state.supplierRequests; await focus(page); await page.waitForTimeout(100); assert.equal(state.requests, signedOutRequests, 'Signed-out does not fetch private references');
+      assert.equal(state.supplierRequests, signedOutSupplierRequests, 'Signed-out does not fetch the private supplier catalog');
       await expect(ranking).toHaveCount(0); await shot('signed-out'); assert.deepEqual(errors, []); assert.deepEqual(state.writes, []);
+      assert.deepEqual(sharedLocations(page).requests, [], 'Intelligence browsing never publishes shared location records');
+      assert.deepEqual(state.attachments.requests.filter(request => request.body), [], 'Intelligence browsing never modifies shared attachments');
       results.push({ engine, width, theme, passed: true });
     } catch (error) { await shot('failure').catch(() => {}); results.push({ engine, width, theme, passed: false, error: error.message }); throw error; }
     finally { state.pending.splice(0).forEach(done => done()); await context.close(); await writeFile(resolve(out, 'report.json'), JSON.stringify({ origin: base, results }, null, 2)); }

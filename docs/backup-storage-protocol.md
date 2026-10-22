@@ -30,9 +30,12 @@ The request is JSON containing only `objects`, with one to twenty entries:
 ```
 
 The caller obtains this inventory from its consistent database snapshot. The
-server verifies object ID, bucket, full path, current version, size, and PDF MIME
-type using Storage's metadata API. It accepts only the configured report bucket
-and existing immutable report-path format. Unexpected buckets or object types
+server verifies object ID, bucket, full path, current version, size, and MIME
+type using Storage's metadata API. It accepts the configured report bucket
+with its immutable PDF path, and the protected general-attachment bucket with
+its immutable UUID/UUID path. Published attachments must match their verified
+metadata digest; pending bytes are captured as recovery evidence without
+claiming they are published. Unexpected buckets or object types
 require a reviewed protocol update; the caller must not silently omit them.
 
 A successful response contains `schemaVersion: 1`, `projectRef`, and exactly the

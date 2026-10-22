@@ -31,7 +31,7 @@ export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClo
   privateTabs?: PrivateProfileTabsController;
   countryPrivateTabs?: PrivateProfileTabsController;
 }) {
-  const { run } = useDemo();
+  const { runKnowledge } = useDemo();
   const { realUser, preview } = useAccess();
   const [base] = useState(() => structuredClone({ tabs, primary }));
   const privateBase = useRef<ProfileTabCollection | null>(privateTabs?.data ? structuredClone(privateTabs.data) : null);
@@ -85,7 +85,7 @@ export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClo
       const document: KnowledgeDocument = { ...structuredClone(source.document), sections };
       if (!sameKnowledge(source.document, document)) changes.push({ target: source.target, baseVersion: source.document.version, baseDocument: source.document, document });
     }
-    if (changes.length && (!canManageShared || !run({ type: 'manage-knowledge-tabs', changes }, 'Updated.'))) throw new Error('Shared tabs could not be saved. Your changes are still here.');
+    if (changes.length && (!canManageShared || !await runKnowledge({ type: 'manage-knowledge-tabs', changes }, 'Updated.'))) throw new Error('Shared tabs could not be saved. Your changes are still here.');
     const added = draft.find(tab => !initial.some(entry => entry.id === tab.id));
     onSaved(added?.id ?? draft.find(tab => tab.id === activeTabId)?.id ?? draft[0]?.id ?? '');
   }

@@ -1,6 +1,6 @@
-import type { DemoState } from "./model";
-import type { KnowledgeSection, KnowledgeBlock } from "./knowledge";
-import { singaporeRefineries } from "./intelligence";
+import type { DemoState } from "./model.ts";
+import type { KnowledgeSection, KnowledgeBlock } from "./knowledge.ts";
+import { singaporeRefineries } from "./intelligence.ts";
 /** Illustrative content only. No private FCUNO records are imported. */
 export function demoKnowledgeSections(
   state: DemoState,

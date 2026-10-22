@@ -1,3 +1,4 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -24,6 +25,7 @@ async function fixture(context) {
   await context.route('**/api/**', route => { if (route.request().method() !== 'GET') state.writes.push(route.request().url()); return route.fulfill({ status: 404, json: { message: 'Synthetic fixture only.' } }); });
   await context.route('**://paste-untrusted.invalid/**', route => { state.external.push(route.request().url()); return route.abort(); });
   await installEmptyLiveInbox(context);
+  await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await installProfileTabMocks(context, { ownerId: () => state.user?.id, preview: () => Boolean(state.preview) });
   await context.route('**/api/access/**', route => route.fulfill(state.user ? { json: new URL(route.request().url()).pathname.endsWith('/session') ? { user: state.user, preview: state.preview } : { users: [state.user], offices: [], requests: [] } } : { status: 401, json: { message: 'Sign in required.' } }));
   await context.route('**/api/admin/**', route => route.fulfill({ json: { count: 0, items: [] } }));
@@ -62,17 +64,14 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
     const page = await context.newPage(), errors = []; page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png` }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Page must not overflow'); };
     try {
-      await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-      const key = `ecosystem.live.v1:${user.id}:state`;
-      await expect.poll(() => page.evaluate(key => Boolean(localStorage.getItem(key)), key)).toBe(true);
-      await page.evaluate(key => {
-        const saved = JSON.parse(localStorage.getItem(key));
+      sharedLocations(context).seed(saved => {
         saved.knowledgeRecords['country:Japan'] = { version: 1, layoutVersion: 2, sections: [{ id: 'paste-fixture', title: 'PASTE FIXTURE', blocks: [
           { id: 'sibling', type: 'text', title: 'UNCHANGED NOTE', text: 'KEEP SIBLING' },
           { id: 'fixture-table', type: 'table', title: 'TABLE FIXTURE', columns: [{ id: 'name', name: 'NAME' }, { id: 'detail', name: 'DETAIL' }], rows: [{ id: 'original', cells: ['ORIGINAL', 'KEEP'] }] },
-        ] }] }; localStorage.setItem(key, JSON.stringify(saved));
-      }, key);
-      await page.reload(); let workspace = await openProfile(page), editor = await edit(page, workspace);
+        ] }] };
+      });
+      await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+      let workspace = await openProfile(page), editor = await edit(page, workspace);
       await btn(editor.locator('.knowledge-sheet-toolbar'), 'PASTE TABLE').click();
       let dialog = page.getByRole('dialog', { name: 'PASTE TABLE', exact: true });
       await btn(dialog, 'PASTE FROM CLIPBOARD').click(); await expect(dialog.getByRole('alert')).toContainText('PASTE INTO THE TABLE DATA FIELD');
@@ -127,7 +126,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await btn(dialog, 'CANCEL').click();
       await btn(editor, /^SAVE$/i).click(); await expect(editor).toHaveCount(0);
       await expect(workspace).toContainText('KEEP SIBLING');
-      const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).knowledgeRecords['country:Japan'], key);
+      const saved = sharedLocations(page).snapshot().knowledgeRecords['country:Japan'];
       const table = saved.sections.find(section => section.id === 'paste-fixture').blocks.find(block => block.id === 'fixture-table');
       assert.equal(table.rows[0].cells[1], `MAIN (${url})`); assert.equal(table.rows[1].cells[2], 'B\nC'); assert.equal(table.rows[2].cells[3], 'G');
       assert.equal(await page.evaluate(() => window.__copiedScriptRan), undefined); assert.deepEqual(state.external, []);
@@ -140,7 +139,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await editor.getByLabel('Block 3 title', { exact: true }).fill('IMPORTED TABLE');
       await expect(editor.getByLabel('Row 1, DETAIL', { exact: true })).toHaveValue('FIRST, LINE\nSECOND LINE');
       await shot('new-table'); await btn(editor, /^SAVE$/i).click(); await expect(editor).toHaveCount(0);
-      const afterAdd = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).knowledgeRecords['country:Japan'], key);
+      const afterAdd = sharedLocations(page).snapshot().knowledgeRecords['country:Japan'];
       const blocks = afterAdd.sections.find(section => section.id === 'paste-fixture').blocks;
       assert.equal(blocks.length, 3); assert.equal(blocks[2].title, 'IMPORTED TABLE'); assert.deepEqual(blocks[1].rows, table.rows); assert.equal(blocks[0].text, 'KEEP SIBLING');
       editor = await edit(page, workspace);

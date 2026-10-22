@@ -1,4 +1,4 @@
-import type { Company, DemoState } from './model';
+import type { Company, DemoState } from './model.ts';
 
 export type BuyerSharedListKind = 'group' | 'team' | 'competition';
 export interface BuyerSharedEntry {

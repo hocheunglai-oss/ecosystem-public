@@ -1,7 +1,7 @@
-import type { Action, DemoState } from './model';
-import { checkKnowledgeChange, defaultKnowledgeTitle, knowledgeDocument, knowledgeSectionRole, sameKnowledge, validateKnowledge, validateKnowledgeProvenance, type KnowledgeBlock, type KnowledgeChange, type KnowledgeDocument } from './knowledge';
-import { emptyIntelligenceKeyInfo, intelligenceFields, INTELLIGENCE_VALUE_MAX_LENGTH, sameIntelligenceKeyInfo, validateIntelligenceKeyInfo, type IntelligenceKeyInfo } from './intelligenceFields';
-import { locationRecords } from './locations';
+import type { Action, DemoState } from './model.ts';
+import { checkKnowledgeChange, defaultKnowledgeTitle, knowledgeDocument, knowledgeSectionRole, sameKnowledge, validateKnowledge, validateKnowledgeProvenance, type KnowledgeBlock, type KnowledgeChange, type KnowledgeDocument } from './knowledge.ts';
+import { emptyIntelligenceKeyInfo, intelligenceFields, INTELLIGENCE_VALUE_MAX_LENGTH, sameIntelligenceKeyInfo, validateIntelligenceKeyInfo, type IntelligenceKeyInfo } from './intelligenceFields.ts';
+import { locationRecords } from './locations.ts';
 
 export type ExtractionField = keyof IntelligenceKeyInfo;
 export interface ExtractionProposal {

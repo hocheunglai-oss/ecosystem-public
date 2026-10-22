@@ -30,16 +30,22 @@ export async function serveBackupDownloads(req: IncomingMessage & { body?: unkno
     const request = new Request(new URL(req.url ?? '/', config.origin), { method: req.method, headers, body });
     const service = createClient(config.supabaseUrl, config.secretKey, { auth: { persistSession: false, autoRefreshToken: false },
       global: { fetch: (input, init) => fetch(input, { ...init, redirect: 'error', signal: AbortSignal.timeout(15_000) }) } });
-    const bucket = service.storage.from(ecoConnections.supplierReportsBucket);
+    const getBucket = (id: string) => { if (!([ecoConnections.supplierReportsBucket, ecoConnections.profileAttachmentsBucket] as readonly string[]).includes(id)) throw Error('Unknown bucket'); return service.storage.from(id); };
     const response = await handleBackupDownloads(request, {
-      async info(path) {
-        const { data, error } = await bucket.info(path);
+      async info(path, bucketId = ecoConnections.supplierReportsBucket) {
+        const { data, error } = await getBucket(bucketId).info(path);
         if (error || !data) throw Error('Storage unavailable');
-        return { id: data.id, bucketId: data.bucketId, name: data.name, version: data.version ?? null,
+        let verified: {managed?: boolean;sha256?:string|null} = {};
+        if (bucketId === ecoConnections.profileAttachmentsBucket) {
+          const result = await service.rpc('eco_profile_attachment_backup', {p_path:path});
+          if (result.error || !result.data || result.data.state === 'active' && (result.data.objectId !== data.id || result.data.version !== (data.version ?? null) || result.data.size !== data.size || result.data.mime !== data.contentType)) throw Error('Attachment inventory mismatch');
+          verified = {managed:true,sha256:result.data.sha256};
+        }
+        return { ...verified, id: data.id, bucketId: data.bucketId, name: data.name, version: data.version ?? null,
           size: data.size ?? NaN, contentType: data.contentType ?? '' };
       },
-      async sign(path, seconds) {
-        const { data, error } = await bucket.createSignedUrl(path, seconds);
+      async sign(path, seconds, bucketId = ecoConnections.supplierReportsBucket) {
+        const { data, error } = await getBucket(bucketId).createSignedUrl(path, seconds);
         if (error || !data?.signedUrl) throw Error('Storage unavailable');
         return data.signedUrl;
       },

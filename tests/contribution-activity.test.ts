@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contributionActivity, contributionHistory, contributionStatus } from '../src/lib/contributionActivity';
+import { contributionActivity, contributionHistory, contributionStatus, projectLocationPublication, mergeLocationActivity } from '../src/lib/contributionActivity';
 import type { Contribution, DemoState } from '../src/lib/model';
 import type { KnowledgeChange, KnowledgeDocument } from '../src/lib/knowledge';
 import type { HatAward } from '../src/lib/hats';
@@ -373,4 +374,40 @@ test('summaries preserve input publications, original audit, legacy records and 
   const before = structuredClone(input);
   for (const period of ['28d', '7d', 'month', 'all'] as const) contributionActivity(input, ['otto', 'otto', 'unknown'], period, NOW);
   assert.deepEqual(input, before);
+});
+
+
+test('hashed publication facts preserve full-payload grouping, recurring edits, batches and exclusions', async () => {
+  const contributions = [
+    update('a', { a: 'Before' }, { a: 'After' }, '2026-10-11T17:00:00Z'),
+    update('b', { b: 'Before' }, { b: 'After' }, '2026-10-11T18:00:00Z'),
+    update('both', { a: 'After', b: 'After' }, { a: 'Revised', b: 'Revised' }, '2026-10-11T19:00:00Z'),
+    update('replay', { a: 'Before' }, { a: 'After' }, '2026-10-12T17:00:00Z'),
+    entry('legacy', '2026-10-12T00:00:00Z', { targetType: 'country', targetId: 'Singapore', historicalImport: true }),
+    entry('pending', undefined, { status: 'pending' }),
+    entry('tabs', undefined, { tabChanges: [change({ a: 'First' }, { a: 'First' })] }),
+  ];
+  const empty = emptyIntelligenceKeyInfo(), filled = { ...empty, isoSpecs: 'ISO EXAMPLE' };
+  contributions.push(entry('key-a', '2026-10-08T00:00:00Z', { targetType: 'port', targetId: 'hong-kong', keyInfoBase: empty, proposedKeyInfo: filled }),
+    entry('key-b', '2026-10-09T00:00:00Z', { author: 'elena', targetType: 'port', targetId: 'hong-kong', keyInfoBase: filled, proposedKeyInfo: empty }),
+    entry('key-c', '2026-10-10T00:00:00Z', { targetType: 'port', targetId: 'hong-kong', keyInfoBase: empty, proposedKeyInfo: filled }));
+  const batch = entry('batch', '2026-10-12T01:00:00Z', { targetType: 'port', targetId: 'hong-kong', extractionBatch: { id: 'batch-1', changes: [change({ z: 'Before' }, { z: 'After' })], intelligenceChanges: [] } });
+  contributions.push(batch, { ...batch, id: 'batch-retry', publishedAt: '2026-10-13T01:00:00Z' });
+  const full = state(contributions), compact = state(await Promise.all(contributions.map(async contribution => {
+    const { knowledgeChange: _c, tabChanges: _t, extractionBatch: _e, proposedKeyInfo: _p, keyInfoBase: _b, ...metadata } = contribution;
+    return { ...metadata, body: '', locationPublication: await projectLocationPublication(full, contribution, value => createHash('sha256').update(value).digest('hex')) };
+  })));
+  for (const actor of ['otto', 'elena']) for (const period of ['7d', '28d', 'month', 'all'] as const) assert.deepEqual(contributionActivity(compact, actor, period, NOW), contributionActivity(full, actor, period, NOW));
+  assert.doesNotMatch(JSON.stringify(compact), /ISO EXAMPLE|Before|Revised/);
+});
+
+test('remote complete totals merge with local entries without counting only the loaded page or duplicating active days', () => {
+  const local = contributionActivity(state([entry('local', '2026-10-11T16:00:00Z')]), 'otto', '7d', NOW);
+  local.hatsReceived = 3;
+  const remote = contributionActivity(state([entry('remote1', '2026-10-11T17:00:00Z'), entry('remote2', '2026-10-12T17:00:00Z')]), 'otto', '7d', NOW);
+  remote.hatsReceived = 50;
+  const result = mergeLocationActivity(local, { summary: { ...remote, entries: remote.entries.slice(0, 1) }, activeDates: ['2026-10-12', '2026-10-13'] });
+  assert.equal(result.total, 3); assert.equal(result.activeDays, 2); assert.equal(result.entries.length, 2); assert.equal(result.hatsReceived, 3);
+  assert.equal(result.weeks.reduce((sum, week) => sum + week.count, 0), 3);
+  assert.equal(mergeLocationActivity(local, null), local);
 });

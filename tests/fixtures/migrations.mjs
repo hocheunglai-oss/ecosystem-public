@@ -19,6 +19,11 @@ export async function readSchemaMigrations() {
 }
 
 export async function applySchemaMigrations(query) {
+  // Managed Storage schemas exist in Supabase; native isolated fixtures provide
+  // only the metadata columns used by migrations. This is never production SQL.
+  await query(`create schema if not exists storage;
+    create table if not exists storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint);
+    create table if not exists storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb,version text,updated_at timestamptz default now());`);
   const entries = await readSchemaMigrations();
   for (const entry of entries) await query(entry.sql);
   return entries.filter(entry => /^\d{14}_/.test(entry.name)).map(entry => entry.name);

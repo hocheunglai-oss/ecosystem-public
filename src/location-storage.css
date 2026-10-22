@@ -1,0 +1,8 @@
+.location-storage-status { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.location-storage-status span { min-width:0; overflow-wrap:anywhere; }
+.location-import-review { min-width:0; display:grid; gap:12px; }
+.location-import-review details { border:1px solid var(--line); padding:10px; border-radius:5px; min-width:0; }
+.location-import-review summary { cursor:pointer; overflow-wrap:anywhere; font-weight:600; }
+.location-import-review p,.location-import-review dd { white-space:pre-wrap; overflow-wrap:anywhere; }
+.location-import-review dl>div { display:grid; grid-template-columns:minmax(100px,1fr) minmax(0,2fr); gap:8px; }
+.location-import-review dd { margin:0; }

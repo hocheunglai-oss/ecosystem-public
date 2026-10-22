@@ -1,5 +1,5 @@
-import type { DemoState, Port } from './model';
-import { locationCountries } from './locations';
+import type { DemoState, Port } from './model.ts';
+import { locationCountries } from './locations.ts';
 
 /** Flatten only relationships: never turn a grouping label into a new port.
  * Original knowledge keys, revisions, contributions, hats and file references remain

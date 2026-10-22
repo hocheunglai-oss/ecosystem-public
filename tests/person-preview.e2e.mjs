@@ -1,3 +1,5 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -11,7 +13,7 @@ const base=process.env.ECO_PERSON_PREVIEW_ORIGIN||'http://127.0.0.1:4398';
 const out=resolve(process.env.ECO_PERSON_PREVIEW_OUTPUT||'/private/tmp/eco-person-preview');
 const owner={id:'10000000-0000-4000-8000-000000000001',email:'Admin@example.test',displayName:'REAL ADMIN',phone:'+85200000001',officeId:'HK',officeName:'HONG KONG',isAdmin:true,isManager:false,isSpcTrader:false,isActive:true,activated:true,passwordChangeSuggested:false,revision:1};
 const person={...owner,id:'10000000-0000-4000-8000-000000000002',email:'Vincent@example.test',displayName:'VINCENT REAL',isAdmin:false,officeId:'SG',officeName:'SINGAPORE'};
-const key=`ecosystem.live.v1:${owner.id}:state`,foreignKey=`ecosystem.live.v1:${person.id}:state`;
+const key=`ecosystem.live.v1:${owner.id}:state:v2`,foreignKey=`ecosystem.live.v1:${person.id}:state`;
 const btn=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const results=[];
 await mkdir(out,{recursive:true});
@@ -19,6 +21,8 @@ async function fixture(context){
  const session={user:structuredClone(owner),preview:null},writes=[],reads=[];
  await context.route('**/api/**',route=>{if(route.request().method()!=='GET')writes.push(route.request().url());return route.fulfill({status:404,json:{message:'Isolated fixture only.'}});});
  await installEmptyLiveInbox(context);
+ await installSharedLocations(context,{user:()=>session.user,preview:()=>session.preview});
+ await installSharedAttachments(context,{user:()=>session.user,preview:()=>session.preview});
  await installIntelligence(context,syntheticIntelligence());
  await context.route('**/api/access/**',route=>{
   const request=route.request(),path=new URL(request.url()).pathname.split('/api/access/')[1];
@@ -40,7 +44,7 @@ async function fixture(context){
 }
 async function seed(page){
  await expect.poll(()=>page.evaluate(key=>Boolean(localStorage.getItem(key)),key)).toBe(true);
- await page.evaluate(({key,foreignKey,owner,person})=>{
+ const seeded=await page.evaluate(({key,foreignKey,owner,person})=>{
   const state=JSON.parse(localStorage.getItem(key));
   state.profiles[person.id]={email:person.email,phone:''};
   const award=(id,recipientId)=>({id,targetKey:id,readerId:'luca',recipientId,awardedAt:'2026-10-20T01:00:00Z',target:{kind:'key-info',portId:'port-chiba',field:'sampleLocation'},update:{updatedBy:recipientId,updatedAt:'2026-10-19T01:00:00Z'}});
@@ -48,8 +52,9 @@ async function seed(page){
   state.knowledgeRecords['port:port-chiba']={version:1,layoutVersion:2,sections:[{id:'preview-notes',title:'PREVIEW NOTES',blocks:[
    {id:'selected-note',type:'text',title:'SELECTED PERSON NOTE',text:'THIS IS A SHARED NOTE.',update:{updatedBy:person.id,updatedAt:'2026-10-20T01:00:00Z'}},
    {id:'owner-note',type:'text',title:'ADMIN NOTE',text:'ANOTHER SHARED NOTE.',update:{updatedBy:owner.id,updatedAt:'2026-10-20T01:00:00Z'}}]}]};
-  localStorage.setItem(key,JSON.stringify(state));localStorage.setItem(foreignKey,'PRIVATE FOREIGN WORKSPACE MUST NOT BE READ');
+  localStorage.setItem(key,JSON.stringify(state));localStorage.setItem(foreignKey,'PRIVATE FOREIGN WORKSPACE MUST NOT BE READ');return state;
  },{key,foreignKey,owner,person});
+ sharedLocations(page).seedState(seeded);
  await page.reload({waitUntil:'networkidle'});
 }
 async function selectPerson(page,id,shot){
@@ -82,7 +87,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
    await selectPerson(page,'gianmichele');await expect(page.locator('.hud-resource-hats strong')).toHaveText('2');await page.locator('.hud-resource-hats').click();await expect(panel).toContainText('VINCENT (FICTIONAL)');await shot('fictional-user');await btn(panel,'Close hats off').click();
    await page.reload({waitUntil:'networkidle'});await expect(page.getByRole('status',{name:'Role preview'})).not.toContainText('VINCENT');await expect(page.locator('.hud-resource-hats strong')).toHaveText('1');await btn(page,'Back to REAL ADMIN').click();
    await selectPerson(page,'preview-user');await expect(page.locator('.hud-resource-hats strong')).toHaveText('0');await btn(page,'Back to REAL ADMIN').click();
-   assert.equal(await page.evaluate(key=>localStorage.getItem(key),foreignKey),'PRIVATE FOREIGN WORKSPACE MUST NOT BE READ');assert.equal(await read(),before);assert.deepEqual(f.writes,[]);assert.ok(f.reads.every(request=>!request.body?.includes(person.id)),'Target identity is never sent as owner/authentication');
+   assert.equal(await page.evaluate(key=>localStorage.getItem(key),foreignKey),'PRIVATE FOREIGN WORKSPACE MUST NOT BE READ');assert.equal(await read(),before);assert.deepEqual(f.writes,[]);assert.deepEqual(sharedLocations(page).requests,[],'Display-only preview never writes shared location records');assert.ok(f.reads.every(request=>!request.body?.includes(person.id)),'Target identity is never sent as owner/authentication');
    await selectPerson(page,person.id);f.session.user={...owner,isAdmin:false};f.session.preview=null;await invalidateFixtureAuthority(page,f.session);await expect(btn(page,'View as')).toHaveCount(0);await expect(page.getByRole('status',{name:'Role preview'})).toHaveCount(0);
    await btn(page,'Sign out').click();await expect(btn(page,'Sign in')).toBeVisible();await expect(page.locator('#hud-hats-off')).toHaveCount(0);await expect(btn(page,'View as')).toHaveCount(0);
    assert.deepEqual(errors,[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));results.push({engine,width,theme,passed:true,screenshots:shots});console.log(`PASS ${engine} ${width} ${theme}`);

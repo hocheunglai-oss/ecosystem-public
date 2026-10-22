@@ -1,3 +1,5 @@
+import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -25,16 +27,18 @@ const user = {
   passwordChangeSuggested: false,
   revision: 1,
 };
-const key = `ecosystem.live.v1:${user.id}:state`;
+const key = `ecosystem.live.v1:${user.id}:state:v2`;
 const reports = [];
 for (const [engine, type] of [
   ["chromium", chromium],
   ["webkit", webkit],
 ]) {
+  if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
   const browser = await type.launch({ headless: true });
   try {
     for (const width of [1440, 320, 390])
       for (const theme of ["light", "dark"]) {
+        if(process.env.ECO_TEST_WIDTH&&+process.env.ECO_TEST_WIDTH!==width||process.env.ECO_TEST_THEME&&process.env.ECO_TEST_THEME!==theme)continue;
         const context = await browser.newContext({
           viewport: { width, height: 1000 },
           isMobile: width < 760,
@@ -47,6 +51,8 @@ for (const [engine, type] of [
         const pending = [],
           writes = [];
         await installEmptyLiveInbox(context);
+        await installSharedLocations(context,{user:()=>user,now:()=> '2026-10-14T10:00:00Z'});
+        await installSharedAttachments(context,{user:()=>user});
         await context.route("**/api/access/**", (route) => {
           const path = new URL(route.request().url()).pathname.replace(
             "/api/access/",
@@ -156,7 +162,8 @@ for (const [engine, type] of [
           ).toHaveText("CHECKING");
           await expect(panel.getByRole("progressbar")).toHaveCount(0);
           await expect(panel.locator("[data-activity-total]")).toHaveText("0");
-          await expect(panel).toContainText("LOCAL CONTRIBUTIONS SHOWN");
+          await expect(panel).toContainText("LOCAL CONTRIBUTIONS");
+          await expect(panel.getByRole("status")).toHaveText("CHECKING SHARED CONTRIBUTIONS.");
           await shot("loading");
           mode = "error";
           await Promise.all(
@@ -260,6 +267,7 @@ for (const [engine, type] of [
           );
           await shot("combined");
           assert.deepEqual(writes, []);
+          assert.deepEqual(sharedLocations(page).requests, [], 'Status checks never write shared location records');
           assert.deepEqual(errors, []);
           reports.push({ engine, width, theme, passed: true });
           console.log(`PASS ${engine} ${width} ${theme}`);

@@ -36,7 +36,11 @@ jobs:
       - run: pnpm build
       - run: pnpm security:build
       - run: pnpm security:inventory
-      - run: pnpm audit --audit-level high
+      - run: node --test scripts/dependency-audit.test.mjs
+      - name: Audit every locked dependency
+        run: node scripts/dependency-audit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       # Logged evidence is mandatory; downloadable archives are supplementary.
       # This keeps artifact storage outages separate from actual quality failures.
       - name: Validate and log non-secret build evidence

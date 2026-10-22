@@ -511,12 +511,13 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: page overflow`);
       };
       try {
+        sharedLocations(context).seed((state, { country, port }) => {
+          state.knowledgeRecords = { ...state.knowledgeRecords, 'country:Japan': country, 'port:port-chiba': port };
+        }, { country: knowledgeDocument('country'), port: knowledgeDocument('port') });
         await page.goto(base);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
         await createLiveFixtureBuyer(page, 'UNIFIED TAB TEST BUYER');
-        sharedLocations(page).seed((state, { country, port }) => {
-          state.knowledgeRecords = { ...state.knowledgeRecords, 'country:Japan': country, 'port:port-chiba': port };
-        }, { country: knowledgeDocument('country'), port: knowledgeDocument('port') });
+        // Retain the reload to verify that the newly created buyer persists.
         await page.reload();
         for (const kind of kinds) await verifyProfile(page, state, kind, width, shot);
         await verifySharedEditing(page, state, width, shot);

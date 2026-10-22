@@ -70,6 +70,12 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         }
       };
       try {
+        sharedLocations(context).seed(value => {
+          value.locationCountries = ['Singapore', 'Netherlands', 'United Arab Emirates', 'Canada'].map(name => ({ id: name, name }));
+          value.ports = value.ports.filter(port => ['port-singapore', 'port-rotterdam', 'port-fujairah'].includes(port.id));
+          const seed = value.ports.find(port => port.id === 'port-singapore');
+          value.ports.push({ ...seed, id: 'port-fixture-offset', name: 'OFFSET FIXTURE', timezone: 'UTC-3:30' }, { ...seed, id: 'port-fixture-unknown', name: 'UNKNOWN ZONE FIXTURE', timezone: 'Not/A_Zone' });
+        });
         await page.goto(base);
         await expect(btn(page, 'Sign in')).toBeEnabled();
         await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toHaveCount(0);
@@ -78,13 +84,6 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         state.user = structuredClone(user);
         await page.reload();
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-        sharedLocations(page).seed(value => {
-          value.locationCountries = ['Singapore', 'Netherlands', 'United Arab Emirates', 'Canada'].map(name => ({ id: name, name }));
-          value.ports = value.ports.filter(port => ['port-singapore', 'port-rotterdam', 'port-fujairah'].includes(port.id));
-          const seed = value.ports.find(port => port.id === 'port-singapore');
-          value.ports.push({ ...seed, id: 'port-fixture-offset', name: 'OFFSET FIXTURE', timezone: 'UTC-3:30' }, { ...seed, id: 'port-fixture-unknown', name: 'UNKNOWN ZONE FIXTURE', timezone: 'Not/A_Zone' });
-        });
-        await page.reload();
         const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
         await btn(nav, 'Ports & Suppliers').click();
         await btn(nav, 'Countries & Ports').click();

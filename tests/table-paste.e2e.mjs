@@ -64,14 +64,14 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
     const page = await context.newPage(), errors = []; page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png` }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Page must not overflow'); };
     try {
-      await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
-      sharedLocations(page).seed(saved => {
+      sharedLocations(context).seed(saved => {
         saved.knowledgeRecords['country:Japan'] = { version: 1, layoutVersion: 2, sections: [{ id: 'paste-fixture', title: 'PASTE FIXTURE', blocks: [
           { id: 'sibling', type: 'text', title: 'UNCHANGED NOTE', text: 'KEEP SIBLING' },
           { id: 'fixture-table', type: 'table', title: 'TABLE FIXTURE', columns: [{ id: 'name', name: 'NAME' }, { id: 'detail', name: 'DETAIL' }], rows: [{ id: 'original', cells: ['ORIGINAL', 'KEEP'] }] },
         ] }] };
       });
-      await page.reload(); let workspace = await openProfile(page), editor = await edit(page, workspace);
+      await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+      let workspace = await openProfile(page), editor = await edit(page, workspace);
       await btn(editor.locator('.knowledge-sheet-toolbar'), 'PASTE TABLE').click();
       let dialog = page.getByRole('dialog', { name: 'PASTE TABLE', exact: true });
       await btn(dialog, 'PASTE FROM CLIPBOARD').click(); await expect(dialog.getByRole('alert')).toContainText('PASTE INTO THE TABLE DATA FIELD');

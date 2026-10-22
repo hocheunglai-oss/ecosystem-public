@@ -1,6 +1,6 @@
-import { isAccessActor } from './accessActor';
-import { actors, teamForActor, type Actor, type Company, type DemoState } from './model';
-import type { CreditAttachment } from './creditAttachments';
+import { isAccessActor } from './accessActor.ts';
+import { actors, teamForActor, type Actor, type Company, type DemoState } from './model.ts';
+import type { CreditAttachment } from './creditAttachments.ts';
 
 export type CreditWorkflow = 'urgent' | 'p1';
 export interface CreditVoyage { vessel: string; imo: string; portId?: string; portName: string; eta: string }

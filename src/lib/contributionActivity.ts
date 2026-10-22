@@ -1,7 +1,7 @@
-import { actors, type Contribution, type DemoState, type LocationPublication } from './model';
-import type { KnowledgeBlock, KnowledgeChange, KnowledgeTarget } from './knowledge';
-import { intelligenceFields, type IntelligenceKeyInfo } from './intelligenceFields';
-import { canonicalLocationTarget } from './locations';
+import { actors, type Contribution, type DemoState, type LocationPublication } from './model.ts';
+import type { KnowledgeBlock, KnowledgeChange, KnowledgeTarget } from './knowledge.ts';
+import { intelligenceFields, type IntelligenceKeyInfo } from './intelligenceFields.ts';
+import { canonicalLocationTarget } from './locations.ts';
 
 export type ContributionPeriod = '28d' | '7d' | 'month' | 'all';
 export type ContributionStatusKey = 'inactive' | 'active' | 'outstanding';

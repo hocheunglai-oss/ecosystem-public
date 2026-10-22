@@ -1,5 +1,5 @@
-import { buyerSharedEntries } from './buyerSharedLists';
-import type { Contribution, DemoState } from './model';
+import { buyerSharedEntries } from './buyerSharedLists.ts';
+import type { Contribution, DemoState } from './model.ts';
 
 export const BUYER_COMPETITION_MAX_LENGTH = 10000;
 

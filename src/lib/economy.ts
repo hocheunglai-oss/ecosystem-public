@@ -1,4 +1,4 @@
-import { actors, type Actor, type DemoState } from './model';
+import { actors, type Actor, type DemoState } from './model.ts';
 
 export interface Team { id: string; name: string; managerId: string; memberIds: string[] }
 const officeTeams: readonly Team[] = [

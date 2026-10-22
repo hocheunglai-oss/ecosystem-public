@@ -1,5 +1,5 @@
-import { reportingDate } from './reportingDate';
-import type { Company, DemoState, Outcome } from './model';
+import { reportingDate } from './reportingDate.ts';
+import type { Company, DemoState, Outcome } from './model.ts';
 
 export type BuyerPeriod = '12m' | 'year' | 'all';
 export const buyerGroupKey = (buyer: Company) => buyer.accountGroupId?.trim() || buyer.id;

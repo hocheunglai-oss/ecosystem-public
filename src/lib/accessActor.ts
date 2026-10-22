@@ -1,5 +1,5 @@
-import type { AccessUser } from '../../shared/access';
-import type { Actor } from './model';
+import type { AccessUser } from '../../shared/access.ts';
+import type { Actor } from './model.ts';
 const accessActors = new WeakSet<Actor>();
 
 /**

@@ -1,7 +1,7 @@
-import { demoKnowledgeSections } from "./knowledgeDemo";
-import type { DemoState } from "./model";
-import { emptyIntelligenceKeyInfo, type IntelligenceKeyInfo } from "./intelligenceFields";
-import { canonicalLocationTarget, locationCountries, legacyLocationGroup } from './locations';
+import { demoKnowledgeSections } from "./knowledgeDemo.ts";
+import type { DemoState } from "./model.ts";
+import { emptyIntelligenceKeyInfo, type IntelligenceKeyInfo } from "./intelligenceFields.ts";
+import { canonicalLocationTarget, locationCountries, legacyLocationGroup } from './locations.ts';
 
 /** `area` remains solely for immutable legacy documents, audit and attachment references. */
 export type KnowledgeTarget = {

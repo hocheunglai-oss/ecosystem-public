@@ -1,6 +1,6 @@
-import { canonicalTarget, knowledgeDocument, knowledgeEntryUpdateLookup, knowledgeKeyInfoUpdate, type KnowledgeEntryUpdate, type KnowledgeTarget } from './knowledge';
-import { intelligenceFields, type IntelligenceKeyInfo } from './intelligenceFields';
-import { actors, type DemoState } from './model';
+import { canonicalTarget, knowledgeDocument, knowledgeEntryUpdateLookup, knowledgeKeyInfoUpdate, type KnowledgeEntryUpdate, type KnowledgeTarget } from './knowledge.ts';
+import { intelligenceFields, type IntelligenceKeyInfo } from './intelligenceFields.ts';
+import { actors, type DemoState } from './model.ts';
 
 /** A stable entry identity: changing its author or content never creates another vote slot. */
 export type HatTarget =

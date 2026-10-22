@@ -1,12 +1,12 @@
-import type { Action, Actor, AuditEntry, Contribution, DemoState, Port, LocationPublication } from './model';
-import { applyAction } from './model';
-import { projectLocationPublication } from './contributionActivity';
-import { isAccessActor } from './accessActor';
-import { knowledgeDocument, validateKnowledge, type KnowledgeChange, type KnowledgeDocument, type KnowledgeRevision, type KnowledgeTarget } from './knowledge';
-import { intelligenceFields, validateIntelligenceKeyInfo } from './intelligenceFields';
-import { locationCountries, type LegacyLocationArea, type LocationCountry } from './locations';
-import { flattenLocationHierarchy } from './locationMigration';
-import { retireFictionalSupplierRecords } from './supplierRetirement';
+import type { Action, Actor, AuditEntry, Contribution, DemoState, Port, LocationPublication } from './model.ts';
+import { applyAction } from './model.ts';
+import { projectLocationPublication } from './contributionActivity.ts';
+import { isAccessActor } from './accessActor.ts';
+import { knowledgeDocument, validateKnowledge, type KnowledgeChange, type KnowledgeDocument, type KnowledgeRevision, type KnowledgeTarget } from './knowledge.ts';
+import { intelligenceFields, validateIntelligenceKeyInfo } from './intelligenceFields.ts';
+import { locationCountries, type LegacyLocationArea, type LocationCountry } from './locations.ts';
+import { flattenLocationHierarchy } from './locationMigration.ts';
+import { retireFictionalSupplierRecords } from './supplierRetirement.ts';
 
 /** Only shared location data crosses this boundary. Private notes, buyers, hats,
  * commercial records, identities and prototype state never form part of it. */

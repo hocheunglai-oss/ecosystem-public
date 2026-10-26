@@ -1,4 +1,4 @@
-/* No ambient motion on phones. The root theme snapshot still fades as one scene. */
+/* Phone controls remain still. Flowing Water explicitly opts in only its decorative layers. */
 :root[data-interface="mobile"] *,
 :root[data-interface="mobile"] *::before,
 :root[data-interface="mobile"] *::after {
@@ -6,18 +6,6 @@
   transition: none !important;
   scroll-behavior: auto !important;
 }
-:root[data-interface="mobile"] .desktop-reward-only { display: none !important; }
-.mobile-harbour-background {
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  overflow: hidden;
-  pointer-events: none;
-  background: #0b3150;
-}
-.mobile-harbour-background > svg { display: block; width: 100%; height: 100%; }
-.mobile-theme-snapshot { position: absolute; inset: 0; pointer-events: none; }
-.mobile-theme-snapshot > svg { display: block; width: 100%; height: 100%; }
 :root[data-interface="mobile"] .immersive-app {
   min-height: 100svh;
   padding-bottom: max(20px, env(safe-area-inset-bottom));
@@ -82,7 +70,7 @@
   justify-content: flex-end;
   order: 2;
 }
-:root[data-interface="mobile"] :is(.theme-toggle, .demo-reset-control) { min-height: 44px; background: #103448f2; }
+:root[data-interface="mobile"] .theme-toggle { min-height: 44px; background: #103448f2; }
 :root[data-interface="mobile"] .world-controls {
   position: static;
   width: 100%;
@@ -114,7 +102,6 @@
 :root[data-interface="mobile"] .window-foot { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 :root[data-interface="mobile"] :is(input, select, textarea) { font-size: 16px !important; }
 :root[data-interface="mobile"] .center-parser { height: 180px; min-height: 180px; }
-:root[data-interface="mobile"] .profile-dropdown { width: min(380px, calc(100vw - 28px)); }
 .account-inline-slot { grid-column: 1 / -1; min-width: 0; }
 .account-inline-slot:empty { display: none; }
 :root[data-interface="mobile"] .trader-hud .account-inline-panel {
@@ -140,4 +127,3 @@
 :root[data-interface="mobile"] .account-inline-panel .inbox-item-clear { min-width: 44px; }
 :root[data-interface="mobile"] .office-comparison-table,
 :root[data-interface="mobile"] .economy-team-table { min-width: 0; }
-:root[data-interface="mobile"] .office-selected-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }

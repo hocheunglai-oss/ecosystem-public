@@ -46,7 +46,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Privacy', exact: true })).toHaveCount(0);
       assert.equal(privacyReads, 0); assert.equal(locations.reads,0,'Signed-out page never reads shared location data');
-      await expect(page.locator('[data-artwork-ready]').first()).toHaveAttribute('data-artwork-ready', 'true');
+      await expect(page.locator('.immersive-app')).toHaveAttribute('data-design', 'flowing-water');
+      await expect(page.locator('.flowing-water-background')).toBeVisible();
       await page.evaluate(() => document.fonts.ready); await shot(page, 'sign-in');
       const publicPage = await context.newPage(), requests = [];
       publicPage.on('request', request => requests.push(request.url()));

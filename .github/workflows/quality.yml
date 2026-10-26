@@ -132,6 +132,7 @@ jobs:
               tests/admin-health-refresh.e2e.mjs
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
+              tests/flowing-water.e2e.mjs
             artifacts: |
               output/administration-ui
               output/contribution-actions-ui
@@ -139,6 +140,7 @@ jobs:
               output/auth-session-ui
               output/shared-contribution-availability
               output/eco-release-gates-ui
+              output/flowing-water-ui
           - group: suppliers
             label: Suppliers
             scripts: |
@@ -255,6 +257,9 @@ jobs:
           ECO_PDF_PREVIEW_ORIGIN: http://127.0.0.1:4286
           ECO_PDF_PREVIEW_OUTPUT: output/pdf-preview-ui
           ECO_RELEASE_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_FLOWING_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_FLOWING_UI_OUTPUT: ${{ runner.temp }}/eco-flowing-water-ui
+          ECO_FLOWING_REPORT_OUTPUT: output/flowing-water-ui
           ECO_TEST_OUTPUT: output/shared-contribution-availability
           ECO_SUPPLIER_UI_ORIGIN: http://127.0.0.1:4286
           ECO_SUPPLIER_UI_OUTPUT: output/shared-suppliers-ui

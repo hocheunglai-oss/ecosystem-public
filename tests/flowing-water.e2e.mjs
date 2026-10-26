@@ -123,7 +123,10 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     }, theme);
     const page = await context.newPage(), errors = [];
     page.setDefaultTimeout(12000); page.on('pageerror', error => errors.push(error.message));
-    const shot = async name => { await noOverflow(page, name); await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); };
+    const shot = async name => { await noOverflow(page, name);
+      const footer = await page.locator('.home-display-controls button:visible').evaluateAll(nodes => nodes.map(node => ({ label:node.textContent.trim(), size:parseFloat(getComputedStyle(node).fontSize), height:node.getBoundingClientRect().height })));
+      assert.ok(footer.every(control => control.size >= 14 && control.height >= 44), `Readable footer actions: ${JSON.stringify(footer)}`);
+      await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); };
     const background = page.locator('.flowing-water-background');
     const toggle = () => page.locator('.home-display-controls').getByRole('button', { name: /^(Dark|Light) mode$/ });
     try {

@@ -14,7 +14,7 @@ function readTheme(): Theme {
   }
 }
 
-export function useTheme({ marine = true }: { marine?: boolean } = {}) {
+export function useTheme({ marine = true, background = 'harbour' }: { marine?: boolean; background?: 'harbour' | 'flowing' } = {}) {
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [requested, setRequested] = useState(theme);
   const [error, setError] = useState("");
@@ -55,11 +55,11 @@ export function useTheme({ marine = true }: { marine?: boolean } = {}) {
     setError("");
   }, [marine]);
   useEffect(() => {
-    if (!marine) return;
+    if (!marine || background !== 'harbour') return;
     // Warm both modes during idle use; failed optional loads are retryable on request.
     void prepareHarbourTheme("light").catch(() => {});
     void prepareHarbourTheme("dark").catch(() => {});
-  }, [marine]);
+  }, [marine, background]);
 
   async function toggleTheme() {
     const target = intent.current === "light" ? "dark" : "light";
@@ -74,7 +74,9 @@ export function useTheme({ marine = true }: { marine?: boolean } = {}) {
       flushSync(() => setTheme(target));
     };
     try {
-      await prepareHarbourTheme(target);
+      // The CSS water scene is already present in both themes. Never hold its
+      // theme switch hostage to downloading artwork that this interface doesn't use.
+      if (background === 'harbour') await prepareHarbourTheme(target);
       if (!mounted.current || ticket !== request.current) return;
       const animate = !matchMedia("(prefers-reduced-motion: reduce)").matches && !document.hidden;
       if (typeof document.startViewTransition === "function" && animate) {
@@ -87,7 +89,7 @@ export function useTheme({ marine = true }: { marine?: boolean } = {}) {
         void active.finished.catch(() => {}).finally(() => {
           if (transition.current === active) transition.current = null;
         });
-      } else if (!marineMode.current && animate) {
+      } else if (background === 'harbour' && !marineMode.current && animate) {
         const active = transitionMobileHarbour(commit);
         transition.current = active;
         void active?.finished.finally(() => {

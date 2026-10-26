@@ -1,25 +1,37 @@
-/* The working UI's final shared layer. Illustrated home and chart geometry stay local. */
+/* Flowing Water is the shared UI language; scene motion stays outside work surfaces. */
 :root {
+  --ui-canvas: #f1f4ee;
+  --ui-surface: #fbfcf8;
+  --ui-raised: #eaf1eb;
+  --ui-field: #ffffff;
+  --ui-ink: #21443f;
+  --ui-muted: #536e68;
+  --ui-line: #b3c5bd;
+  --ui-boundary: #91aba1;
+  --ui-accent: #267064;
   --ui-font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ui-font-heading: "Manrope", "DM Sans", sans-serif;
   --ui-text-meta: 11px;
-  --ui-text-label: 12px;
-  --ui-text-body: 13px;
-  --ui-text-section: 14px;
-  --ui-text-title: 20px;
+  --ui-text-label: 13px;
+  --ui-text-action: 14px;
+  --ui-text-action-compact: 13px;
+  --ui-text-body: 14px;
+  --ui-text-section: 15px;
+  --ui-text-title: 22px;
   --ui-weight-body: 450;
   --ui-weight-label: 600;
   --ui-weight-heading: 700;
-  --ui-radius-control: 5px;
-  --ui-control-height: 30px;
-  --ui-field-height: 36px;
-  --ui-control-padding: 5px 10px;
-  --ui-control-surface: var(--ws-field, var(--surface, #f5f9fc));
-  --ui-control-ink: var(--ink, #17364a);
-  --ui-control-border: var(--line, #91aabd);
-  --ui-control-hover: #e5f1f4;
-  --ui-focus: #158da4;
-  --ui-link: #175dcf;
+  --ui-radius-control: 8px;
+  --ui-radius-action: 999px;
+  --ui-control-height: 36px;
+  --ui-field-height: 40px;
+  --ui-control-padding: 8px 14px;
+  --ui-control-surface: var(--ui-field);
+  --ui-control-ink: var(--ui-ink);
+  --ui-control-border: var(--ui-line);
+  --ui-control-hover: #e5eee7;
+  --ui-focus: #267064;
+  --ui-link: #245fb2;
   --ui-primary: #c5f574;
   --ui-primary-hover: #b9ed67;
   --ui-primary-border: #b7df75;
@@ -33,11 +45,25 @@
   --ui-disabled-opacity: .55;
   --ui-form-width: 720px;
   --ui-editor-width: 1120px;
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --line: var(--ui-line);
+  --surface: var(--ui-surface);
+  --panel-boundary: var(--ui-boundary);
 }
 :root[data-theme="dark"] {
-  --ui-control-hover: #294358;
-  --ui-focus: #78d9dd;
-  --ui-link: #83bbff;
+  --ui-canvas: #102c2d;
+  --ui-surface: #173638;
+  --ui-raised: #214345;
+  --ui-field: #123033;
+  --ui-ink: #e5eeea;
+  --ui-muted: #b4c8c2;
+  --ui-line: #496b65;
+  --ui-boundary: #608279;
+  --ui-accent: #a5d9c6;
+  --ui-control-hover: #294c48;
+  --ui-focus: #a5d9c6;
+  --ui-link: #91c3ff;
   --ui-primary-border: #aace69;
   --ui-danger: #ffb4c0;
   --ui-danger-surface: #3b2736;
@@ -45,13 +71,68 @@
   --ui-private-surface: #342b43;
   --ui-private-ink: #dfc9f7;
   --ui-private-border: #846d9f;
+  --theme-canvas: var(--ui-canvas);
+  --theme-panel: var(--ui-surface);
+  --theme-raised: var(--ui-raised);
+  --theme-field: var(--ui-field);
+  --theme-ink: var(--ui-ink);
+  --theme-muted: var(--ui-muted);
+  --theme-faint: #9db7ad;
+  --theme-line: var(--ui-line);
+  --theme-cyan: var(--ui-accent);
 }
 
-/* Finite type scale for ordinary work surfaces, without changing the harbour's rem scale. */
+/* Opaque, still reading surfaces carry the same palette without the animated scene. */
+#root :is(.workspace-window, .modal, .workspace-module),
+#root .workspace:not(.is-home) .main-content {
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --line: var(--ui-line);
+  --surface: var(--ui-surface);
+  --panel-boundary: var(--ui-boundary);
+  --ws-surface: var(--ui-raised);
+  --ws-field: var(--ui-field);
+  --ws-cyan: var(--ui-accent);
+  color: var(--ui-ink);
+}
+#root :is(.workspace-window, .modal),
+#root .workspace:not(.is-home) .main-content {
+  background: var(--ui-canvas);
+  border-color: var(--ui-boundary);
+}
+#root .workspace-window :is(.window-toolbar, .window-foot) {
+  background: var(--ui-raised);
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+  box-shadow: none;
+}
+#root .workspace-window .window-toolbar :is(span, b),
+#root .workspace-window .window-foot { color: var(--ui-muted); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(h1, h2, h3, h4, .field, .check-label) { color: var(--ui-ink); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .field small, .modal-intro, .eyebrow, .section-label, .source-note, .review-meta,
+  .results-count, .muted, .detail-list dt, .stat-card > span, .stat-card > small,
+  .module-metrics, .credit-request-amount span, .empty p, .card-heading p, .page-heading p
+) { color: var(--ui-muted); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .field input, .field select, .field textarea, .search-box, .filter-select select,
+  .directory-toolbar > select, .center-parser, .center-standard
+) {
+  background: var(--ui-field);
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+  box-shadow: none;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(select option) { background: var(--ui-field); color: var(--ui-ink); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea)::placeholder { color: var(--ui-muted); opacity: 1; }
+#root :is(.workspace-window, .modal, .workspace-module) :is(.field input, .field select, .field textarea):disabled { background: var(--ui-raised); color: var(--ui-muted); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea, select):focus { border-color: var(--ui-focus); box-shadow: none; }
+
+/* Finite working type scale; never change the application's root rem scale. */
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) {
-  --ui-control-surface: var(--ws-field, var(--surface, #f5f9fc));
-  --ui-control-ink: var(--ink, #17364a);
-  --ui-control-border: var(--line, #91aabd);
+  --ui-control-surface: var(--ui-field);
+  --ui-control-ink: var(--ui-ink);
+  --ui-control-border: var(--ui-line);
   font-family: var(--ui-font);
   font-size: var(--ui-text-body);
   font-weight: var(--ui-weight-body);
@@ -82,7 +163,7 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(th, td) { font-size: var(--ui-text-label); line-height: 1.5; }
 #root :is(.workspace-window, .modal, .workspace-module) th { font-weight: var(--ui-weight-label); }
 
-/* Home launchers retain their original larger navigation geometry. */
+/* Home entry actions have their own larger 16px scale. */
 /* Ordinary actions stay neutral. Green is explicit contribution or entry semantics. */
 #root :is(.ui-button, .button, button.lime-control:not(.launcher-toggle)),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
@@ -103,13 +184,13 @@
   min-width: 0;
   max-width: 100%;
   border: 1px solid var(--ui-control-border);
-  border-radius: var(--ui-radius-control);
+  border-radius: var(--ui-radius-action);
   padding: var(--ui-control-padding);
   background: var(--ui-control-surface);
   color: var(--ui-control-ink);
   box-shadow: none;
   font-family: var(--ui-font);
-  font-size: var(--ui-text-label);
+  font-size: var(--ui-text-action);
   font-weight: var(--ui-weight-label);
   line-height: 18px;
   letter-spacing: 0;
@@ -145,7 +226,7 @@
   color: var(--ui-danger); background: color-mix(in srgb, var(--ui-danger-surface) 88%, var(--ui-danger)); border-color: var(--ui-danger);
 }
 
-/* Icon actions retain their shape; record rows, trees and custom charts are not action buttons. */
+/* Icon actions use circular targets; record rows, trees and charts keep their geometry. */
 #root :is(.ui-button--icon, .icon-button),
 #root :is(.workspace-window, .modal, .workspace-module) :is(.ui-button--icon, .icon-button, .modal-close, .window-tool, .knowledge-icon-control, .enquiry-icon, .credit-record-pager > button, .buyer-profile__pages > button, .supplier-page-controls > button, .location-back) {
   display: inline-flex;
@@ -159,7 +240,7 @@
   min-height: var(--ui-control-height);
   padding: 5px;
   border: 1px solid var(--ui-control-border);
-  border-radius: var(--ui-radius-control);
+  border-radius: var(--ui-radius-action);
   color: var(--ui-control-ink);
   background: var(--ui-control-surface);
   box-shadow: none;
@@ -182,15 +263,20 @@
 ) {
   min-height: var(--ui-control-height);
   padding: var(--ui-control-padding);
-  border-radius: var(--ui-radius-control);
+  border-radius: var(--ui-radius-action);
   font-family: var(--ui-font);
-  font-size: var(--ui-text-label);
+  font-size: var(--ui-text-action-compact);
   font-weight: var(--ui-weight-label);
   line-height: 18px;
 }
 #root :is(.workspace-window, .modal, .workspace-module) :is(.text-button, .row-link) {
   font-family: var(--ui-font); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); line-height: 1.5;
 }
+/* Dense table actions retain 13px labels without inflating their data columns. */
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  td, .table-controls, .knowledge-pagination, .credit-record-actions,
+  .supplier-information-actions, .supplier-page-controls
+) { --ui-text-action: var(--ui-text-action-compact); }
 #root :is(.workspace-window, .modal, .workspace-module, .access-login) input:is([type="checkbox"], [type="radio"]) { accent-color:var(--ui-focus); }
 #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
   font-family: var(--ui-font);
@@ -208,13 +294,12 @@
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(button, input, select, textarea):disabled,
 #root :is(.ui-button, .button, .icon-button):disabled { cursor: not-allowed; opacity: var(--ui-disabled-opacity); }
 
-/* The explicitly shared home Feedback action uses these tokens without restyling the artwork HUD. */
+/* Credited Feedback retains its green meaning in the Flowing Water homepage. */
 #root .home-display-controls .ecosystem-feedback {
-  min-height: var(--ui-control-height); padding: var(--ui-control-padding); border-radius: var(--ui-radius-control);
-  font-family: var(--ui-font); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label);
+  min-height: var(--ui-control-height); padding: var(--ui-control-padding); border-radius: var(--ui-radius-action);
+  font-family: var(--ui-font); font-size: var(--ui-text-action); font-weight: var(--ui-weight-label);
   border-color: var(--ui-primary-border); background: var(--ui-primary); color: var(--ui-primary-ink);
 }
-/* Personal details expands inside the dark harbour HUD in either page theme. */
 /* Expanded windows retain a compact working area for ordinary editing. */
 #root .modal.window-dialog > form:not(.knowledge-editor-focused) { width: 100%; max-width: var(--ui-form-width); margin-inline: auto; }
 #root .modal.window-dialog.wide > form:not(.knowledge-editor-focused),
@@ -231,11 +316,11 @@
   font-family: var(--ui-font); font-size: var(--ui-text-body); line-height: 1.5;
 }
 #root .account-inline-panel {
-  --ui-control-surface: #17374b;
-  --ui-control-ink: #edf5fb;
-  --ui-control-border: #6c8d9f;
-  --ui-control-hover: #29485d;
-  --ui-focus: #78d9dd;
+  --ui-control-surface: #173638;
+  --ui-control-ink: #e5eeea;
+  --ui-control-border: #608279;
+  --ui-control-hover: #294c48;
+  --ui-focus: #a5d9c6;
 }
 #root .profile-dropdown label > span { font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
 #root .profile-dropdown input {
@@ -244,10 +329,13 @@
 }
 #root .profile-dropdown > header h2 { font-family: var(--ui-font-heading); font-size: var(--ui-text-section); font-weight: var(--ui-weight-heading); }
 #root .profile-dropdown .profile-save.ui-button { width: auto; justify-self: start; }
+/* Readable fact labels may exceed legacy fixed tracks; keep both columns bounded. */
+#root .admin-facts :is(dt, dd) { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 760px), (pointer: coarse) {
   :root { --ui-control-height: 44px; --ui-field-height: 44px; --ui-control-padding: 10px 12px; }
   #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]) { font-size: 16px; }
   #root :is(.workspace-window, .modal, .workspace-module) :is(.text-button, .row-link) { min-height: 44px; align-items: center; }
   #root .users-access-actions > button { flex: 1 1 140px; }
   #root .profile-dropdown input { font-size: 16px; }
+  #root .admin-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; align-items: start; }
 }

@@ -63,7 +63,7 @@ async function expectDeferredHeading(page) {
   await heading.click(); await expect(page.locator('dialog[open]')).toHaveCount(0);
   assert.ok(await heading.evaluate(node => node.tabIndex < 0), 'Deferred heading is not an interactive keyboard target');
   const layout = await group.evaluate(node => { const heading = node.querySelector('[role="heading"]').getBoundingClientRect(), remark = node.querySelector('.launcher-release-remark'); return { gap: remark.getBoundingClientRect().top - heading.bottom, fontSize: parseFloat(getComputedStyle(remark).fontSize) }; });
-  assert.ok(layout.gap >= -1 && layout.gap <= 8 && layout.fontSize === 11, 'Small release remark directly follows the lime heading');
+  assert.ok(layout.gap >= 8 && layout.gap <= 12 && layout.fontSize === 11, 'Small release remark follows the disabled Flowing Water entry with a readable gap');
 }
 async function close(page) { await page.getByRole('button', { name: 'Close workspace', exact: true }).click(); }
 async function changePreview(page, label) {

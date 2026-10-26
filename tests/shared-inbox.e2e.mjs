@@ -149,7 +149,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
     await device2.addInitScript(theme => localStorage.setItem('ecosystem.theme.v1', theme), theme);
     const page = await context.newPage(), page2 = await device2.newPage(), errors = [];
     page.on('pageerror', error => errors.push(error.message)); page2.on('pageerror', error => errors.push(error.message)); page.setDefaultTimeout(10000); page2.setDefaultTimeout(10000);
-    const settled = async target => { await expect(target.locator('.marine-world,.mobile-harbour-background')).toHaveAttribute('data-artwork-ready', 'true', { timeout: 60000 }); };
+    const settled = async target => { await expect(target.locator('.immersive-app')).toHaveAttribute('data-design', 'flowing-water'); await expect(target.locator('.flowing-water-background')).toBeVisible(); };
     const shot = async name => { await settled(page); await page.evaluate(() => { scrollTo(0, 0); document.querySelectorAll('.account-inline-panel,.inbox-list').forEach(element => { element.scrollTop = 0; }); }); await page.evaluate(async () => { await Promise.all([...document.images].map(image => image.decode().catch(() => {}))); }); await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: name !== 'notifications' }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name} overflow`); };
     try {
       // Keep initial lazy rendering live; verifyPolling freezes this fixed clock well ahead of setup time.

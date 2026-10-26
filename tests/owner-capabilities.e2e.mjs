@@ -35,7 +35,8 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   const hats=page.getByRole('combobox',{name:'Hats appearance preview',exact:true});
   const testControl=page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true});
   async function shot(name,panel) {
-   await expect(page.locator('[data-artwork-ready="true"]')).toBeVisible();
+   await expect(page.locator('.immersive-app')).toHaveAttribute('data-design','flowing-water');
+   await expect(page.locator('.flowing-water-background')).toBeVisible();
    await page.screenshot({path:`${out}/${engine}-${width}-${theme}-${name}.png`,fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal overflow');
    if(panel){const box=await panel.boundingBox();assert.ok(box&&box.x>=-1&&box.x+box.width<=width+1,'Account panel fits viewport');}

@@ -43,7 +43,7 @@ import { canPreviewAppearance } from "../shared/appearancePreview";
 import { hatCount } from "./lib/hats";
 import { contributionActivity, contributionPreviewCounts, contributionStatus, type ContributionStatusKey } from "./lib/contributionActivity";
 import { ProfileMenu } from "./ProfileMenu";
-import { MobileHarbourBackground } from "./MobileHarbourBackground";
+import { FlowingWaterBackground } from "./FlowingWaterBackground";
 import { useMobileInterface } from "./mobile";
 import {
   WorkspaceModule,
@@ -60,8 +60,6 @@ import type { ModalSpec, OpenModal } from "./types";
 import { trapDialogFocus } from "./dialogFocus";
 import { useTheme } from "./theme";
 import { workspaceGroups as groups, workspaceTitles, type OpenWorkspace, type WorkspaceNavigationContext } from "./workspaceNavigation";
-
-import { MarineWorld } from "./MarineWorld";
 
 const roleLabel = (role: string) =>
   role === "admin"
@@ -381,7 +379,7 @@ function WorkspaceWindow({
 
 function Workspace() {
   const mobile = useMobileInterface();
-  const { theme, requested, toggleTheme, pending: themePending, error: themeError } = useTheme({ marine: !mobile });
+  const { requested, toggleTheme, pending: themePending, error: themeError } = useTheme({ marine: false, background: 'flowing' });
   const { actor, state, toast, storageWarning, notify } = useDemo();
   const { user: session, signOut: logOut } = useAccess();
   const { unreadCount: inboxUnreadCount } = useInbox();
@@ -447,16 +445,12 @@ function Workspace() {
   return (
     <div
       className={`immersive-app ${session ? "is-signed-in" : "is-entry"}`}
-      data-motion={!mobile && motionEnabled ? "on" : "off"}
+      data-design="flowing-water"
+      data-motion={motionEnabled ? "on" : "off"}
       data-interface={mobile ? "mobile" : "desktop"}
       onClickCapture={interceptLegacyLink}
     >
-      {mobile ? <MobileHarbourBackground theme={theme} signedIn={Boolean(session)} /> : <div className="ecosystem-world">
-        <MarineWorld
-          theme={theme}
-          motionEnabled={motionEnabled}
-        />
-      </div>}
+      <FlowingWaterBackground paused={!motionEnabled || Boolean(active || modal)} />
       {!session ? (
         <Login />
       ) : (
@@ -540,7 +534,8 @@ function Workspace() {
           )}
         </main>
       )}
-      <footer className="world-controls">ECOSYSTEM | FRATELLI COSULICH</footer>
+      <footer className="flowing-footer">
+      <span className="world-controls">ECOSYSTEM | FRATELLI COSULICH</span>
       <div className="home-display-controls">
         {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={15} aria-hidden="true" /> Feedback for ecosystem
@@ -556,6 +551,7 @@ function Workspace() {
         </button>
         {session && <><TestWorkspaceControl pending={Boolean(pendingAdminRequest)} /><RolePreview pending={Boolean(pendingAdminRequest)} /></>}
       </div>
+      </footer>
       {storageWarning && (
         <div className="storage-warning" role="status">
           Browser storage is unavailable. Changes will last for this visit only.

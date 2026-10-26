@@ -6,6 +6,7 @@ import { tsImport } from 'tsx/esm/api';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 import { locationHistoryPage } from './fixtures/shared-locations.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
+import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 const domain = await tsImport('./fixtures/shared-location-domain.ts', import.meta.url);
 const { handleLocationKnowledge, createLiveState } = domain;
 const base = process.env.ECO_SHARED_LOCATION_ORIGIN || 'http://127.0.0.1:4288';
@@ -195,9 +196,13 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       assert.equal(await page.evaluate(id=>localStorage.getItem(`ecosystem.live.v1:${id}:state`),admin.id),before);
       assert.ok(await workspace.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'No horizontal workspace overflow');
       page.once('dialog',dialog=>dialog.accept());await page.reload();({workspace,profile}=await openProfile(page));
-      session.preview={role:'trader',officeId:'HK',officeName:'HONG KONG',readOnly:true};await page.reload();({workspace,profile}=await openProfile(page));
+      // Deliver authority changes through the application's cross-tab session
+      // refresh, allowing its effects to abort old activity reads before the
+      // account view unmounts. Reloads above still verify persisted data; tearing
+      // down the document here would bypass the cleanup this assertion covers.
+      session.preview={role:'trader',officeId:'HK',officeName:'HONG KONG',readOnly:true};await invalidateFixtureAuthority(page,session);({workspace,profile}=await openProfile(page));
       await expect(button(profile.locator('.knowledge-content-toolbar'),'EDIT')).toHaveCount(0);await shot('preview-read-only');
-      session.user=null;await page.reload();await expect(page.getByRole('main',{name:'ECOSYSTEM workspace'})).toHaveCount(0);await shot('signed-out');
+      session.user=null;await invalidateFixtureAuthority(page,session);await expect(page.getByRole('main',{name:'ECOSYSTEM workspace'})).toHaveCount(0);await expect(page.locator('.access-login')).toBeVisible();await shot('signed-out');
       assert.deepEqual(errors,[]);
       // Each archive fits independently, while their safe combined import does
       // not. Rendering that review must stay usable and retain the raw archive.

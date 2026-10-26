@@ -82,8 +82,9 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(th, td) { font-size: var(--ui-text-label); line-height: 1.5; }
 #root :is(.workspace-window, .modal, .workspace-module) th { font-weight: var(--ui-weight-label); }
 
+/* Home launchers retain their original larger navigation geometry. */
 /* Ordinary actions stay neutral. Green is explicit contribution or entry semantics. */
-#root :is(.ui-button, .button, button.lime-control),
+#root :is(.ui-button, .button, button.lime-control:not(.launcher-toggle)),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
   .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
   .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
@@ -117,7 +118,7 @@
   text-decoration: none;
   filter: none;
 }
-#root :is(.ui-button, .button, button.lime-control):hover:not(:disabled),
+#root :is(.ui-button, .button, button.lime-control:not(.launcher-toggle)):hover:not(:disabled),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
   .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
   .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
@@ -127,11 +128,11 @@
   .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
   .supplier-information-actions > button, .location-recents button, .supplier-recents button
 ):hover:not(:disabled) { background: var(--ui-control-hover); border-color: var(--ui-focus); box-shadow: none; filter: none; }
-#root button:is(.ui-button--contribution, .ui-button--entry),
+#root button:is(.ui-button--contribution, .ui-button--entry):not(.launcher-toggle),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button:is(
   .ui-button--contribution, .ui-button--entry
 ) { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
-#root button:is(.ui-button--contribution, .ui-button--entry):hover:not(:disabled),
+#root button:is(.ui-button--contribution, .ui-button--entry):not(.launcher-toggle):hover:not(:disabled),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button:is(
   .ui-button--contribution, .ui-button--entry
 ):hover:not(:disabled) { background: var(--ui-primary-hover); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }

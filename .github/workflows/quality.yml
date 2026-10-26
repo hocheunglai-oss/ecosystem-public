@@ -217,7 +217,25 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Use official Ubuntu HTTPS mirrors for browser dependencies
+        run: |
+          # Keep the runner's suites, components and signing keys unchanged.
+          # The Azure HTTP mirror can deliver packages too slowly for the job limit.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          mirror_file = Path('/etc/apt/apt-mirrors.txt')
+          official = {
+              'https://archive.ubuntu.com/ubuntu/',
+              'https://security.ubuntu.com/ubuntu/',
+          }
+          mirrors = [line for line in mirror_file.read_text().splitlines()
+                     if line.split() and line.split()[0] in official]
+          if {line.split()[0] for line in mirrors} != official:
+              raise SystemExit('Expected official Ubuntu HTTPS mirrors are missing')
+          mirror_file.write_text('\n'.join(mirrors) + '\n')
+          PY
+          printf '%s\n' 'Acquire::Retries "2";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/80eco-ci-downloads
+      - run: timeout --signal=TERM --kill-after=30s 8m pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm build
       - name: Verify themes, phone widths, access states and freshness
         env:

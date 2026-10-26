@@ -155,11 +155,15 @@ async function checkGeometry(page, scope, width) {
   const controls = scope.locator('button.button:visible');
   const styles = await controls.evaluateAll(nodes => nodes.map(node => {
     const style = getComputedStyle(node), box = node.getBoundingClientRect();
-    return { name: node.textContent.trim(), radius: style.borderRadius, height: box.height, left: box.left, right: box.right };
+    return { name: node.textContent.trim(), radius: style.borderRadius, font: style.fontFamily, fontSize: style.fontSize, weight: style.fontWeight, casing: style.textTransform, height: box.height, left: box.left, right: box.right };
   }));
   for (const control of styles) {
-    assert.equal(control.radius, '5px', `${control.name}: shared button radius`);
-    assert.ok(control.height >= (width <= 600 ? 44 : 30) - 1, `${control.name}: shared control height (${control.height})`);
+    assert.equal(control.radius, '999px', `${control.name}: shared pill action radius`);
+    assert.match(control.font, /DM Sans/, `${control.name}: shared action typeface`);
+    assert.equal(control.fontSize, '14px', `${control.name}: readable shared action type`);
+    assert.equal(control.weight, '600', `${control.name}: shared action weight`);
+    assert.equal(control.casing, 'uppercase', `${control.name}: uppercase action label`);
+    assert.ok(control.height >= (width <= 760 ? 44 : 36) - 1, `${control.name}: shared control height (${control.height})`);
     assert.ok(control.left >= -1 && control.right <= width + 1, `${control.name}: fits viewport`);
   }
 }

@@ -329,10 +329,13 @@
 }
 #root .profile-dropdown > header h2 { font-family: var(--ui-font-heading); font-size: var(--ui-text-section); font-weight: var(--ui-weight-heading); }
 #root .profile-dropdown .profile-save.ui-button { width: auto; justify-self: start; }
+/* Readable fact labels may exceed legacy fixed tracks; keep both columns bounded. */
+#root .admin-facts :is(dt, dd) { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 760px), (pointer: coarse) {
   :root { --ui-control-height: 44px; --ui-field-height: 44px; --ui-control-padding: 10px 12px; }
   #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]) { font-size: 16px; }
   #root :is(.workspace-window, .modal, .workspace-module) :is(.text-button, .row-link) { min-height: 44px; align-items: center; }
   #root .users-access-actions > button { flex: 1 1 140px; }
   #root .profile-dropdown input { font-size: 16px; }
+  #root .admin-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; align-items: start; }
 }

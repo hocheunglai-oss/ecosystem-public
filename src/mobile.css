@@ -6,47 +6,8 @@
   transition: none !important;
   scroll-behavior: auto !important;
 }
-:root[data-interface="mobile"] .immersive-app {
-  min-height: 100svh;
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-}
-:root[data-interface="mobile"] .entry-screen {
-  min-height: 0;
-  flex: 1;
-  padding: max(300px, calc(var(--mobile-flag-bottom, 240px) + 25px)) max(22px, env(safe-area-inset-right)) 32px max(22px, env(safe-area-inset-left));
-  align-content: center;
-}
-:root[data-interface="mobile"] .entry-brand {
-  top: max(25px, env(safe-area-inset-top));
-  left: max(22px, env(safe-area-inset-left));
-  max-width: calc(100% - 44px);
-}
-:root[data-interface="mobile"] .entry-pass { padding: 20px; }
-:root[data-interface="mobile"] .world-interface {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: 560px;
-  margin-inline: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: max(25px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 26px max(22px, env(safe-area-inset-left));
-}
-:root[data-interface="mobile"] .world-left { flex: none; width: 100%; }
-:root[data-interface="mobile"] .world-identity { min-height: 62px; }
-:root[data-interface="mobile"] .world-launcher {
-  width: 100%;
-  max-width: none;
-  margin-top: max(36px, calc(var(--mobile-flag-bottom, 240px) - 75px));
-  gap: 10px;
-}
-:root[data-interface="mobile"] .launcher-toggle { min-height: 54px; padding: 14px 18px; font-size: 17px; }
 :root[data-interface="mobile"] .launcher-menu button { min-height: 48px; }
 :root[data-interface="mobile"] .launcher-group.is-open .launcher-menu button { transform: none; opacity: 1; }
-:root[data-interface="mobile"] .home-hud-stack { width: 100%; max-width: none; margin: 0; flex: none; }
 :root[data-interface="mobile"] .trader-hud {
   max-width: none;
   width: 100%;
@@ -60,26 +21,6 @@
 :root[data-interface="mobile"] .hud-identity > span { font-size: 12px; }
 :root[data-interface="mobile"] .trader-hud .hud-points-row { gap: 0; padding: 8px 8px 8px 0; border: 0; }
 :root[data-interface="mobile"] :is(.hud-profile-toggle, .inbox-toggle, .trader-hud .hud-settings) { min-width: 44px; width: 44px; min-height: 44px; height: 44px; }
-:root[data-interface="mobile"] .home-display-controls {
-  position: static;
-  width: 100%;
-  max-width: 560px;
-  margin-inline: auto;
-  padding: 0 max(22px, env(safe-area-inset-right)) 14px max(22px, env(safe-area-inset-left));
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  order: 2;
-}
-:root[data-interface="mobile"] .theme-toggle { min-height: 44px; background: #103448f2; }
-:root[data-interface="mobile"] .world-controls {
-  position: static;
-  width: 100%;
-  max-width: 560px;
-  margin-inline: auto;
-  padding-inline: max(22px, env(safe-area-inset-left));
-  order: 3;
-  font-size: 9px;
-}
 /* Phone forms use the whole viewport and large controls, including in landscape. */
 :root[data-interface="mobile"] .workspace-window,
 :root[data-interface="mobile"] .workspace-window.is-expanded {

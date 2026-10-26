@@ -78,79 +78,18 @@ body {
 
 /* Only identity and entry controls remain on the login surface. */
 .entry-screen {
-  min-height: 100svh;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  padding: 125px 24px;
   position: relative;
 }
-.entry-brand {
-  position: absolute;
-  top: 36px;
-  left: 38px;
-  max-width: calc(100% - 76px);
-}
 .entry-pass {
-  width: min(100%, 350px);
   min-width: 0;
-  padding: 24px;
-  background: #0b2e43bf;
-  border: 1px solid #ffffff3b;
-  border-top: 2px solid var(--acid);
-  border-radius: 4px;
-  box-shadow: 0 16px 70px #001a3a35;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  animation: world-arrive 0.45s both;
 }
 .entry-submit {
-  width: 100%;
   margin: 14px 0 0;
-  font-size: 0.9rem;
-  min-height: 54px;
 }
 
 /* The four launch controls sit beside one compact performance display. */
 .world-interface {
-  min-height: 100svh;
-  padding: 36px 38px 94px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
   align-content: flex-start;
-  gap: 36px 28px;
-}
-.world-left {
-  flex: 1 1 18rem;
-  min-width: 0;
-}
-.world-identity {
-  animation: world-arrive 0.4s both;
-}
-.world-launcher {
-  width: min(100%, 16.54rem);
-  margin-top: 45px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  animation: world-arrive 0.4s 0.08s both;
-}
-.launcher-group[data-group="Trading"] {
-  --menu-green: #c3f54c;
-}
-.launcher-group[data-group="Ports & Suppliers"] {
-  --menu-green: #b5ed4d;
-}
-.launcher-group[data-group="Buyers and Credit"] {
-  --menu-green: #a7e655;
-}
-.launcher-toggle {
-  width: 100%;
-  min-height: 58px;
-  padding: 16px 20px;
-  font-size: 1.05rem;
-  background: var(--menu-green);
 }
 .launcher-toggle > span {
   min-width: 0;
@@ -184,13 +123,7 @@ body {
   flex: 0 1 21.2rem;
   min-width: 0;
   margin-left: auto;
-  background: #092f43d9;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid #ffffff35;
-  border-top: 3px solid var(--acid);
   border-radius: 3px;
-  box-shadow: 0 10px 35px #00172920;
   position: relative;
   z-index: 2;
   animation: world-arrive 0.4s 0.12s both;
@@ -225,16 +158,8 @@ body {
   border-bottom: 1px solid #ffffff21;
 }
 .world-controls {
-  position: absolute;
-  left: 38px;
-  right: 38px;
-  bottom: 25px;
-  color: #f0f7fa;
-  font-size: 0.57rem;
   font-weight: 650;
-  letter-spacing: 0.12em;
   line-height: 1.5;
-  text-shadow: 0 1px 5px #092735;
 }
 /* Native pop-outs keep drafts mounted and keyboard focus contained. */
 .workspace-window {
@@ -534,17 +459,6 @@ body {
   }
 }
 @media (max-width: 1100px) {
-  .world-interface {
-    padding: 28px 28px 90px;
-  }
-  .entry-brand {
-    top: 28px;
-    left: 28px;
-  }
-  .world-controls {
-    left: 28px;
-    right: 28px;
-  }
   .workspace-window {
     width: calc(100vw - 48px);
     height: calc(100dvh - 54px);
@@ -554,38 +468,10 @@ body {
   }
 }
 @media (max-width: 760px) {
-  .entry-brand {
-    top: 25px;
-    left: 22px;
-    max-width: calc(100% - 44px);
-  }
-  .entry-screen {
-    padding: 115px 22px;
-  }
-  .entry-pass {
-    padding: 22px;
-  }
-  .world-interface {
-    padding: 25px 22px 100px;
-    gap: 28px;
-  }
-  .world-left {
-    flex-basis: 100%;
-  }
-  .world-launcher {
-    width: 100%;
-    max-width: 380px;
-    margin-top: 35px;
-  }
   .trader-hud {
     flex: 1 1 100%;
     max-width: 380px;
     margin-left: 0;
-  }
-  .world-controls {
-    left: 22px;
-    right: 22px;
-    bottom: 23px;
   }
   .workspace-window {
     width: calc(100vw - 20px);

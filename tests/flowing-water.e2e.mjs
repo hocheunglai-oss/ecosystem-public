@@ -140,7 +140,7 @@ async function contributionColours(page) {
     if (action.credited) assert.equal(action.ink, 'rgb(255, 255, 255)', 'Credited homepage label has white text');
   }
 }
-async function nightGhostContrast(page) {
+async function verifyNightContrast(page) {
   // Bound the brightest possible backdrop from the colour-map channel maxima,
   // then conservatively composite a white sheen at its maximum opacity. The
   // darker shade overlay is ignored, so this remains a safe contrast floor.
@@ -151,6 +151,19 @@ async function nightGhostContrast(page) {
   });
   const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
   const contrasts = [];
+  const textTokens = await page.locator('.immersive-app').evaluate(node => {
+    const probe = document.createElement('i'); node.append(probe);
+    const values = ['--flow-ink', '--flow-muted', '--flow-footer'].map(token => {
+      probe.style.color = `var(${token})`;
+      return { token, ink: getComputedStyle(probe).color.match(/[\d.]+/g).slice(0, 3).map(value => Number(value) / 255) };
+    });
+    probe.remove(); return values;
+  });
+  for (const { token, ink } of textTokens) {
+    const foreground = luminance(ink), background = luminance(backdrop), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    contrasts.push(contrast);
+  }
   const inspect = async (action, state) => {
     await action.evaluate(node => Promise.all(node.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))));
     const style = await action.evaluate(node => {
@@ -164,12 +177,16 @@ async function nightGhostContrast(page) {
     assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   };
-  for (const action of await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all()) {
+  const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();
+  const footer = await page.locator('.home-display-controls button:visible:not(.ecosystem-feedback)').all();
+  assert.equal(navigation.length, 2, 'Both secondary entry actions are checked');
+  assert.ok(footer.length >= 2, 'Ordinary theme and account-view footer controls are checked');
+  for (const action of [...navigation, ...footer]) {
     await page.mouse.move(0, 0); await inspect(action, 'normal');
     await action.hover(); await inspect(action, 'hover');
   }
   await page.mouse.move(0, 0);
-  assert.equal(contrasts.length, 4, 'Both secondary entry actions are checked in normal and hover states');
+  assert.equal(contrasts.length, 3 + 2 * (navigation.length + footer.length), 'Unboxed labels and normal/hover entry and footer actions all retain readable contrast');
   return Math.min(...contrasts);
 }
 async function verifyHiddenPause(page, background, waterImage) {
@@ -305,7 +322,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const geometry = await homepageGeometry(page, width);
       await originalLogoColours(page);
       await contributionColours(page);
-      const nightNavigationContrast = theme === 'dark' ? await nightGhostContrast(page) : null;
+      const nightContrastMinimum = theme === 'dark' ? await verifyNightContrast(page) : null;
       const stationary = await contentPositions(page);
       await expect(background).toHaveAttribute('data-paused', 'false');
       await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBeGreaterThan(0);
@@ -421,7 +438,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.deepEqual(state.harbour, [], 'Flowing Water does not request retired harbour assets');
       assert.ok(state.water.length > 0 && state.water.every(path => path === waterArtwork.path), 'Day and night use exactly the same artwork with no alternate scene requested');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      results.push({ engine, width, theme, passed: true, geometry, waterMotionPixels, nightNavigationContrast, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
+      results.push({ engine, width, theme, passed: true, geometry, waterMotionPixels, nightContrastMinimum, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
       console.log(`PASS ${engine} ${width} ${theme}: sign-in/out, navigation, theme, motion, role gate`);
     } catch (error) {
       results.push({ engine, width, theme, passed: false, error: error.message, unexpected: state.unexpected, errors });

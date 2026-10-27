@@ -15,6 +15,7 @@
   --flow-sheen: #e2f7ff;
   --flow-footer: #071f28;
   --flow-focus: #d8efc9;
+  --flow-footer-hover: #ffffff20;
   color: var(--flow-ink);
   font-family: var(--ui-font);
   min-height: 100svh;
@@ -24,7 +25,7 @@
 }
 :root[data-theme="dark"] .immersive-app[data-design="flowing-water"] {
   --flow-ink: #f5edf2;
-  --flow-muted: #e0d2dc;
+  --flow-muted: #eee3eb;
   --flow-rule: #f2dfe53d;
   --flow-menu: #29222f;
   --flow-primary: #f4e8df;
@@ -38,6 +39,7 @@
   --flow-sheen: #ffdcc3;
   --flow-footer: #f5edf2;
   --flow-focus: #f4c6ad;
+  --flow-footer-hover: var(--flow-ghost);
 }
 /* Smooth original watercolours; slight overscan keeps the moving artwork edge out of view. */
 .flowing-water-background {
@@ -146,7 +148,7 @@
 #root .immersive-app[data-design="flowing-water"] .home-display-controls :is(.theme-toggle,.test-workspace-control,.role-preview-controls > button) { min-height: 44px; padding: 6px 0; background: transparent; border: 0; box-shadow: none; color: var(--flow-footer); font-size: var(--ui-text-action); border-radius: 6px; }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback { --ui-control-padding: 8px 14px; min-height: 44px; padding: 8px 14px; font-size: var(--ui-text-action); border-radius: var(--ui-radius-action); background: var(--ui-contribution); border: 1px solid var(--ui-contribution-border); color: var(--ui-contribution-ink); }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback:hover { background: var(--ui-contribution-hover); color: var(--ui-contribution-ink); }
-#root .immersive-app[data-design="flowing-water"] .home-display-controls :is(.theme-toggle,.test-workspace-control,.role-preview-controls > button):hover:not(.ecosystem-feedback) { color: var(--flow-footer); background: #ffffff20; }
+#root .immersive-app[data-design="flowing-water"] .home-display-controls :is(.theme-toggle,.test-workspace-control,.role-preview-controls > button):hover:not(.ecosystem-feedback) { color: var(--flow-footer); background: var(--flow-footer-hover); }
 #root .immersive-app[data-design="flowing-water"] :is(.world-launcher,.home-hud-stack,.entry-screen,.flowing-footer) :focus-visible { outline: 2px solid var(--flow-focus); outline-offset: 4px; }
 
 /* Keep the existing credential fields and submission flow, with the same quiet entry language. */

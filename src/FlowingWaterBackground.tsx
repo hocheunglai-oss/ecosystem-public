@@ -14,9 +14,9 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
         <filter id="eco-watercolour-night" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
           <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0" />
           <feComponentTransfer>
-            <feFuncR type="table" tableValues="0.043 0.129 0.286 0.502 0.710" />
-            <feFuncG type="table" tableValues="0.043 0.098 0.173 0.314 0.482" />
-            <feFuncB type="table" tableValues="0.082 0.184 0.298 0.310 0.361" />
+            <feFuncR type="table" tableValues="0.043 0.129 0.286 0.502 0.540" />
+            <feFuncG type="table" tableValues="0.043 0.098 0.173 0.314 0.320" />
+            <feFuncB type="table" tableValues="0.082 0.184 0.298 0.310 0.320" />
           </feComponentTransfer>
         </filter>
       </defs>

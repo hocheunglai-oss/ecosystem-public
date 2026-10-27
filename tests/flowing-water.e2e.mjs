@@ -209,25 +209,79 @@ async function verifyInternalMotion(page, background) {
   }
   return { capability, difference: strongest, elapsed: after.time - before.time, frames: after.frame - before.frame, fixedBounds: true, actualMovementVerified: capability.mode === 'webgl' };
 }
-async function settledPhasePixels(page, background, plan) {
-  const state = await flowState(background), settling = [];
-  let pixels = await waterPixels(page, plan);
-  assert.deepEqual(await flowState(background), state, 'The controlled phase stays fixed throughout compositor capture');
-  for (let sample = 1; sample < 4; sample++) {
-    const next = await waterPixels(page, plan), difference = pixelDifference(pixels, next);
-    assert.deepEqual(await flowState(background), state, 'Compositor settlement cannot advance the controlled renderer');
-    settling.push(difference);
-    if (difference.mean <= .05 && difference.maximum <= 1) {
-      verifyVisibleWaterPixels(next, 'Settled loop phase');
-      return { state, pixels: next, settling };
-    }
-    pixels = next;
-  }
-  assert.fail(`The fixed-phase compositor did not settle within four captures (${JSON.stringify({ state, settling })})`);
+async function installControlledPhaseReadback(background, plan) {
+  return background.locator('canvas').evaluateHandle((canvas, plan) => {
+    const gl = canvas.getContext('webgl');
+    if (!gl || gl.isContextLost()) throw new Error('Controlled readback requires the existing working WebGL context');
+    const original = gl.drawArrays, descriptor = Object.getOwnPropertyDescriptor(gl, 'drawArrays');
+    const program = gl.getParameter(gl.CURRENT_PROGRAM), phaseLocation = gl.getUniformLocation(program, 'u_phase');
+    let buffer = null, latest = null, serial = 0, restored = false;
+    const wrapped = function(...args) {
+      const result = Reflect.apply(original, this, args);
+      try {
+        const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+        if (this !== gl || gl.isContextLost() || gl.getParameter(gl.FRAMEBUFFER_BINDING) !== null) throw new Error('The real decorative draw must target its existing default framebuffer');
+        if (width <= 0 || height <= 0 || width * height > 3_005_000) throw new Error('Controlled readback exceeds the renderer buffer bound');
+        if (!buffer || buffer.length !== width * height * 4) buffer = new Uint8Array(width * height * 4);
+        // Read in the same stack as the actual draw, before the default
+        // preserveDrawingBuffer:false surface may be presented and cleared.
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
+        const readbackError = gl.getError();
+        if (readbackError !== gl.NO_ERROR) throw new Error(`Controlled GPU readback failed with WebGL error ${readbackError}`);
+        const pixels = plan.points.flatMap(([x, y]) => {
+          const column = Math.floor(x * width / plan.width), row = height - 1 - Math.floor(y * height / plan.height);
+          if (column < 0 || column >= width || row < 0 || row >= height) throw new Error('Controlled sample falls outside the framebuffer');
+          const offset = (row * width + column) * 4;
+          return [buffer[offset], buffer[offset + 1], buffer[offset + 2]];
+        });
+        latest = { serial: ++serial, expectedFrame: Number(canvas.dataset.flowFrame || 0) + 1,
+          phase: gl.getUniform(program, phaseLocation), sameProgram: gl.getParameter(gl.CURRENT_PROGRAM) === program,
+          width, height, bufferBytes: buffer.byteLength, viewportWidth: innerWidth, viewportHeight: innerHeight,
+          mode: args[0], first: args[1], count: args[2], triangleStrip: gl.TRIANGLE_STRIP, pixels };
+      } catch (error) { latest = { error: String(error.message) }; }
+      return result;
+    };
+    Object.defineProperty(gl, 'drawArrays', { configurable: true, writable: true, value: wrapped });
+    return {
+      capture() {
+        const node = canvas.closest('.flowing-water-background');
+        return { ...latest, state: { renderer: node.dataset.renderer, state: node.dataset.flowState,
+          frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0), period: Number(canvas.dataset.flowPeriodMs) },
+          retainedCanvas: canvas === document.querySelector('.flowing-water-canvas'), retainedContext: canvas.getContext('webgl') === gl,
+          hookInstalled: gl.drawArrays === wrapped, preserved: gl.getContextAttributes()?.preserveDrawingBuffer,
+          canvasWidth: canvas.width, canvasHeight: canvas.height };
+      },
+      restore() {
+        if (restored || gl.drawArrays !== wrapped) throw new Error('Controlled readback ownership changed before cleanup');
+        if (descriptor) Object.defineProperty(gl, 'drawArrays', descriptor); else delete gl.drawArrays;
+        buffer = null; latest = null; restored = true;
+        return gl.drawArrays === original && (descriptor ? Object.hasOwn(gl, 'drawArrays') : !Object.hasOwn(gl, 'drawArrays'));
+      },
+    };
+  }, plan);
+}
+async function controlledPhasePixels(readback, plan) {
+  const capture = await readback.evaluate(probe => probe.capture());
+  assert.equal(capture.error, undefined, 'Synchronous framebuffer capture succeeds after the real draw');
+  assert.ok(capture.retainedCanvas && capture.retainedContext && capture.hookInstalled && capture.sameProgram, 'The loop uses the original canvas, context, program and narrowly scoped readback hook');
+  assert.equal(capture.preserved, false, 'Testing does not change the production drawing-buffer setting');
+  assert.equal(capture.state.renderer, 'webgl'); assert.equal(capture.state.state, 'running');
+  assert.equal(capture.expectedFrame, capture.state.frame, 'Readback belongs to the recorded real draw, whose metadata updates after drawArrays returns');
+  assert.equal(capture.mode, capture.triangleStrip); assert.equal(capture.first, 0); assert.equal(capture.count, 4);
+  assert.equal(capture.width, capture.canvasWidth); assert.equal(capture.height, capture.canvasHeight);
+  assert.equal(capture.viewportWidth, plan.width); assert.equal(capture.viewportHeight, plan.height);
+  assert.equal(capture.bufferBytes, capture.width * capture.height * 4);
+  assert.ok(capture.bufferBytes <= 12_020_000, 'Only one bounded full-frame scratch buffer is retained');
+  assert.equal(capture.pixels.length, plan.points.length * 3);
+  const expectedPhase = (capture.state.time % capture.state.period) / capture.state.period * Math.PI * 2;
+  assert.ok(Number.isFinite(capture.phase) && Math.abs(capture.phase - expectedPhase) <= .000001, 'The actual GPU phase uniform matches the recorded active time to float precision');
+  verifyVisibleWaterPixels(capture.pixels, 'Controlled framebuffer phase');
+  return capture;
 }
 async function verifyPeriodicFrames(page, background) {
-  // This separate check seeks only to compare exact loop phases. The movement
-  // and pause proof above used the untouched real clock throughout.
+  // Separate controlled-loop proof from the unchanged real-time composed
+  // screenshots above. Raw pixels are read synchronously from the real draw;
+  // this does not claim to capture a browser compositor presentation fence.
   await page.goto('about:blank');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.clock.install();
@@ -236,40 +290,50 @@ async function verifyPeriodicFrames(page, background) {
   await readyRenderer(page);
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; stable fallback verified separately' };
   await expect.poll(async () => (await flowState(background)).frame).toBeGreaterThan(2);
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
-  // pauseAt may end between the renderer's 30fps draws. Prime an actual draw
-  // before choosing the baseline, rather than accepting a different phase.
-  const beforePrime = await flowState(background);
-  await page.clock.fastForward(48);
-  const primed = await flowState(background);
-  assert.ok(primed.frame > beforePrime.frame && primed.time > beforePrime.time, 'The baseline starts at an actual newly drawn phase');
-  const period = (await flowState(background)).period;
-  assert.equal(period, 48000, 'The full internal loop retains its declared 48-second period');
-  const plan = await waterPixelPlan(page), first = await settledPhasePixels(page, background, plan);
-  await page.clock.fastForward(period);
-  const repeated = await settledPhasePixels(page, background, plan), repeat = pixelDifference(first.pixels, repeated.pixels);
-  assert.ok(Math.abs(repeated.state.time - first.state.time - period) <= .001, `The comparison advances exactly one renderer period (${JSON.stringify({ first: first.state, repeated: repeated.state })})`);
-  assert.ok(repeat.mean <= .12 && repeat.changedFraction <= .005, `The actual rendered artwork returns to the same phase after one loop (${JSON.stringify({ repeat, first: first.state, repeated: repeated.state })})`);
-  await page.clock.fastForward(period / 4);
-  const quarterFrame = await settledPhasePixels(page, background, plan), quarter = pixelDifference(first.pixels, quarterFrame.pixels);
-  assert.ok(quarter.mean > .15 && quarter.changedFraction > .01, 'A quarter-loop differs visibly; periodic equality is not a frozen renderer');
-  const phase = (await flowState(background)).time % period;
-  await page.clock.fastForward((period - 96 - phase + period) % period);
-  const nearSeam = [await settledPhasePixels(page, background, plan)], phases = [nearSeam[0].state.time % period];
-  for (let sample = 0; sample < 4; sample++) {
+  const plan = await waterPixelPlan(page), readback = await installControlledPhaseReadback(background, plan);
+  let evidence;
+  try {
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+    const beforePrime = await flowState(background);
     await page.clock.fastForward(48);
-    nearSeam.push(await settledPhasePixels(page, background, plan));
-    phases.push(nearSeam.at(-1).state.time % period);
+    const first = await controlledPhasePixels(readback, plan);
+    assert.ok(first.state.frame > beforePrime.frame && first.state.time > beforePrime.time, 'The baseline starts at an actual newly drawn phase');
+    const period = first.state.period;
+    assert.equal(period, 48000, 'The full internal loop retains its declared 48-second period');
+    await page.clock.fastForward(period);
+    const repeated = await controlledPhasePixels(readback, plan), repeat = pixelDifference(first.pixels, repeated.pixels);
+    assert.ok(repeated.serial > first.serial && repeated.state.frame > first.state.frame, 'The repeated phase is a new real draw, never a reused readback');
+    assert.ok(Math.abs(repeated.state.time - first.state.time - period) <= .001, `The comparison advances exactly one renderer period (${JSON.stringify({ first: first.state, repeated: repeated.state })})`);
+    assert.equal(repeated.phase, first.phase, 'Exactly one loop repeats the same actual GPU phase uniform');
+    assert.deepEqual([repeated.width, repeated.height], [first.width, first.height], 'Period comparison retains fixed framebuffer dimensions');
+    assert.ok(repeat.mean <= .12 && repeat.changedFraction <= .005, `The actual framebuffer returns to the same phase after one loop (${JSON.stringify({ repeat, first: first.state, repeated: repeated.state })})`);
+    await page.clock.fastForward(period / 4);
+    const quarterFrame = await controlledPhasePixels(readback, plan), quarter = pixelDifference(first.pixels, quarterFrame.pixels);
+    assert.ok(quarterFrame.serial > repeated.serial && quarterFrame.state.frame > repeated.state.frame, 'The quarter phase comes from a new real draw');
+    assert.ok(quarter.mean > .15 && quarter.changedFraction > .01, 'A quarter-loop differs visibly; periodic equality is not a frozen renderer');
+    const phase = quarterFrame.state.time % period;
+    await page.clock.fastForward((period - 96 - phase + period) % period);
+    const nearSeam = [await controlledPhasePixels(readback, plan)], phases = [nearSeam[0].state.time % period];
+    for (let sample = 0; sample < 4; sample++) {
+      await page.clock.fastForward(48);
+      const next = await controlledPhasePixels(readback, plan), previous = nearSeam.at(-1);
+      assert.ok(next.serial > previous.serial && next.state.frame > previous.state.frame, 'Every seam sample is a new real draw');
+      assert.ok(Math.abs(next.state.time - previous.state.time - 48) <= .001, 'Seam samples retain equal48ms active-time steps');
+      nearSeam.push(next); phases.push(next.state.time % period);
+    }
+    const wrap = phases.findIndex((value, index) => index > 0 && value < phases[index - 1]);
+    assert.ok(wrap > 0 && wrap < phases.length - 1, `Samples cross the real period boundary (${phases.join(', ')})`);
+    const steps = nearSeam.slice(1).map((frame, index) => pixelDifference(nearSeam[index].pixels, frame.pixels));
+    const neighbours = steps.filter((_step, index) => index !== wrap - 1), seam = steps[wrap - 1];
+    assert.ok(seam.mean <= Math.max(...neighbours.map(step => step.mean)) * 3 + .12, `The loop boundary has no pixel jump beyond adjacent equal-time steps (${JSON.stringify(steps)})`);
+    const captures = [first, repeated, quarterFrame, ...nearSeam].map(({ pixels, ...capture }) => capture);
+    evidence = { verified: true, period, repeat, quarter, phases, seam, adjacent: neighbours, captures,
+      provenance: 'Controlled-clock raw WebGL framebuffer readPixels in the same stack immediately after each native drawArrays; real-time composed screenshot movement/freeze evidence is separate and unchanged.' };
+  } finally {
+    try { assert.equal(await readback.evaluate(probe => probe.restore()), true, 'The original drawArrays method/property is restored before later checks'); }
+    finally { await readback.dispose(); await page.clock.resume(); }
   }
-  const wrap = phases.findIndex((value, index) => index > 0 && value < phases[index - 1]);
-  assert.ok(wrap > 0 && wrap < phases.length - 1, `Samples cross the real period boundary (${phases.join(', ')})`);
-  const steps = nearSeam.slice(1).map((frame, index) => pixelDifference(nearSeam[index].pixels, frame.pixels));
-  const neighbours = steps.filter((_step, index) => index !== wrap - 1);
-  const seam = steps[wrap - 1];
-  assert.ok(seam.mean <= Math.max(...neighbours.map(step => step.mean)) * 3 + .12, `The loop boundary has no pixel jump beyond adjacent equal-time steps (${JSON.stringify(steps)})`);
-  await page.clock.resume();
-  const captures = [first, repeated, quarterFrame, ...nearSeam].map(({ state, settling }) => ({ state, settling }));
-  return { verified: true, period, repeat, quarter, phases, seam, adjacent: neighbours, captures };
+  return { ...evidence, readbackHookRestored: true };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial fallback verified' };

@@ -36,8 +36,8 @@ void main() {
   // The outer frame never moves. All harmonics meet with matching velocity at 48s.
   vec2 edge = smoothstep(vec2(0.0), vec2(0.12), p) * smoothstep(vec2(0.0), vec2(0.12), 1.0 - p);
   vec2 warped = p + edge.x * edge.y * vec2(0.018, 0.014) * flow;
-  // A fixed 1% inset removes only the reference screenshot's dark outer border.
-  vec2 uv = 0.5 + (warped - 0.5) * u_cover * 0.98;
+  // Match the still image's centered cover crop without adding a zoom or inset.
+  vec2 uv = 0.5 + (warped - 0.5) * u_cover;
   gl_FragColor = texture2D(u_image, uv);
 }`;
 

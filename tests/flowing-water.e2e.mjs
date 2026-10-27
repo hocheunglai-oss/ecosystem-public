@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-reference.jpeg', width: 1493, height: 704, hash: '96578f550faa3a003a89c672b24af6698e3188f97c23a1a3688761727fd4e1c0' };
+const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -209,6 +209,22 @@ async function verifyInternalMotion(page, background) {
   }
   return { capability, difference: strongest, elapsed: after.time - before.time, frames: after.frame - before.frame, fixedBounds: true, actualMovementVerified: capability.mode === 'webgl' };
 }
+async function settledPhasePixels(page, background, plan) {
+  const state = await flowState(background), settling = [];
+  let pixels = await waterPixels(page, plan);
+  assert.deepEqual(await flowState(background), state, 'The controlled phase stays fixed throughout compositor capture');
+  for (let sample = 1; sample < 4; sample++) {
+    const next = await waterPixels(page, plan), difference = pixelDifference(pixels, next);
+    assert.deepEqual(await flowState(background), state, 'Compositor settlement cannot advance the controlled renderer');
+    settling.push(difference);
+    if (difference.mean <= .05 && difference.maximum <= 1) {
+      verifyVisibleWaterPixels(next, 'Settled loop phase');
+      return { state, pixels: next, settling };
+    }
+    pixels = next;
+  }
+  assert.fail(`The fixed-phase compositor did not settle within four captures (${JSON.stringify({ state, settling })})`);
+}
 async function verifyPeriodicFrames(page, background) {
   // This separate check seeks only to compare exact loop phases. The movement
   // and pause proof above used the untouched real clock throughout.
@@ -221,32 +237,39 @@ async function verifyPeriodicFrames(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; stable fallback verified separately' };
   await expect.poll(async () => (await flowState(background)).frame).toBeGreaterThan(2);
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  // pauseAt may end between the renderer's 30fps draws. Prime an actual draw
+  // before choosing the baseline, rather than accepting a different phase.
+  const beforePrime = await flowState(background);
+  await page.clock.fastForward(48);
+  const primed = await flowState(background);
+  assert.ok(primed.frame > beforePrime.frame && primed.time > beforePrime.time, 'The baseline starts at an actual newly drawn phase');
   const period = (await flowState(background)).period;
   assert.equal(period, 48000, 'The full internal loop retains its declared 48-second period');
-  const plan = await waterPixelPlan(page), firstState = await flowState(background), first = await waterPixels(page, plan);
+  const plan = await waterPixelPlan(page), first = await settledPhasePixels(page, background, plan);
   await page.clock.fastForward(period);
-  const repeatedState = await flowState(background), repeated = await waterPixels(page, plan), repeat = pixelDifference(first, repeated);
-  assert.ok(Math.abs(repeatedState.time - firstState.time - period) <= 17, 'The comparison advances one complete renderer period');
-  assert.ok(repeat.mean <= .12 && repeat.changedFraction <= .005, `The actual rendered artwork returns to the same phase after one loop (${JSON.stringify(repeat)})`);
+  const repeated = await settledPhasePixels(page, background, plan), repeat = pixelDifference(first.pixels, repeated.pixels);
+  assert.ok(Math.abs(repeated.state.time - first.state.time - period) <= .001, `The comparison advances exactly one renderer period (${JSON.stringify({ first: first.state, repeated: repeated.state })})`);
+  assert.ok(repeat.mean <= .12 && repeat.changedFraction <= .005, `The actual rendered artwork returns to the same phase after one loop (${JSON.stringify({ repeat, first: first.state, repeated: repeated.state })})`);
   await page.clock.fastForward(period / 4);
-  const quarter = pixelDifference(first, await waterPixels(page, plan));
+  const quarterFrame = await settledPhasePixels(page, background, plan), quarter = pixelDifference(first.pixels, quarterFrame.pixels);
   assert.ok(quarter.mean > .15 && quarter.changedFraction > .01, 'A quarter-loop differs visibly; periodic equality is not a frozen renderer');
   const phase = (await flowState(background)).time % period;
   await page.clock.fastForward((period - 96 - phase + period) % period);
-  const nearSeam = [await waterPixels(page, plan)], phases = [(await flowState(background)).time % period];
+  const nearSeam = [await settledPhasePixels(page, background, plan)], phases = [nearSeam[0].state.time % period];
   for (let sample = 0; sample < 4; sample++) {
     await page.clock.fastForward(48);
-    nearSeam.push(await waterPixels(page, plan));
-    phases.push((await flowState(background)).time % period);
+    nearSeam.push(await settledPhasePixels(page, background, plan));
+    phases.push(nearSeam.at(-1).state.time % period);
   }
   const wrap = phases.findIndex((value, index) => index > 0 && value < phases[index - 1]);
   assert.ok(wrap > 0 && wrap < phases.length - 1, `Samples cross the real period boundary (${phases.join(', ')})`);
-  const steps = nearSeam.slice(1).map((frame, index) => pixelDifference(nearSeam[index], frame));
+  const steps = nearSeam.slice(1).map((frame, index) => pixelDifference(nearSeam[index].pixels, frame.pixels));
   const neighbours = steps.filter((_step, index) => index !== wrap - 1);
   const seam = steps[wrap - 1];
   assert.ok(seam.mean <= Math.max(...neighbours.map(step => step.mean)) * 3 + .12, `The loop boundary has no pixel jump beyond adjacent equal-time steps (${JSON.stringify(steps)})`);
   await page.clock.resume();
-  return { verified: true, period, repeat, quarter, phases, seam, adjacent: neighbours };
+  const captures = [first, repeated, quarterFrame, ...nearSeam].map(({ state, settling }) => ({ state, settling }));
+  return { verified: true, period, repeat, quarter, phases, seam, adjacent: neighbours, captures };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial fallback verified' };
@@ -269,6 +292,14 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
   await expect(image).toHaveAttribute('src', expected.path);
   await readyRenderer(page);
   await expect.poll(() => image.evaluate((image, expected) => image.complete && image.naturalWidth === expected.width && image.naturalHeight === expected.height && new URL(image.currentSrc).pathname === expected.path, expected)).toBe(true);
+  const framing = await page.locator('.flowing-water-image,.flowing-water-canvas').evaluateAll(nodes => nodes.map(node => {
+    const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+    return { x: box.x, y: box.y, width: box.width, height: box.height, viewportWidth: innerWidth, viewportHeight: innerHeight, fit: style.objectFit, tag: node.tagName };
+  }));
+  for (const frame of framing) {
+    assert.ok(Math.abs(frame.x) < .1 && Math.abs(frame.y) < .1 && Math.abs(frame.width - frame.viewportWidth) < .1 && Math.abs(frame.height - frame.viewportHeight) < .1, 'The full-bleed PNG and animated canvas share fixed viewport bounds without a screenshot-border inset');
+    if (frame.tag === 'IMG') assert.equal(frame.fit, 'cover');
+  }
   const filter = await image.evaluate(node => getComputedStyle(node).filter);
   assert.equal(await page.locator('.flowing-water-canvas').evaluate(node => getComputedStyle(node).filter), filter, 'The canvas and still reference share exactly the same colour-only theme treatment');
   if (theme === 'light') assert.equal(filter, 'none', 'Day mode displays the original approved artwork colours');
@@ -325,7 +356,7 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
   if (verifyBytes) {
     const response = await context.request.get(new URL(expected.path, base).href);
     assert.equal(response.status(), 200);
-    assert.ok(response.headers()['content-type']?.includes('image/jpeg'), 'Artwork is served as an image, never the application HTML fallback');
+    assert.ok(response.headers()['content-type']?.includes('image/png'), 'Artwork is served as an image, never the application HTML fallback');
     assert.equal(createHash('sha256').update(await response.body()).digest('hex'), expected.hash, 'The correct approved artwork is served unchanged for this theme');
   }
 }
@@ -339,6 +370,16 @@ async function originalLogoColours(page) {
     return layers;
   });
   assert.ok(layers.every(layer => layer.filter === 'none' && layer.opacity === '1' && layer.blend === 'normal'), `The original white/green E/F logo is never recoloured with the water: ${JSON.stringify(layers)}`);
+  const tagline = await page.locator('.brand-tagline text').evaluate(node => {
+    const style = getComputedStyle(node), box = node.getBoundingClientRect(), frame = node.ownerSVGElement.getBoundingClientRect();
+    return { text: node.textContent.trim(), stroke: style.stroke, shadow: style.textShadow, size: parseFloat(style.fontSize), weight: Number(style.fontWeight), left: box.left, right: box.right, top: box.top, bottom: box.bottom, frame: { left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom } };
+  });
+  assert.equal(tagline.text, 'FRATELLI COSULICH MARINE ENERGY');
+  assert.equal(tagline.stroke, 'none', 'The existing tagline has solid letters without an outline in either theme');
+  assert.equal(tagline.shadow, 'none');
+  assert.equal(tagline.size, 22);
+  assert.equal(tagline.weight, 600);
+  assert.ok(tagline.left >= tagline.frame.left - 1 && tagline.right <= tagline.frame.right + 1 && tagline.top >= tagline.frame.top - 1 && tagline.bottom <= tagline.frame.bottom + 1, 'The stronger solid tagline fits its existing SVG lockup without clipping');
 }
 async function contributionColours(page) {
   const actions = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => {

@@ -5,7 +5,6 @@
   --flow-rule: #f4faf447;
   --flow-menu: #194c43;
   --flow-primary: #f8faf4;
-  --flow-tagline-outline: var(--flow-primary);
   --flow-primary-ink: #21463c;
   --flow-ghost-ink: #021316;
   --flow-ghost: #f4faf58f;
@@ -30,7 +29,6 @@
   --flow-rule: #f2dfe53d;
   --flow-menu: #29222f;
   --flow-primary: #f4e8df;
-  --flow-tagline-outline: none;
   --flow-primary-hover: #efdbcf;
   --flow-primary-ink: #34272f;
   --flow-ghost-ink: #f5edf2;
@@ -52,7 +50,7 @@
 .flowing-water-background > * { position: absolute; pointer-events: none; }
 .flowing-water-palette { width: 0; height: 0; overflow: hidden; }
 .flowing-water-image {
-  inset: -1.020408%; width: 102.040816%; height: 102.040816%; max-width: none;
+  inset: 0; width: 100%; height: 100%; max-width: none;
   object-fit: cover; object-position: center;
 }
 .flowing-water-canvas { inset: 0; width: 100%; height: 100%; opacity: 0; }
@@ -82,8 +80,8 @@
 }
 #root .immersive-app[data-design="flowing-water"] .world-identity { min-height: 0; width: min(100%,320px); animation: none; }
 #root .immersive-app[data-design="flowing-water"] .brand-lockup { width: 100%; }
-#root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: var(--flow-ghost-ink); font-weight: 450; font-size: 17px; }
-#root .immersive-app[data-design="flowing-water"] .brand-tagline text { stroke: var(--flow-tagline-outline); stroke-width: 1px; paint-order: stroke fill; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+#root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: var(--flow-ghost-ink); font-weight: 600; font-size: 22px; }
+#root .immersive-app[data-design="flowing-water"] .brand-tagline text { stroke: none; }
 #root .immersive-app[data-design="flowing-water"] .world-launcher {
   width: min(100%,296px); max-width: none; margin-top: 38px;
   display: grid; grid-template-columns: minmax(0,1fr); align-items: start; gap: 12px;

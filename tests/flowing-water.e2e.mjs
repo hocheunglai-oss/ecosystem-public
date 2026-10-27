@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const suppliedWaterHash = '96578f550faa3a003a89c672b24af6698e3188f97c23a1a3688761727fd4e1c0';
+const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: 'f0bd089570a0b549b58565afebf43b5674bf7dbef9e14310883eea3705ce074f' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -31,7 +31,11 @@ const groups = {
   'Buyers and Credit': ['Buyer Profiles', 'Credit Requests'],
 };
 async function mocks(context) {
-  const state = { signedIn: false, rejectLogin: true, user: { ...member }, writes: [], unexpected: [], harbour: [] };
+  const state = { signedIn: false, rejectLogin: true, user: { ...member }, writes: [], unexpected: [], harbour: [], water: [] };
+  context.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (/^\/flowing-water-.*\.(png|jpeg)$/.test(path)) state.water.push(path);
+  });
   await context.route('**/marine/**', route => {
     const path = new URL(route.request().url()).pathname;
     // Vite may import source helpers under /src/marine; only retired public
@@ -84,6 +88,58 @@ const contentPositions = page => page.locator('.world-identity, .main-search, .w
   const box = node.getBoundingClientRect();
   return { name: node.className, x: box.x, y: box.y, width: box.width, height: box.height };
 }));
+async function verifyArtwork(page, context, theme, verifyBytes = false) {
+  const expected = waterArtwork, image = page.locator('.flowing-water-image');
+  await expect(image).toHaveCount(1);
+  await expect(image).toHaveAttribute('src', expected.path);
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((image, expected) => image.complete && image.naturalWidth === expected.width && image.naturalHeight === expected.height && new URL(image.currentSrc).pathname === expected.path, expected)).toBe(true);
+  const filter = await image.evaluate(node => getComputedStyle(node).filter);
+  if (theme === 'light') assert.equal(filter, 'none', 'Day mode displays the original approved artwork colours');
+  else {
+    assert.ok(filter.includes('#eco-watercolour-night'), 'Night applies its colour filter to the same visible image');
+    const palette = await page.locator('#eco-watercolour-night').evaluate(node => ({
+      primitives: [...node.children].map(child => child.localName),
+      channels: ['feFuncR', 'feFuncG', 'feFuncB'].map(name => node.querySelector(name).getAttribute('tableValues').trim().split(/\s+/).map(Number)),
+    }));
+    assert.deepEqual(palette.primitives, ['feColorMatrix', 'feComponentTransfer'], 'Night changes only colour: no replacement scene, blur or displacement');
+    assert.ok(palette.channels.every(channel => channel.length === palette.channels[0].length && channel.every(value => Number.isFinite(value) && value >= 0 && value <= 1)));
+    const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+    for (let index = 1; index < palette.channels[0].length; index++) {
+      const input = index / (palette.channels[0].length - 1);
+      assert.ok(luminance(palette.channels.map(channel => channel[index])) < luminance([input, input, input]), 'Night colour mapping darkens the midtones and highlights');
+    }
+  }
+  if (verifyBytes) {
+    const response = await context.request.get(new URL(expected.path, base).href);
+    assert.equal(response.status(), 200);
+    assert.ok(response.headers()['content-type']?.includes('image/png'), 'Artwork is served as an image, never the application HTML fallback');
+    assert.equal(createHash('sha256').update(await response.body()).digest('hex'), expected.hash, 'The correct approved artwork is served unchanged for this theme');
+  }
+}
+async function originalLogoColours(page) {
+  const layers = await page.locator('.ecosystem-logo img').evaluate(node => {
+    const layers = [];
+    for (let layer = node; layer; layer = layer.parentElement) {
+      const style = getComputedStyle(layer);
+      layers.push({ tag: layer.tagName, filter: style.filter, opacity: style.opacity, blend: style.mixBlendMode });
+    }
+    return layers;
+  });
+  assert.ok(layers.every(layer => layer.filter === 'none' && layer.opacity === '1' && layer.blend === 'normal'), `The original white/green E/F logo is never recoloured with the water: ${JSON.stringify(layers)}`);
+}
+async function contributionColours(page) {
+  const actions = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => {
+    const style = getComputedStyle(node), channels = style.backgroundColor.match(/[\d.]+/g)?.slice(0, 3).map(Number) || [];
+    return { text: node.textContent.trim(), credited: node.classList.contains('ui-button--contribution'), channels, ink: style.color };
+  }));
+  assert.ok(actions.some(action => action.credited), 'Signed-in homepage retains credited Feedback');
+  for (const action of actions) {
+    const [r, g, b] = action.channels, blue = b > r + 50 && b > g + 45;
+    assert.equal(blue, action.credited, `Only contribution actions use blue: ${action.text}`);
+    if (action.credited) assert.equal(action.ink, 'rgb(255, 255, 255)', 'Credited homepage label has white text');
+  }
+}
 async function verifyHiddenPause(page, background, waterImage) {
   // Isolated visibility fixture: exercise the same event used for a background
   // tab without relying on the host window focus or disturbing another browser.
@@ -100,7 +156,7 @@ async function verifyHiddenPause(page, background, waterImage) {
     await background.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.ready)));
     const still = await waterImage.boundingBox(), paused = await animationState(background);
     await page.waitForTimeout(200);
-    assert.ok(boxDifference(await waterImage.boundingBox(), still) < 0.1, 'A hidden document freezes the supplied image');
+    assert.ok(boxDifference(await waterImage.boundingBox(), still) < 0.1, 'A hidden document freezes the theme artwork');
     assert.deepEqual(await animationState(background), paused, 'A hidden document pauses every decorative animation');
   } finally {
     await page.evaluate(() => {
@@ -186,12 +242,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(page.locator('.marine-world, .mobile-harbour-background')).toHaveCount(0);
       await expect(background).toBeVisible();
       const waterImage = background.locator('img');
-      await expect(waterImage).toHaveAttribute('src', '/flowing-water-reference.jpeg');
-      await expect(waterImage).toBeVisible();
-      await expect.poll(() => waterImage.evaluate(image => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0)).toBe(true);
-      const waterResponse = await context.request.get(new URL('/flowing-water-reference.jpeg', base).href);
-      assert.equal(waterResponse.status(), 200);
-      assert.equal(createHash('sha256').update(await waterResponse.body()).digest('hex'), suppliedWaterHash, 'The actual supplied background image is served unchanged');
+      await verifyArtwork(page, context, theme, true);
       await expect(page.locator('.world-launcher')).toHaveCount(0);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       const logo = page.locator('.ecosystem-logo img');
@@ -199,6 +250,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect.poll(() => logo.evaluate(image => image.complete && image.naturalWidth === 1712 && image.naturalHeight === 222)).toBe(true);
       const logoResponse = await context.request.get(new URL('/logo-transparent.png', base).href);
       assert.equal(createHash('sha256').update(await logoResponse.body()).digest('hex'), originalLogoHash, 'Original E/F logo pixels retained');
+      await originalLogoColours(page);
       await page.getByLabel('Email', { exact: true }).fill(member.email);
       await page.getByLabel('Password', { exact: true }).fill('Synthetic Password 8');
       assert.ok((await page.locator('.access-login input').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).textTransform))).every(value => value === 'none'), 'Email and password case must remain exact');
@@ -206,7 +258,9 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       // Broken/absent old harbour artwork must never block theme switching.
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
       await expect(toggle()).toHaveAttribute('aria-busy', 'false');
+      await verifyArtwork(page, context, theme === 'light' ? 'dark' : 'light', true);
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await verifyArtwork(page, context, theme);
       await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       await expect(page.getByRole('alert')).toHaveText('Synthetic sign-in rejected.');
       await expect(page.getByLabel('Email', { exact: true })).toHaveValue(member.email);
@@ -217,6 +271,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible();
       await expect.poll(() => page.locator('.world-interface').evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity).length)).toBe(0);
       const geometry = await homepageGeometry(page, width);
+      await originalLogoColours(page);
+      await contributionColours(page);
       const stationary = await contentPositions(page);
       await expect(background).toHaveAttribute('data-paused', 'false');
       await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBeGreaterThan(0);
@@ -234,7 +290,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const after = await animationState(background);
       assert.notDeepEqual(after.map(a => a.time), before.map(a => a.time), 'Decorative water advances');
       const waterMotionPixels = Math.max(...['x', 'y', 'width', 'height'].map(key => Math.max(...imageSamples.map(box => box[key])) - Math.min(...imageSamples.map(box => box[key]))));
-      assert.ok(waterMotionPixels >= 0.3, `The supplied background visibly moves across four seconds (${waterMotionPixels.toFixed(2)}px)`);
+      assert.ok(waterMotionPixels >= 0.3, `The theme artwork visibly moves across four seconds (${waterMotionPixels.toFixed(2)}px)`);
       await verifyHiddenPause(page, background, waterImage);
       await shot('home');
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
@@ -279,11 +335,20 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const reduced = await animationState(background), reducedImage = await waterImage.boundingBox(); await page.waitForTimeout(200);
       assert.ok(reduced.every(a => a.state !== 'running'), 'Reduced motion has no running water animation');
       assert.deepEqual(await animationState(background), reduced, 'Reduced motion freezes the water');
-      assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Reduced motion leaves the supplied image still');
+      assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Reduced motion leaves the theme artwork still');
+      const reducedArtworkStyle = await waterImage.evaluate(node => { const style = getComputedStyle(node); return { fit: style.objectFit, position: style.objectPosition, filter: style.filter }; });
       await toggle().focus(); await toggle().press('Enter');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
+      await verifyArtwork(page, context, theme === 'light' ? 'dark' : 'light');
+      const oppositeArtworkStyle = await waterImage.evaluate(node => { const style = getComputedStyle(node); return { fit: style.objectFit, position: style.objectPosition, filter: style.filter }; });
+      assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Theme changes preserve the exact still-image position and size');
+      assert.equal(oppositeArtworkStyle.fit, reducedArtworkStyle.fit);
+      assert.equal(oppositeArtworkStyle.position, reducedArtworkStyle.position);
+      assert.notEqual(oppositeArtworkStyle.filter, reducedArtworkStyle.filter, 'Night changes the colouring of the same image');
       await expect(toggle()).toBeFocused(); await toggle().press('Enter');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await verifyArtwork(page, context, theme);
+      assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Returning to the initial theme preserves artwork geometry');
       assert.equal(await page.evaluate(() => localStorage.getItem('ecosystem.theme.v1')), theme);
       // The new visual layout must retain the real member's non-interactive 2.0 gate.
       state.user = { ...state.user, isAdmin: false, isSpcTrader: false };
@@ -321,8 +386,9 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.deepEqual(state.writes, expectedWrites);
       assert.deepEqual(locations.requests, [], 'Navigation and theme changes never save shared location data');
       assert.deepEqual(state.harbour, [], 'Flowing Water does not request retired harbour assets');
+      assert.ok(state.water.length > 0 && state.water.every(path => path === waterArtwork.path), 'Day and night use exactly the same artwork with no alternate scene requested');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      results.push({ engine, width, theme, passed: true, geometry, waterMotionPixels, suppliedWaterHash, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
+      results.push({ engine, width, theme, passed: true, geometry, waterMotionPixels, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
       console.log(`PASS ${engine} ${width} ${theme}: sign-in/out, navigation, theme, motion, role gate`);
     } catch (error) {
       results.push({ engine, width, theme, passed: false, error: error.message, unexpected: state.unexpected, errors });

@@ -66,28 +66,43 @@ async function profile(page) {
 async function credited(action) {
   await expect(action).toHaveAttribute('aria-description','CONTRIBUTION +1');
   await expect(action).toHaveClass(/knowledge-update-button/);
-  const style=await action.evaluate(node=>{const probe=document.createElement('i');probe.style.background='var(--ui-primary)';document.body.append(probe);const result={actual:getComputedStyle(node).backgroundColor,expected:getComputedStyle(probe).backgroundColor};probe.style.background='var(--ui-primary-hover)';result.hover=getComputedStyle(probe).backgroundColor;probe.remove();return result;});
-  assert.ok([style.expected,style.hover].includes(style.actual),`Credited action uses the shared green fill or its shared hover state: ${JSON.stringify(style)} ${await action.getAttribute('class')}`);
+  await expect(action).toHaveClass(/ui-button--contribution/);
+  const style=await action.evaluate(node=>{
+    const probe=document.createElement('i');node.append(probe);
+    const color=token=>{probe.style.background=`var(${token})`;return getComputedStyle(probe).backgroundColor;};
+    const result={actual:getComputedStyle(node).backgroundColor,ink:getComputedStyle(node).color,expected:color('--ui-contribution'),hover:color('--ui-contribution-hover'),expectedInk:color('--ui-contribution-ink')};
+    probe.remove();return result;
+  });
+  assert.ok([style.expected,style.hover].includes(style.actual),`Credited action uses the shared blue fill or its shared hover state: ${JSON.stringify(style)} ${await action.getAttribute('class')}`);
+  assert.equal(style.ink,style.expectedInk,'Contribution text uses the shared white ink');
+  const rgb=value=>value.match(/[\d.]+/g).slice(0,3).map(Number),fill=rgb(style.actual),ink=rgb(style.ink);
+  assert.ok(fill[2]>fill[0]+50&&fill[2]>fill[1]+45,'Contribution actions are visibly blue');
+  assert.deepEqual(ink,[255,255,255],'Contribution labels remain white in both themes');
+  const luminance=channels=>channels.map(value=>{const n=value/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;}).reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0);
+  const foreground=luminance(ink),background=luminance(fill);
+  assert.ok((Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05)>=4.5,'Contribution label contrast is at least 4.5:1');
 }
 async function neutral(action) {
   assert.equal(await action.getAttribute('aria-description'),null);
-  await expect(action).not.toHaveClass(/knowledge-update-button/);
+  await expect(action).not.toHaveClass(/knowledge-update-button|ui-button--contribution/);
   await expect(action.locator('.contribution-action-hint')).toHaveCount(0);
   const style=await action.evaluate(node=>{const probe=document.createElement('i');node.append(probe);const values=['--ui-control-surface','--ui-control-hover'].map(token=>{probe.style.background=`var(${token})`;return getComputedStyle(probe).backgroundColor;});probe.remove();return {actual:getComputedStyle(node).backgroundColor,values};});
   assert.ok(style.values.includes(style.actual),`Ordinary action stays neutral: ${await action.textContent()} ${style.actual}`);
+  const fill=style.actual.match(/[\d.]+/g).slice(0,3).map(Number);
+  assert.ok(!(fill[2]>fill[0]+50&&fill[2]>fill[1]+45),'Ordinary/private actions do not use the reserved contribution blue');
 }
 
 async function swappedInside(action,page) {
   await action.evaluate(node=>node.blur());await page.mouse.move(0,0);
   const hint=action.locator('.contribution-action-hint'),label=action.locator('.contribution-action-label');
   await expect(hint).toBeHidden();const before=await action.boundingBox();
-  await page.keyboard.press('Tab');await action.focus();await expect(action).toBeFocused();await expect(hint).toBeVisible();
+  await page.keyboard.press('Tab');await action.focus();await expect(action).toBeFocused();await expect(hint).toBeVisible();await credited(action);
   assert.equal(await label.evaluate(node=>getComputedStyle(node).opacity),'0');
   const after=await action.boundingBox(),content=await hint.boundingBox();
   assert.ok(Math.abs(before.width-after.width)<.5 && Math.abs(before.height-after.height)<.5,'Contribution replacement keeps button dimensions stable');
   assert.ok(content.x>=after.x && content.y>=after.y && content.x+content.width<=after.x+after.width && content.y+content.height<=after.y+after.height,'Contribution label is inside the button');
   assert.equal(await hint.evaluate(node=>getComputedStyle(node).position),'static','No external tooltip bubble');
-  if((page.viewportSize()?.width??0)>=760){await action.evaluate(node=>node.blur());await action.hover();await expect(hint).toBeVisible();assert.equal(await label.evaluate(node=>getComputedStyle(node).opacity),'0');}
+  if((page.viewportSize()?.width??0)>=760){await action.evaluate(node=>node.blur());await action.hover();await expect(hint).toBeVisible();await credited(action);assert.equal(await label.evaluate(node=>getComputedStyle(node).opacity),'0');}
 }
 async function openWorkspace(page,group,name) {
   const nav=page.getByRole('navigation',{name:'Workspace navigation'});

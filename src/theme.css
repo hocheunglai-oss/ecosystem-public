@@ -38,21 +38,21 @@
 /* Standard summary panels share the flat workspace surface in each theme. */
 :is(.office-selected-summary, .resource-balance) { background: var(--ws-surface, #eef3f9); }
 
-/* Explicit navy surfaces. */
+/* Shared dark working surfaces; semantic status colours retain their meaning. */
 :root[data-theme="dark"] :is(.workspace-window, .modal) .contribution-reward {
   color: var(--theme-amber);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --theme-canvas: #101d2b;
-  --theme-panel: #192b3c;
-  --theme-raised: #213748;
-  --theme-field: #0d1a28;
-  --theme-ink: #edf5fb;
-  --theme-muted: #afc3d3;
-  --theme-faint: #8fa9bb;
-  --theme-line: #52758666;
-  --theme-cyan: #78d9dd;
+  --theme-canvas: var(--ui-canvas);
+  --theme-panel: var(--ui-surface);
+  --theme-raised: var(--ui-raised);
+  --theme-field: var(--ui-field);
+  --theme-ink: var(--ui-ink);
+  --theme-muted: var(--ui-muted);
+  --theme-faint: #aa9fae;
+  --theme-line: var(--ui-line);
+  --theme-cyan: var(--ui-accent);
   --theme-lime: #c5f574;
   --theme-green: #b7e69c;
   --theme-amber: #f3d497;
@@ -61,7 +61,7 @@
   --muted: var(--theme-muted);
   --line: var(--theme-line);
   --surface: var(--theme-panel);
-  background: #081522;
+  background: var(--ui-canvas);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) {
   --ink: var(--theme-ink);
@@ -74,12 +74,12 @@
   --ws-cyan: var(--theme-cyan);
   color-scheme: dark;
   color: var(--theme-ink);
-  border-color: #789fa659;
+  border-color: var(--ui-boundary);
   background: var(--theme-canvas);
   box-shadow: 0 28px 100px #000a, inset 0 1px #c1ebed0b;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal)::backdrop {
-  background: #020b166b;
+  background: #100c186b;
 }
 :root[data-theme="dark"] .workspace-window .window-toolbar {
   color: var(--theme-ink);
@@ -90,9 +90,9 @@
 :root[data-theme="dark"] .workspace-window :is(.window-toolbar span, .window-toolbar b, .window-tool, .window-foot) {
   color: var(--theme-muted);
 }
-:root[data-theme="dark"] .workspace-window .window-foot { background: #101e2c; }
+:root[data-theme="dark"] .workspace-window .window-foot { background: var(--ui-raised); }
 :root[data-theme="dark"] :is(.window-content, .table-wrap, .resource-history, .center-incoming-list) {
-  scrollbar-color: #526f85 #152534;
+  scrollbar-color: var(--ui-boundary) var(--ui-field);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(h1, h2, h3, h4) {
   color: var(--theme-ink);
@@ -148,7 +148,7 @@
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(input, textarea, select):disabled {
   color: var(--theme-faint);
-  background: #1b2a38;
+  background: var(--ui-raised);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal, .entry-identity) select option {
   color: var(--theme-ink);
@@ -156,13 +156,13 @@
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(input, textarea, select):focus {
   border-color: var(--theme-cyan);
-  box-shadow: 0 0 0 3px #78d9dd1f;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-focus) 12%, transparent);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(button, summary, a):focus-visible {
   outline-color: var(--theme-cyan);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) input:is([type="checkbox"], [type="radio"]) {
-  accent-color: #b5ed70;
+  accent-color: var(--ui-focus);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .raw-input {
   background: var(--theme-field) !important;
@@ -170,7 +170,7 @@
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .search-select-list {
   background: var(--theme-panel);
-  border-color: #6b9ea7;
+  border-color: var(--ui-boundary);
   box-shadow: 0 15px 28px #0007;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.search-select-list > button, .search-select > svg, .search-box) {
@@ -178,10 +178,10 @@
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.search-select-list > button:hover, .search-select-list > button.is-active) {
   color: var(--theme-ink);
-  background: #294857;
+  background: var(--ui-control-hover);
 }
 
-/* Buttons, tabs and semantic feedback retain their meaning in the navy palette. */
+/* Ordinary actions and selection use neutral surfaces, separate from contributions. */
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
   .button.secondary, .parser-clear, .center-lifecycle button, .enquiry-terms button,
   .lost-reason-row > button, .segmented, .knowledge-strip .button
@@ -195,16 +195,16 @@
   .button.secondary:hover:not(:disabled), .parser-clear:hover:not(:disabled),
   .center-lifecycle button:hover, .enquiry-terms button:hover:not(:disabled),
   .modal-close:hover, .window-tool:hover, .icon-button:hover, .enquiry-icon:hover
-) { color: var(--theme-ink); background: var(--theme-raised); border-color: #79afb1; }
+) { color: var(--theme-ink); background: var(--theme-raised); border-color: var(--ui-focus); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .button.primary {
-  color: #172d20;
-  background: var(--theme-lime);
-  border-color: #b6dc62;
-  box-shadow: inset 0 1px #ffffff59, 0 3px 14px #a0d44b15;
+  color: var(--ui-control-ink);
+  background: var(--ui-control-surface);
+  border-color: var(--ui-control-border);
+  box-shadow: none;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .button.primary:hover:not(:disabled) {
-  color: #172d20;
-  background: #d1f890;
+  color: var(--ui-control-ink);
+  background: var(--ui-control-hover);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.modal-close, .enquiry-icon, .tabs button, .center-tabs button, .office-view-tabs [role="tab"]) {
   color: var(--theme-muted);
@@ -213,19 +213,19 @@
   .center-tabs button[aria-selected="true"], .office-view-tabs [role="tab"][aria-selected="true"], .segmented button.active
 ) {
   color: var(--theme-ink);
-  background: #24404c;
-  border-color: #649798;
-  box-shadow: inset 0 -2px #78d9dd;
+  background: var(--ui-raised);
+  border-color: var(--ui-focus);
+  box-shadow: inset 0 -2px var(--ui-focus);
 }
 :root[data-theme="dark"] .workspace-window .center-tabs button:hover { color: var(--theme-ink); background: var(--theme-raised); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .tabs button.active { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .tabs button.active::after { background: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .enquiry-terms button[aria-pressed="true"] {
-  color: var(--theme-lime);
-  background: #2c412c;
-  border-color: #8bac59;
+  color: var(--ui-control-ink);
+  background: var(--ui-control-hover);
+  border-color: var(--ui-focus);
 }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .badge { color: var(--theme-muted); background: #2a3f51; }
+:root[data-theme="dark"] :is(.workspace-window, .modal) .badge { color: var(--theme-muted); background: var(--ui-raised); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.badge.green, .notice.green) { color: var(--theme-green); background: #203d33; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.badge.amber, .notice.amber, .enquiry-review) { color: var(--theme-amber); background: #3c3527; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.badge.rose, .notice.rose, .segmented .active.danger) { color: var(--theme-rose); background: #462c3c; }
@@ -259,19 +259,19 @@
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item:hover, .port-card:hover, .center-incoming-open:hover, .center-history-compact summary:hover) { background: var(--theme-raised); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item.active, .port-card.active, .center-incoming-row.is-selected, .office-comparison-table tbody tr.is-selected) {
   background: var(--theme-raised);
-  border-color: #6b9695;
-  box-shadow: inset 3px 0 #8dd4b3;
+  border-color: var(--ui-focus);
+  box-shadow: inset 3px 0 var(--ui-focus);
 }
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-avatar, .square-icon, .circle-icon, .step-number) { color: var(--theme-cyan); background: #223e4c; }
+:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-avatar, .square-icon, .circle-icon, .step-number) { color: var(--theme-cyan); background: var(--ui-raised); }
 :root[data-theme="dark"] .workspace-window .center-credit-indicator {
   color: var(--theme-ink);
   background: var(--theme-panel);
-  border-color: #49818a;
+  border-color: var(--ui-boundary);
   box-shadow: inset 0 1px #c4fcfb0a;
 }
 :root[data-theme="dark"] .workspace-window .center-credit-numbers > div:last-child strong { color: var(--theme-lime); }
 :root[data-theme="dark"] .workspace-window .center-credit-numbers .is-negative strong { color: var(--theme-rose) !important; }
-:root[data-theme="dark"] :is(.center-credit-track, .progress, .team-progress-track) { background: #36505e; }
+:root[data-theme="dark"] :is(.center-credit-track, .progress, .team-progress-track) { background: var(--ui-line); }
 :root[data-theme="dark"] .workspace-window .center-queue-divider { background: var(--theme-line); box-shadow: none; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .outcome-form .fixture-product h3 { color: var(--theme-cyan); }
 
@@ -279,13 +279,13 @@
 :root[data-theme="dark"] :is(.workspace-window, .modal) table { color: var(--theme-ink); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) th {
   color: var(--theme-muted);
-  background: #1c3042;
+  background: var(--ui-raised);
   border-color: var(--theme-line);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) tbody th { color: var(--theme-ink); background: transparent; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) td { border-color: var(--theme-line); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) td small { color: var(--theme-muted); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) tbody tr:hover { background: #24394a; }
+:root[data-theme="dark"] :is(.workspace-window, .modal) tbody tr:hover { background: var(--ui-control-hover); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.office-comparison-table button) { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .text-button { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.positive, .text-green) { color: var(--theme-green) !important; }
@@ -304,11 +304,11 @@
 .workspace-window .window-foot-actions .ecosystem-feedback,
 :root .home-display-controls .theme-toggle.ecosystem-feedback {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
-  border: 1px solid #b7e96d; border-radius: 5px; background: #c5f574; color: #19301d;
+  border: 1px solid var(--ui-contribution-border); border-radius: var(--ui-radius-action); background: var(--ui-contribution); color: var(--ui-contribution-ink);
   min-height: 30px; white-space: nowrap;
 }
 .workspace-window .window-foot-actions .ecosystem-feedback:hover,
-:root .home-display-controls .theme-toggle.ecosystem-feedback:hover { background: #b9ed67; color: #19301d; }
+:root .home-display-controls .theme-toggle.ecosystem-feedback:hover { background: var(--ui-contribution-hover); color: var(--ui-contribution-ink); }
 .feedback-reward { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; }
 :root[data-interface="mobile"] .home-display-controls {
   display: grid;

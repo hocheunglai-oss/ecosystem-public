@@ -8,7 +8,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!api/|assets/|fonts/|marine/|pdf-preview/|privacy\\.html$|backup-privacy\\.html$|flowing-water-reference\\.jpeg$|favicon.svg|logo.png|logo-transparent.png|world-v2.png).*)",
+      "source": "/((?!api/|assets/|fonts/|marine/|pdf-preview/|privacy\\.html$|backup-privacy\\.html$|flowing-water-reference\\.jpeg$|flowing-water-day\\.png$|favicon.svg|logo.png|logo-transparent.png|world-v2.png).*)",
       "destination": "/index.html"
     }
   ],

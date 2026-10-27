@@ -32,10 +32,17 @@
   --ui-control-hover: #e5eee7;
   --ui-focus: #267064;
   --ui-link: #245fb2;
-  --ui-primary: #c5f574;
-  --ui-primary-hover: #b9ed67;
-  --ui-primary-border: #b7df75;
-  --ui-primary-ink: #19301d;
+  --ui-primary: var(--ui-raised);
+  --ui-primary-hover: var(--ui-control-hover);
+  --ui-primary-border: var(--ui-boundary);
+  --ui-primary-ink: var(--ui-ink);
+  --ui-contribution: #006fee;
+  --ui-contribution-hover: #005bcc;
+  --ui-contribution-border: #006fee;
+  --ui-contribution-ink: #ffffff;
+  --ui-recognition: #c5f574;
+  --ui-recognition-border: #b7df75;
+  --ui-recognition-ink: #19301d;
   --ui-danger: #a42f3b;
   --ui-danger-surface: #fff0f1;
   --ui-danger-border: #c47981;
@@ -52,19 +59,19 @@
   --panel-boundary: var(--ui-boundary);
 }
 :root[data-theme="dark"] {
-  --ui-canvas: #102c2d;
-  --ui-surface: #173638;
-  --ui-raised: #214345;
-  --ui-field: #123033;
-  --ui-ink: #e5eeea;
-  --ui-muted: #b4c8c2;
-  --ui-line: #496b65;
-  --ui-boundary: #608279;
-  --ui-accent: #a5d9c6;
-  --ui-control-hover: #294c48;
-  --ui-focus: #a5d9c6;
+  --ui-canvas: #171620;
+  --ui-surface: #211e2b;
+  --ui-raised: #2d2736;
+  --ui-field: #17151f;
+  --ui-ink: #f2edf2;
+  --ui-muted: #bdb3c1;
+  --ui-line: #554958;
+  --ui-boundary: #7a667c;
+  --ui-accent: #e3bca8;
+  --ui-control-hover: #352d3d;
+  --ui-focus: #e3bca8;
   --ui-link: #91c3ff;
-  --ui-primary-border: #aace69;
+  --ui-recognition-border: #aace69;
   --ui-danger: #ffb4c0;
   --ui-danger-surface: #3b2736;
   --ui-danger-border: #b47d8d;
@@ -77,7 +84,7 @@
   --theme-field: var(--ui-field);
   --theme-ink: var(--ui-ink);
   --theme-muted: var(--ui-muted);
-  --theme-faint: #9db7ad;
+  --theme-faint: #aa9fae;
   --theme-line: var(--ui-line);
   --theme-cyan: var(--ui-accent);
 }
@@ -127,6 +134,22 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea)::placeholder { color: var(--ui-muted); opacity: 1; }
 #root :is(.workspace-window, .modal, .workspace-module) :is(.field input, .field select, .field textarea):disabled { background: var(--ui-raised); color: var(--ui-muted); }
 #root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea, select):focus { border-color: var(--ui-focus); box-shadow: none; }
+/* Legacy profile headings and selected tabs must follow the night palette too. */
+:root[data-theme="dark"] #root :is(.buyer-profile, .buyer-profile-directory) {
+  --buyer-heading: var(--ui-raised);
+  --buyer-section-heading: var(--ui-raised);
+}
+:root[data-theme="dark"] #root :is(.workspace-window, .modal, .workspace-module) :is(
+  .credit-record-heading, .credit-record-table th, .credit-form-section > h3,
+  .profile-tab-content > header
+) { background: var(--ui-raised); }
+:root[data-theme="dark"] #root :is(.workspace-window, .modal, .workspace-module) :is(
+  .profile-tabs-list > button:not([data-visibility="private"])[aria-selected="true"],
+  .credit-workflow-tabs button[aria-pressed="true"]
+) {
+  background: var(--ui-raised); border-color: var(--ui-focus); color: var(--ui-ink);
+  box-shadow: inset 0 -2px var(--ui-focus);
+}
 
 /* Finite working type scale; never change the application's root rem scale. */
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) {
@@ -164,7 +187,7 @@
 #root :is(.workspace-window, .modal, .workspace-module) th { font-weight: var(--ui-weight-label); }
 
 /* Home entry actions have their own larger 16px scale. */
-/* Ordinary actions stay neutral. Green is explicit contribution or entry semantics. */
+/* Saturated blue is reserved for credited contributions; ordinary actions stay neutral. */
 #root :is(.ui-button, .button, button.lime-control:not(.launcher-toggle)),
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(
   .button, .lime-control, .attachments-trigger, .ecosystem-feedback, .knowledge-manage-button,
@@ -209,14 +232,18 @@
   .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
   .supplier-information-actions > button, .location-recents button, .supplier-recents button
 ):hover:not(:disabled) { background: var(--ui-control-hover); border-color: var(--ui-focus); box-shadow: none; filter: none; }
-#root button:is(.ui-button--contribution, .ui-button--entry):not(.launcher-toggle),
-#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button:is(
-  .ui-button--contribution, .ui-button--entry
-) { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
-#root button:is(.ui-button--contribution, .ui-button--entry):not(.launcher-toggle):hover:not(:disabled),
-#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button:is(
-  .ui-button--contribution, .ui-button--entry
-):hover:not(:disabled) { background: var(--ui-primary-hover); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
+#root button.ui-button--entry:not(.launcher-toggle),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button.ui-button--entry { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
+#root button.ui-button--entry:not(.launcher-toggle):hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button.ui-button--entry:hover:not(:disabled) { background: var(--ui-primary-hover); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); }
+#root button.ui-button--contribution,
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button.ui-button--contribution {
+  background: var(--ui-contribution); color: var(--ui-contribution-ink); border-color: var(--ui-contribution-border);
+}
+#root button.ui-button--contribution:hover:not(:disabled),
+#root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) button.ui-button--contribution:hover:not(:disabled) {
+  background: var(--ui-contribution-hover); color: var(--ui-contribution-ink); border-color: var(--ui-contribution-hover);
+}
 #root :is(.ui-button--danger, .button.danger),
 #root :is(.workspace-window, .modal, .workspace-module) :is(.button.danger, .ui-button--danger) {
   color: var(--ui-danger); background: var(--ui-danger-surface); border-color: var(--ui-danger-border);
@@ -255,7 +282,7 @@
 #root :is(.workspace-window, .modal, .workspace-module) .enquiry-terms button[aria-pressed="true"] {
   background:var(--ui-control-hover); color:var(--ui-control-ink); border-color:var(--ui-focus);
 }
-/* Navigation keeps its selected-state indication without contribution green. */
+/* Navigation keeps its selected-state indication without contribution blue. */
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .tabs > button, .center-tabs > button, .knowledge-tabs > button, .profile-tabs-list > button, .buyer-profile__tabs > button,
   .office-view-tabs [role="tab"], .segmented > button, .enquiry-terms > button,
@@ -294,11 +321,11 @@
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) :is(button, input, select, textarea):disabled,
 #root :is(.ui-button, .button, .icon-button):disabled { cursor: not-allowed; opacity: var(--ui-disabled-opacity); }
 
-/* Credited Feedback retains its green meaning in the Flowing Water homepage. */
+/* Credited Feedback shares the same blue treatment on entry and working screens. */
 #root .home-display-controls .ecosystem-feedback {
   min-height: var(--ui-control-height); padding: var(--ui-control-padding); border-radius: var(--ui-radius-action);
   font-family: var(--ui-font); font-size: var(--ui-text-action); font-weight: var(--ui-weight-label);
-  border-color: var(--ui-primary-border); background: var(--ui-primary); color: var(--ui-primary-ink);
+  border-color: var(--ui-contribution-border); background: var(--ui-contribution); color: var(--ui-contribution-ink);
 }
 /* Expanded windows retain a compact working area for ordinary editing. */
 #root .modal.window-dialog > form:not(.knowledge-editor-focused) { width: 100%; max-width: var(--ui-form-width); margin-inline: auto; }
@@ -321,6 +348,13 @@
   --ui-control-border: #608279;
   --ui-control-hover: #294c48;
   --ui-focus: #a5d9c6;
+}
+:root[data-theme="dark"] #root .account-inline-panel {
+  --ui-control-surface: var(--ui-field);
+  --ui-control-ink: var(--ui-ink);
+  --ui-control-border: var(--ui-boundary);
+  --ui-control-hover: #352d3d;
+  --ui-focus: #e3bca8;
 }
 #root .profile-dropdown label > span { font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
 #root .profile-dropdown input {

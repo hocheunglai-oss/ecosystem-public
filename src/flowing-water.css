@@ -28,85 +28,61 @@
   --flow-ghost: #ffffff16;
   --flow-footer: #eaf2eb;
 }
+/* Keep the supplied image intact. Overscan hides its screenshot frame during drift. */
 .flowing-water-background {
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  overflow: hidden;
-  pointer-events: none;
-  contain: strict;
-  background: linear-gradient(180deg, #398b7c, #2d817a 55%, #549fb4 80%, #88bddc);
+  position: fixed; inset: 0; z-index: -2; overflow: hidden;
+  pointer-events: none; contain: strict; background: #398b85;
 }
-.flowing-water-background > div { position: absolute; pointer-events: none; }
-.flowing-water-base {
-  inset: -16% -9% -15%;
-  background: radial-gradient(ellipse at 68% 4%, #61baa5, transparent 38%), radial-gradient(ellipse at 12% 10%, #1f6d61, transparent 46%), radial-gradient(ellipse at 85% 55%, #4aab9a, transparent 40%);
-  filter: blur(22px);
-  animation: flowing-water-base 31s ease-in-out infinite alternate;
+.flowing-water-background > * { position: absolute; pointer-events: none; }
+.flowing-water-image {
+  inset: -6%; width: 112%; height: 112%; max-width: none;
+  object-fit: cover; object-position: center; will-change: transform;
+  animation: flowing-water-drift 18s ease-in-out -4.5s infinite alternate;
 }
-.flowing-water-glow {
-  left: 38%; top: -36%; width: 45%; height: 92%;
-  border-radius: 45% 55% 70% 20%;
-  background: linear-gradient(160deg, #a4d8cb4d, #74c4b740 43%, transparent 75%);
-  filter: blur(37px);
-  animation: flowing-water-glow 27s ease-in-out infinite alternate;
-}
-.flowing-water-ribbon {
-  left: -29%; top: 39%; width: 135%; height: 39%; border-radius: 50%;
-  background: linear-gradient(180deg, transparent, #70a58a4d 35%, #76b5a133 50%, transparent 80%);
-  filter: blur(35px);
-  animation: flowing-water-ribbon 35s ease-in-out -10s infinite alternate;
-}
-.flowing-water-blue {
-  inset: 61% -17% -35%;
-  background: radial-gradient(ellipse at 50% 80%, #99c9e7, #70b3d4b3 45%, transparent 72%);
-  filter: blur(25px);
-  animation: flowing-water-blue 29s ease-in-out infinite alternate;
-}
-.flowing-water-blue::after {
-  content: ""; position: absolute; inset: 3% -10% 15%;
-  background: repeating-linear-gradient(178deg, transparent 0 19px, #d4efff33 26px, #c6e8f52b 39px, transparent 55px);
-  filter: blur(7px); opacity: .8;
+.flowing-water-sheen {
+  inset: 49% -15% -8%; opacity: .09;
+  background: repeating-linear-gradient(177deg, transparent 0 36px, #e2f7ff 44px, transparent 58px 106px);
+  filter: blur(9px); will-change: transform;
+  animation: flowing-water-sheen 12s ease-in-out -3s infinite alternate;
 }
 .flowing-water-shade {
   inset: 0;
-  background: linear-gradient(180deg, #052e3a80, #073b4059 42%, transparent 70%, #144b6266);
+  background: linear-gradient(110deg, #103f415e, #103f4124 27%, transparent 55%);
 }
-:root[data-theme="dark"] .flowing-water-background { background: linear-gradient(180deg, #1c4237, #163f40 55%, #19455f 80%, #17467c); }
-:root[data-theme="dark"] .flowing-water-base { background: radial-gradient(ellipse at 68% 4%, #5d7650, transparent 38%), radial-gradient(ellipse at 12% 10%, #0e2a26, transparent 46%), radial-gradient(ellipse at 85% 55%, #1c5351, transparent 40%); }
-:root[data-theme="dark"] .flowing-water-glow { background: linear-gradient(160deg, #7c9f7159, #678c791c 43%, transparent 75%); }
-:root[data-theme="dark"] .flowing-water-ribbon { background: linear-gradient(180deg, transparent, #5b9d8033 35%, #54887825 50%, transparent 80%); }
-:root[data-theme="dark"] .flowing-water-blue { background: radial-gradient(ellipse at 50% 80%, #306d9e, #225c7c99 45%, transparent 72%); }
-:root[data-theme="dark"] .flowing-water-blue::after { opacity: .18; }
-:root[data-theme="dark"] .flowing-water-shade { background: linear-gradient(180deg, #061b2333, #071e2844 42%, transparent 70%, #0b244b7d); }
-@keyframes flowing-water-base { from { transform: translate(-8px,-4px) scale(1.02); } to { transform: translate(11px,4px) scale(1.05); } }
-@keyframes flowing-water-glow { from { transform: translate(-10px,6px) rotate(35deg); opacity: .65; } to { transform: translate(14px,-6px) rotate(38deg); opacity: .85; } }
-@keyframes flowing-water-ribbon { from { transform: translate(0,7px) rotate(-18deg); } to { transform: translate(20px,-6px) rotate(-20deg); } }
-@keyframes flowing-water-blue { from { transform: translate(-12px,5px); opacity: .7; } to { transform: translate(15px,-7px); opacity: .9; } }
+:root[data-theme="dark"] .flowing-water-shade { background: linear-gradient(110deg, #092d37b3, #12354394 55%, #17304d80); }
+:root[data-theme="dark"] .flowing-water-sheen { opacity: .05; }
+@keyframes flowing-water-drift {
+  from { transform: translate(-1.7%, .5%) scale(1.025); }
+  to { transform: translate(1.7%, -.5%) scale(1.025); }
+}
+@keyframes flowing-water-sheen {
+  from { transform: translate(-24px, 7px); }
+  to { transform: translate(24px, -7px); }
+}
 
 #root .immersive-app[data-design="flowing-water"] .world-interface {
   flex: 1; min-height: calc(100svh - 80px); max-width: none; width: 100%; margin: 0;
-  display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
-  gap: 0; padding: 28px 42px 0;
+  display: grid; grid-template-columns: minmax(0,1fr) 384px; align-content: start; align-items: start;
+  gap: 24px 40px; padding: 32px 42px 0;
 }
 #root .immersive-app[data-design="flowing-water"] .world-left {
-  flex: 1; width: 100%; min-width: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; padding: 55px 0 145px;
+  width: 100%; min-width: 0; display: flex; flex-direction: column;
+  align-items: flex-start; justify-content: flex-start; padding: 0 0 40px;
 }
-#root .immersive-app[data-design="flowing-water"] .world-identity { min-height: 0; width: min(100%,432px); animation: none; }
+#root .immersive-app[data-design="flowing-water"] .world-identity { min-height: 0; width: min(100%,320px); animation: none; }
 #root .immersive-app[data-design="flowing-water"] .brand-lockup { width: 100%; }
 #root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: var(--flow-muted); font-weight: 450; font-size: 17px; }
 #root .immersive-app[data-design="flowing-water"] .world-launcher {
-  width: min(100%,850px); max-width: none; margin-top: 37px;
-  display: grid; grid-template-columns: 1fr 1.3fr 1.3fr; align-items: start; gap: 12px;
+  width: min(100%,296px); max-width: none; margin-top: 38px;
+  display: grid; grid-template-columns: minmax(0,1fr); align-items: start; gap: 12px;
   animation: none;
 }
 #root .immersive-app[data-design="flowing-water"] .main-search {
-  grid-column: 1 / -1; width: min(100%,290px); margin: 0 auto 18px; color: var(--flow-muted);
+  grid-column: 1 / -1; width: 100%; margin: 0 0 12px; color: var(--flow-muted);
 }
 #root .immersive-app[data-design="flowing-water"] .main-search-field {
-  min-height: 46px; border: 0; border-bottom: 1px solid var(--flow-rule); border-radius: 0;
-  background: transparent; box-shadow: none; padding: 0 1px; gap: 10px;
+  min-height: 46px; border: 1px solid var(--flow-rule); border-radius: var(--ui-radius-control);
+  background: #143f408f; box-shadow: none; padding: 0 12px; gap: 10px;
 }
 #root .immersive-app[data-design="flowing-water"] .main-search-field:focus-within { border-color: var(--flow-focus); box-shadow: 0 1px var(--flow-focus); }
 #root .immersive-app[data-design="flowing-water"] .main-search-field input {
@@ -114,13 +90,13 @@
 }
 #root .immersive-app[data-design="flowing-water"] .main-search-field input::placeholder { color: var(--flow-muted); opacity: 1; }
 #root .immersive-app[data-design="flowing-water"] .main-search-field button { width: 44px; height: 44px; color: var(--flow-ink); }
-#root .immersive-app[data-design="flowing-water"] .main-search-results { left: 50%; transform: translateX(-50%); background: var(--flow-menu); border-color: var(--flow-rule); border-radius: 14px; }
+#root .immersive-app[data-design="flowing-water"] .main-search-results { left: 0; transform: none; background: var(--flow-menu); border-color: var(--flow-rule); border-radius: 14px; }
 #root .immersive-app[data-design="flowing-water"] .launcher-group { position: relative; min-width: 0; }
 #root .immersive-app[data-design="flowing-water"] .launcher-toggle {
-  display: flex; align-items: center; justify-content: center; gap: 17px;
+  display: flex; align-items: center; justify-content: space-between; gap: 17px;
   min-height: 58px; padding: 16px 22px; width: 100%; border: 1px solid var(--flow-rule);
   border-radius: var(--ui-radius-action); font-size: 16px; font-weight: 600; line-height: 1.5;
-  letter-spacing: .015em; text-align: center; color: var(--flow-ghost-ink); background: var(--flow-ghost);
+  letter-spacing: .015em; text-align: left; color: var(--flow-ghost-ink); background: var(--flow-ghost);
   box-shadow: none; filter: none;
 }
 #root .immersive-app[data-design="flowing-water"] .launcher-group[data-group="Trading"] .launcher-toggle {
@@ -129,16 +105,17 @@
 #root .immersive-app[data-design="flowing-water"] button.launcher-toggle:hover { background: #ffffff50; filter: none; }
 #root .immersive-app[data-design="flowing-water"] .launcher-group[data-group="Trading"] button.launcher-toggle:hover { background: #e6efdf; }
 #root .immersive-app[data-design="flowing-water"] .launcher-toggle > svg { width: 20px; height: 20px; flex-shrink: 0; }
-#root .immersive-app[data-design="flowing-water"] .launcher-expansion { position: absolute; top: calc(100% + 9px); left: 0; right: 0; z-index: 4; border-radius: 16px; }
+#root .immersive-app[data-design="flowing-water"] .launcher-expansion { position: static; z-index: 4; margin-top: 0; border-radius: 16px; }
+#root .immersive-app[data-design="flowing-water"] .is-open .launcher-expansion { margin-top: 8px; }
 #root .immersive-app[data-design="flowing-water"] .is-open .launcher-menu { padding: 6px 9px; background: var(--flow-menu); border-radius: 16px; box-shadow: 0 12px 36px #001c2626; }
 #root .immersive-app[data-design="flowing-water"] .launcher-menu > .launcher-menu-row { margin: 0; background: transparent; border: 0; border-radius: 8px; }
 #root .immersive-app[data-design="flowing-water"] .launcher-link { min-height: 46px; padding: 9px 8px; font-size: 13px; }
 #root .immersive-app[data-design="flowing-water"] .launcher-menu-row > button:hover { background: #ffffff16; }
-#root .immersive-app[data-design="flowing-water"] .launcher-release-remark { margin-top: 10px; padding: 0 15px; background: transparent; color: var(--flow-muted); text-align: center; font-size: 11px; line-height: 1.6; }
+#root .immersive-app[data-design="flowing-water"] .launcher-release-remark { margin-top: 10px; padding: 0 15px; background: transparent; color: var(--flow-ghost-ink); text-align: left; font-size: 11px; line-height: 1.6; }
 #root .immersive-app[data-design="flowing-water"] .launcher-heading { opacity: .8; }
 
-#root .immersive-app[data-design="flowing-water"] .home-hud-stack { order: -1; align-self: flex-end; flex: none; width: min(100%,384px); max-width: none; margin: 0; }
-#root .immersive-app[data-design="flowing-water"] .trader-hud[data-trader-hud] { background: transparent; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+#root .immersive-app[data-design="flowing-water"] .home-hud-stack { align-self: start; justify-self: end; width: 100%; max-width: 384px; margin: 0; }
+#root .immersive-app[data-design="flowing-water"] .trader-hud[data-trader-hud] { padding: 14px 16px 8px; background: #143f408f; border: 1px solid #edf9f561; border-radius: 22px; box-shadow: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: none; }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .hud-header { padding: 0; border: 0; }
 #root .immersive-app[data-design="flowing-water"] .hud-identity strong { font-size: 14px; font-weight: 600; letter-spacing: .04em; }
 #root .immersive-app[data-design="flowing-water"] .hud-identity > span { color: var(--flow-muted); font-size: 11px; }
@@ -147,7 +124,7 @@
 #root .immersive-app[data-design="flowing-water"] .trader-hud .hud-points-row { border: 0; padding: 5px 0; }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .account-inline-slot:not(:empty) { margin-top: 10px; border-radius: 16px; overflow: clip; background: var(--flow-menu); }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .account-inline-panel { background: var(--flow-menu); border-radius: 16px; }
-#root .immersive-app[data-design="flowing-water"] .home-preview-banner:not(:empty) { position: static; order: -2; align-self: center; left: auto; top: auto; transform: none; margin: 0 0 18px; width: min(100%,580px); flex: none; }
+#root .immersive-app[data-design="flowing-water"] .home-preview-banner:not(:empty) { position: static; grid-column: 1 / -1; justify-self: center; align-self: center; left: auto; top: auto; transform: none; margin: 0; width: min(100%,580px); flex: none; }
 
 #root .immersive-app[data-design="flowing-water"] .flowing-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px 24px; flex-wrap: wrap; padding: 14px 42px 24px; color: var(--flow-footer); }
 #root .immersive-app[data-design="flowing-water"] .world-controls { position: static; order: 0; width: auto; max-width: none; margin: 0; padding: 0; color: inherit; font-size: 10px; letter-spacing: .06em; text-shadow: none; }
@@ -162,9 +139,9 @@
 #root .immersive-app[data-design="flowing-water"] .entry-screen { flex: 1; min-height: calc(100svh - 80px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; padding: 70px 24px; }
 #root .immersive-app[data-design="flowing-water"] .entry-brand { position: static; width: min(100%,432px); max-width: none; }
 #root .immersive-app[data-design="flowing-water"] .entry-pass { width: min(100%,360px); padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; gap: 20px; }
-#root .immersive-app[data-design="flowing-water"] .access-login label { color: var(--flow-muted); font-size: 13px; font-weight: 600; gap: 8px; letter-spacing: .04em; }
+#root .immersive-app[data-design="flowing-water"] .access-login label { color: var(--flow-ghost-ink); font-size: 13px; font-weight: 600; gap: 8px; letter-spacing: .04em; }
 #root .immersive-app[data-design="flowing-water"] .access-login input { min-height: 50px; border-radius: var(--ui-radius-control); padding: 12px 16px; background: var(--ui-field); color: var(--ui-ink); border: 1px solid var(--ui-line); font-size: 16px; letter-spacing: 0; }
-#root .immersive-app[data-design="flowing-water"] .access-login p { color: var(--flow-muted); font-size: 13px; line-height: 1.6; }
+#root .immersive-app[data-design="flowing-water"] .access-login p { color: var(--flow-ghost-ink); font-size: 13px; line-height: 1.6; }
 #root .immersive-app[data-design="flowing-water"] .access-login p[role="alert"] { padding: 12px 14px; border-radius: 8px; background: var(--ui-danger-surface); color: var(--ui-danger); border: 1px solid var(--ui-danger-border); }
 #root .immersive-app[data-design="flowing-water"] .access-login .entry-submit { width: 100%; min-height: 56px; margin-top: 8px; padding: 15px 24px; border-radius: var(--ui-radius-action); justify-content: center; gap: 16px; background: var(--flow-primary); color: var(--flow-primary-ink); border-color: var(--flow-primary); font-size: 16px; font-weight: 600; }
 #root .immersive-app[data-design="flowing-water"] .access-login .entry-submit:hover:not(:disabled) { background: #e6efdf; color: var(--flow-primary-ink); }
@@ -173,11 +150,11 @@
   #root .immersive-app[data-design="flowing-water"] .flowing-footer { justify-content: center; flex-direction: column-reverse; gap: 10px; }
   #root .immersive-app[data-design="flowing-water"] .home-display-controls { justify-content: center; }
 }
-:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-interface { min-height: 0; padding: max(22px,env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) 0 max(22px,env(safe-area-inset-left)); }
-:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-hud-stack { align-self: center; width: min(100%,420px); }
-:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-left { flex: 1; padding: 44px 0 50px; }
-:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-identity { width: min(100%,360px); }
-:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-launcher { grid-template-columns: minmax(0,1fr); width: min(100%,360px); margin-top: 30px; gap: 12px; }
+:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-interface { display: flex; flex-direction: column; gap: 0; min-height: 0; padding: max(22px,env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) 0 max(22px,env(safe-area-inset-left)); }
+:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-hud-stack { order: -1; align-self: stretch; width: 100%; max-width: none; }
+:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-left { flex: 1; padding: 38px 0 44px; }
+:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-identity { width: min(100%,320px); }
+:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .world-launcher { grid-template-columns: minmax(0,1fr); width: 100%; margin-top: 30px; gap: 12px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .main-search { margin-bottom: 14px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .launcher-toggle { min-height: 56px; justify-content: space-between; padding: 15px 24px; font-size: 16px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .launcher-expansion { position: static; margin-top: 0; }
@@ -188,12 +165,11 @@
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-display-controls .ecosystem-feedback { flex-basis: auto; margin: 0; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .entry-screen { min-height: 0; padding: 60px 24px 48px; gap: 35px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .entry-brand { width: min(100%,360px); }
-/* Only two decorative layers move on phones; all controls and reading surfaces stay still. */
-:root[data-interface="mobile"] .flowing-water-base { animation: flowing-water-base 31s ease-in-out infinite alternate !important; }
-:root[data-interface="mobile"] .flowing-water-blue { animation: flowing-water-blue 29s ease-in-out infinite alternate !important; }
-:root[data-interface="mobile"] .flowing-water-glow { left: 14%; width: 100%; top: -21%; transform: rotate(35deg); }
-:root[data-interface="mobile"] .flowing-water-ribbon { top: 48%; width: 180%; left: -45%; transform: rotate(-18deg); }
-#root .flowing-water-background[data-paused="true"] > div { animation-play-state: paused !important; }
+/* Preserve the same two moving layers on phones; stop both for every pause mode. */
+:root[data-interface="mobile"] .flowing-water-image { animation: flowing-water-drift 18s ease-in-out -4.5s infinite alternate !important; }
+:root[data-interface="mobile"] .flowing-water-sheen { animation: flowing-water-sheen 12s ease-in-out -3s infinite alternate !important; }
+:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-preview-banner:not(:empty) { order: -2; margin-bottom: 18px; }
+#root .flowing-water-background[data-paused="true"] > * { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) {
-  #root .flowing-water-background > div { animation: none !important; }
+  #root .flowing-water-background > * { animation: none !important; }
 }

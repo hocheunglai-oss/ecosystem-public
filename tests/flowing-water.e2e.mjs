@@ -17,6 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
+const suppliedWaterHash = '96578f550faa3a003a89c672b24af6698e3188f97c23a1a3688761727fd4e1c0';
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -78,6 +79,38 @@ const animationState = background => background.evaluate(node => node.getAnimati
   name: animation.animationName, state: animation.playState, time: animation.currentTime,
   duration: animation.effect?.getComputedTiming().duration,
 })));
+const boxDifference = (first, second) => Math.max(...['x', 'y', 'width', 'height'].map(key => Math.abs(first[key] - second[key])));
+const contentPositions = page => page.locator('.world-identity, .main-search, .world-launcher, .home-hud-stack, .flowing-footer').evaluateAll(nodes => nodes.map(node => {
+  const box = node.getBoundingClientRect();
+  return { name: node.className, x: box.x, y: box.y, width: box.width, height: box.height };
+}));
+async function verifyHiddenPause(page, background, waterImage) {
+  // Isolated visibility fixture: exercise the same event used for a background
+  // tab without relying on the host window focus or disturbing another browser.
+  await page.evaluate(() => {
+    for (const key of ['hidden', 'visibilityState']) {
+      if (Object.hasOwn(document, key)) throw new Error(`Unexpected own visibility property: ${key}`);
+    }
+    Object.defineProperties(document, { hidden: { configurable: true, value: true }, visibilityState: { configurable: true, value: 'hidden' } });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  try {
+    await expect(background).toHaveAttribute('data-paused', 'true');
+    await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBe(0);
+    await background.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.ready)));
+    const still = await waterImage.boundingBox(), paused = await animationState(background);
+    await page.waitForTimeout(200);
+    assert.ok(boxDifference(await waterImage.boundingBox(), still) < 0.1, 'A hidden document freezes the supplied image');
+    assert.deepEqual(await animationState(background), paused, 'A hidden document pauses every decorative animation');
+  } finally {
+    await page.evaluate(() => {
+      delete document.hidden; delete document.visibilityState;
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+  }
+  await expect(background).toHaveAttribute('data-paused', 'false');
+  await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBeGreaterThan(0);
+}
 async function noOverflow(page, name) {
   const bounds = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
   assert.ok(bounds.document <= bounds.viewport + 1, `${name}: horizontal overflow ${JSON.stringify(bounds)}`);
@@ -98,14 +131,23 @@ async function homepageGeometry(page, width) {
     assert.ok(button.radius >= button.height / 2, `${button.text}: approved pill action`);
     assert.ok(button.x >= 0 && button.x + button.width <= width + 1, `${button.text}: clipped entry action`);
   }
-  if (width >= 760) {
-    assert.ok(Math.max(...geometry.map(b => b.y)) - Math.min(...geometry.map(b => b.y)) < 2, 'Desktop launchers form one row');
-    assert.ok(geometry.every((b, i) => i === 0 || b.x >= geometry[i - 1].x + geometry[i - 1].width), 'Desktop launchers do not overlap');
-  } else {
-    assert.ok(geometry.every((b, i) => i === 0 || b.y >= geometry[i - 1].y + geometry[i - 1].height), 'Phone launchers stack without overlap');
-  }
+  assert.ok(geometry.every((b, i) => i === 0 || b.y >= geometry[i - 1].y + geometry[i - 1].height), 'Launchers stack without overlap at every screen width');
+  assert.ok(Math.max(...geometry.map(b => b.x)) - Math.min(...geometry.map(b => b.x)) < 2, 'Stacked launchers share a left edge');
   const logo = await page.locator('.world-identity .ecosystem-logo').boundingBox();
-  assert.ok(Math.abs(logo.x + logo.width / 2 - width / 2) < 3, 'Homepage logo is centered');
+  const search = await page.locator('.main-search').boundingBox();
+  assert.ok(Math.abs(logo.x - geometry[0].x) < 3 && Math.abs(search.x - geometry[0].x) < 3, 'Logo, search and navigation retain the original left alignment');
+  assert.ok(search.y >= logo.y + logo.height && geometry[0].y >= search.y + search.height, 'Search and stacked navigation follow the logo');
+  if (width >= 760) assert.ok(logo.x < width * 0.1 && logo.y < 160, 'Desktop logo remains at the top left, including wide displays');
+  const account = await page.locator('.trader-hud[data-trader-hud]').evaluate(node => {
+    const style = getComputedStyle(node), box = node.getBoundingClientRect(), canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1; const context = canvas.getContext('2d');
+    context.fillStyle = style.backgroundColor; context.fillRect(0, 0, 1, 1);
+    return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, radius: parseFloat(style.borderRadius), alpha: context.getImageData(0, 0, 1, 1).data[3] / 255 };
+  });
+  assert.ok(account.alpha > 0 && account.alpha < 1 && account.radius >= 8, 'Account controls have a bounded translucent panel');
+  assert.ok(account.x >= 0 && account.right <= width + 1, 'Account panel fits the viewport');
+  if (width >= 760) assert.ok(account.x > width / 2 && account.y < 160 && account.x > logo.x + logo.width, 'Desktop account panel stays at the top right, separate from the left navigation');
+  else assert.ok(account.bottom <= logo.y, 'Phone account panel and left-aligned logo do not overlap');
   return geometry;
 }
 
@@ -113,7 +155,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
   if (process.env.ECO_TEST_ENGINE && process.env.ECO_TEST_ENGINE !== engine) continue;
   const executablePath = process.env[engine === 'chromium' ? 'ECO_CHROMIUM_EXECUTABLE' : 'ECO_WEBKIT_EXECUTABLE'];
   const browser = await kind.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-  try { for (const width of [1440, 1024, 320, 390]) for (const theme of ['light', 'dark']) {
+  try { for (const width of [1440, 1920, 1024, 320, 390]) for (const theme of ['light', 'dark']) {
     if (process.env.ECO_TEST_WIDTH && +process.env.ECO_TEST_WIDTH !== width || process.env.ECO_TEST_THEME && process.env.ECO_TEST_THEME !== theme) continue;
     const context = await browser.newContext({ viewport: { width, height: width < 760 ? 844 : 900 }, isMobile: width < 760, hasTouch: width < 760, reducedMotion: 'no-preference', colorScheme: theme });
     await installStagingCookies(context, base);
@@ -126,6 +168,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     const shot = async name => { await noOverflow(page, name);
       const footer = await page.locator('.home-display-controls button:visible').evaluateAll(nodes => nodes.map(node => ({ label:node.textContent.trim(), size:parseFloat(getComputedStyle(node).fontSize), height:node.getBoundingClientRect().height })));
       assert.ok(footer.every(control => control.size >= 14 && control.height >= 44), `Readable footer actions: ${JSON.stringify(footer)}`);
+      const textInk = await page.locator('.access-login label:visible, .access-login p:not([role="alert"]):visible, .launcher-release-remark:visible').evaluateAll(nodes => nodes.map(node => {
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d'); context.fillStyle = getComputedStyle(node).color; context.fillRect(0, 0, 1, 1);
+        const [red, green, blue] = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(value => { const s = value / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+        return { text: node.textContent.trim(), luminance: .2126 * red + .7152 * green + .0722 * blue };
+      }));
+      assert.ok(textInk.every(label => theme === 'light' ? label.luminance < .04 : label.luminance > .5), `Sign-in labels and release remarks use dark ink on the bright day image and light ink at night: ${JSON.stringify(textInk)}`);
       await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); };
     const background = page.locator('.flowing-water-background');
     const toggle = () => page.locator('.home-display-controls').getByRole('button', { name: /^(Dark|Light) mode$/ });
@@ -136,6 +185,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.deepEqual(await page.locator('.access-login label').evaluateAll(nodes => nodes.map(node => node.textContent.trim())), ['Email', 'Password'], 'Sign-in retains only existing form labels');
       await expect(page.locator('.marine-world, .mobile-harbour-background')).toHaveCount(0);
       await expect(background).toBeVisible();
+      const waterImage = background.locator('img');
+      await expect(waterImage).toHaveAttribute('src', '/flowing-water-reference.jpeg');
+      await expect(waterImage).toBeVisible();
+      await expect.poll(() => waterImage.evaluate(image => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0)).toBe(true);
+      const waterResponse = await context.request.get(new URL('/flowing-water-reference.jpeg', base).href);
+      assert.equal(waterResponse.status(), 200);
+      assert.equal(createHash('sha256').update(await waterResponse.body()).digest('hex'), suppliedWaterHash, 'The actual supplied background image is served unchanged');
       await expect(page.locator('.world-launcher')).toHaveCount(0);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       const logo = page.locator('.ecosystem-logo img');
@@ -159,14 +215,27 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await shot('sign-in-error');
       await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible();
+      await expect.poll(() => page.locator('.world-interface').evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity).length)).toBe(0);
       const geometry = await homepageGeometry(page, width);
-      const stationary = await page.locator('.world-left').boundingBox();
+      const stationary = await contentPositions(page);
       await expect(background).toHaveAttribute('data-paused', 'false');
       await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBeGreaterThan(0);
-      const before = await animationState(background); await page.waitForTimeout(180);
+      const before = await animationState(background), imageSamples = [await waterImage.boundingBox()];
+      // Measure the visible range, not only net start/end displacement: a slow
+      // alternate animation can cross its turning point during this interval.
+      // Sample the live animation without changing its clock or playback rate.
+      for (let sample = 0; sample < 8; sample++) {
+        await page.waitForTimeout(500);
+        imageSamples.push(await waterImage.boundingBox());
+        const contentAfter = await contentPositions(page);
+        assert.equal(contentAfter.length, stationary.length);
+        for (let index = 0; index < stationary.length; index++) assert.ok(boxDifference(contentAfter[index], stationary[index]) < 0.1, `Water never moves ${stationary[index].name}`);
+      }
       const after = await animationState(background);
       assert.notDeepEqual(after.map(a => a.time), before.map(a => a.time), 'Decorative water advances');
-      assert.deepEqual(await page.locator('.world-left').boundingBox(), stationary, 'Water never moves the controls');
+      const waterMotionPixels = Math.max(...['x', 'y', 'width', 'height'].map(key => Math.max(...imageSamples.map(box => box[key])) - Math.min(...imageSamples.map(box => box[key]))));
+      assert.ok(waterMotionPixels >= 0.3, `The supplied background visibly moves across four seconds (${waterMotionPixels.toFixed(2)}px)`);
+      await verifyHiddenPause(page, background, waterImage);
       await shot('home');
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
       await expect(page.getByRole('region', { name: 'Notifications', exact: true })).toBeVisible();
@@ -183,6 +252,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
         if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
         await expect(button).toHaveAttribute('aria-expanded', 'true');
         assert.equal(await nav.locator('.launcher-toggle[aria-expanded="true"]').count(), 1, 'Only one launcher expands');
+        await expect.poll(() => nav.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity).length)).toBe(0);
+        const menuLayout = await nav.locator('.launcher-group').evaluateAll(nodes => nodes.map(node => {
+          const menu = node.querySelector('.launcher-menu')?.getBoundingClientRect();
+          return { top: node.getBoundingClientRect().top, open: node.querySelector('.launcher-toggle')?.getAttribute('aria-expanded') === 'true', menuBottom: menu?.bottom };
+        }));
+        const expandedIndex = menuLayout.findIndex(item => item.open);
+        if (expandedIndex + 1 < menuLayout.length) assert.ok(menuLayout[expandedIndex].menuBottom <= menuLayout[expandedIndex + 1].top + 1, `${group}: expanded choices never cover the next navigation group`);
         for (const label of children) {
           await nav.getByRole('button', { name: label, exact: true }).click();
           const dialog = page.getByRole('dialog', { name: label, exact: true }); await expect(dialog).toBeVisible();
@@ -198,10 +274,12 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       }
       const opened = nav.locator('.launcher-toggle[aria-expanded="true"]'); if (await opened.count()) await opened.click();
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await expect(background).toHaveAttribute('data-paused', 'true');
-      const reduced = await animationState(background); await page.waitForTimeout(100);
+      await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBe(0);
+      await background.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.ready)));
+      const reduced = await animationState(background), reducedImage = await waterImage.boundingBox(); await page.waitForTimeout(200);
       assert.ok(reduced.every(a => a.state !== 'running'), 'Reduced motion has no running water animation');
       assert.deepEqual(await animationState(background), reduced, 'Reduced motion freezes the water');
+      assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Reduced motion leaves the supplied image still');
       await toggle().focus(); await toggle().press('Enter');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
       await expect(toggle()).toBeFocused(); await toggle().press('Enter');
@@ -244,7 +322,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.deepEqual(locations.requests, [], 'Navigation and theme changes never save shared location data');
       assert.deepEqual(state.harbour, [], 'Flowing Water does not request retired harbour assets');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      results.push({ engine, width, theme, passed: true, geometry, signedOut: true, signedIn: true, nonAdminGate: true });
+      results.push({ engine, width, theme, passed: true, geometry, waterMotionPixels, suppliedWaterHash, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
       console.log(`PASS ${engine} ${width} ${theme}: sign-in/out, navigation, theme, motion, role gate`);
     } catch (error) {
       results.push({ engine, width, theme, passed: false, error: error.message, unexpected: state.unexpected, errors });

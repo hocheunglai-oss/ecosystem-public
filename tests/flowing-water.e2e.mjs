@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '6caf06aaab868733a6bb23f8b1ec42aea91443b718b9f0a8510d801e1f77159d' };
+const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -100,15 +100,49 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
     assert.ok(filter.includes('#eco-watercolour-night'), 'Night applies its colour filter to the same visible image');
     const palette = await page.locator('#eco-watercolour-night').evaluate(node => ({
       primitives: [...node.children].map(child => child.localName),
+      matrix: node.querySelector('feColorMatrix').getAttribute('values').trim().split(/\s+/).map(Number),
       channels: ['feFuncR', 'feFuncG', 'feFuncB'].map(name => node.querySelector(name).getAttribute('tableValues').trim().split(/\s+/).map(Number)),
+      alpha: node.querySelector('feFuncA')?.getAttribute('type'),
     }));
     assert.deepEqual(palette.primitives, ['feColorMatrix', 'feComponentTransfer'], 'Night changes only colour: no replacement scene, blur or displacement');
+    assert.equal(palette.matrix.length, 20);
+    assert.ok(palette.matrix.every(Number.isFinite));
+    assert.deepEqual(palette.matrix.slice(15), [0, 0, 0, 1, 0], 'The night matrix preserves the source alpha');
+    assert.deepEqual([palette.matrix[3], palette.matrix[8], palette.matrix[13]], [0, 0, 0], 'Source opacity does not change the night colours');
+    assert.equal(palette.alpha, 'identity', 'The final transfer also preserves source alpha');
     assert.ok(palette.channels.every(channel => channel.length === palette.channels[0].length && channel.every(value => Number.isFinite(value) && value >= 0 && value <= 1)));
+    const regions = await image.evaluate((image, palette) => {
+      const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const clamp = value => Math.max(0, Math.min(1, value));
+      return [[.08, .30], [.39, .63], [.73, .95]].map(([top, bottom]) => {
+        const source = [0, 0, 0], night = [0, 0, 0], squares = [0, 0, 0]; let count = 0;
+        for (let y = Math.floor(canvas.height * top); y < canvas.height * bottom; y += 8) {
+          for (let x = Math.floor(canvas.width * .1); x < canvas.width * .9; x += 8) {
+            const offset = (y * canvas.width + x) * 4, rgb = [0, 1, 2].map(channel => pixels[offset + channel] / 255);
+            for (let channel = 0; channel < 3; channel++) {
+              const row = palette.matrix.slice(channel * 5, channel * 5 + 5), input = clamp(rgb.reduce((sum, value, index) => sum + value * row[index], row[4]));
+              const table = palette.channels[channel], position = input * (table.length - 1), index = Math.min(Math.floor(position), table.length - 2);
+              const value = table[index] + (table[index + 1] - table[index]) * (position - index);
+              source[channel] += rgb[channel]; night[channel] += value; squares[channel] += value * value;
+            }
+            count++;
+          }
+        }
+        const rgb = night.map(value => value / count);
+        return { source: source.map(value => value / count), rgb, variation: squares.map((value, channel) => Math.sqrt(Math.max(0, value / count - rgb[channel] ** 2))) };
+      });
+    }, palette);
     const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
-    for (let index = 1; index < palette.channels[0].length; index++) {
-      const input = index / (palette.channels[0].length - 1);
-      assert.ok(luminance(palette.channels.map(channel => channel[index])) < luminance([input, input, input]), 'Night colour mapping darkens the midtones and highlights');
+    for (const region of regions) {
+      assert.ok(luminance(region.rgb) < luminance(region.source), 'Each night region is darker than its corresponding day region');
+      assert.ok(Math.max(...region.variation) > .03, 'Night retains local colour variation instead of clipping a region into a flat fill');
     }
+    const [plum, copper, blue] = regions.map(region => region.rgb);
+    assert.ok(plum[2] > plum[0] * 1.2 && plum[0] > plum[1] * 1.2, 'The upper teal region becomes distinctly plum');
+    assert.ok(copper[0] > copper[1] * 1.5 && copper[0] > copper[2] * 1.6, 'The mint middle becomes distinctly copper');
+    assert.ok(blue[2] > blue[0] * 1.5 && blue[2] > blue[1] * 1.3, 'The blue lower region remains distinctly dusky blue');
   }
   if (verifyBytes) {
     const response = await context.request.get(new URL(expected.path, base).href);

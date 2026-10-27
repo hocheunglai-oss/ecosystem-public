@@ -12,11 +12,13 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
     <svg className="flowing-water-palette" width="0" height="0" focusable="false">
       <defs>
         <filter id="eco-watercolour-night" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-          <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0" />
+          {/* Retain source hue: teal becomes plum, mint copper, and blue stays dusky blue. */}
+          <feColorMatrix type="matrix" values="-0.315127 4.299968 -1.352730 0 -1.626157 0.626944 1.519584 0.002427 0 -0.794092 0.386135 -3.250374 1.438371 0 1.762207 0 0 0 1 0" />
           <feComponentTransfer>
-            <feFuncR type="table" tableValues="0.043 0.129 0.286 0.502 0.540" />
-            <feFuncG type="table" tableValues="0.043 0.098 0.173 0.314 0.320" />
-            <feFuncB type="table" tableValues="0.082 0.184 0.298 0.310 0.320" />
+            <feFuncR type="table" tableValues="0.035 0.540" />
+            <feFuncG type="table" tableValues="0.025 0.300" />
+            <feFuncB type="table" tableValues="0.065 0.440" />
+            <feFuncA type="identity" />
           </feComponentTransfer>
         </filter>
       </defs>

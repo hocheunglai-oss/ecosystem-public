@@ -404,24 +404,38 @@ async function verifyNightContrast(page) {
 async function verifyHiddenPause(page, background, waterImage) {
   // Isolated visibility fixture: exercise the same event used for a background
   // tab without relying on the host window focus or disturbing another browser.
-  const beforePausePlan = await waterPixelPlan(page), beforePausePixels = await waterPixels(page, beforePausePlan);
-  await page.evaluate(() => {
+  const canvas = await background.locator('canvas').elementHandle();
+  assert.ok(canvas, 'The current decorative canvas exists before pausing');
+  const supported = rendererCapabilities.get(page);
+  await expect(background).toHaveAttribute('data-flow-state', supported ? 'running' : 'fallback');
+  const beforePause = await background.evaluate(node => {
+    const canvas = node.querySelector('canvas');
+    const state = { renderer: node.dataset.renderer, frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0) };
     for (const key of ['hidden', 'visibilityState']) {
       if (Object.hasOwn(document, key)) throw new Error(`Unexpected own visibility property: ${key}`);
     }
     Object.defineProperties(document, { hidden: { configurable: true, value: true }, visibilityState: { configurable: true, value: 'hidden' } });
     document.dispatchEvent(new Event('visibilitychange'));
+    return state;
   });
   try {
     await expect(background).toHaveAttribute('data-paused', 'true');
+    await expect(background).toHaveAttribute('data-flow-state', supported ? 'paused' : 'fallback');
+    const paused = await flowState(background);
+    assert.equal(paused.renderer, beforePause.renderer, 'Visibility pauses the existing renderer without replacing it with another picture');
+    assert.ok(await canvas.evaluate(node => node === document.querySelector('.flowing-water-canvas')), 'Pausing preserves the existing canvas');
+    assert.ok(paused.frame >= beforePause.frame && paused.time >= beforePause.time, 'Pausing retains the current phase without restarting the renderer');
+    // Start pixel retention evidence at the first confirmed paused frame. A
+    // running screenshot can advance during encoding, decoding and transport.
+    // The unchanged strict pixel/clock and nonblank checks prove this real
+    // running-to-paused transition retains its rendered picture.
     await verifyStillWater(page, background, 'Hidden document');
-    const retained = pixelDifference(beforePausePixels, await waterPixels(page, beforePausePlan));
-    assert.ok(retained.mean <= .5, `Pausing retains the preceding rendered water instead of clearing the canvas (${JSON.stringify(retained)})`);
   } finally {
     await page.evaluate(() => {
       delete document.hidden; delete document.visibilityState;
       document.dispatchEvent(new Event('visibilitychange'));
     });
+    await canvas.dispose();
   }
   await expect(background).toHaveAttribute('data-paused', 'false');
   if (rendererCapabilities.get(page)) await expect(background).toHaveAttribute('data-flow-state', 'running');

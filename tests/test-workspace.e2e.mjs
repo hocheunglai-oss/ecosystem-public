@@ -51,6 +51,10 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
     const state = await fixture(context);
     await context.addInitScript(({ theme, legacyKey }) => { localStorage.setItem('ecosystem.theme.v1', theme); localStorage.setItem(legacyKey, '{"preserved":"LEGACY COMMERCIAL EDITS"}'); localStorage.setItem('ecosystem.inbox.v2', '{"preserved":"LEGACY INBOX"}'); }, { theme, legacyKey });
     const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message)); page.setDefaultTimeout(10000);
+    const activityReads = new Set();
+    page.on('request', request => { if (new URL(request.url()).pathname === '/api/location-knowledge/activity') activityReads.add(request); });
+    page.on('requestfinished', request => activityReads.delete(request));
+    page.on('requestfailed', request => activityReads.delete(request));
     const shot = async name => { await expect(page.locator('.immersive-app')).toHaveAttribute('data-design', 'flowing-water'); await expect(page.locator('.flowing-water-background')).toBeVisible(); await page.evaluate(async () => { await Promise.all([...document.images].map(img => img.decode().catch(() => {}))); }); await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: horizontal overflow`); };
     try {
       await page.goto(base); await expect(control(page)).toBeEnabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
@@ -74,6 +78,9 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await page.getByRole('button', { name: 'Back to OWNER FIXTURE', exact: true }).first().click();
       await expect(control(page)).toBeEnabled(); await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
       assert.equal(JSON.stringify(await readState(page, liveKey)), liveBefore);
+      // This reload checks persisted LIVE data, not interruption of activity reads.
+      await expect(page.locator('.contribution-tier')).toHaveAttribute('data-tier', 'inactive');
+      await expect.poll(() => activityReads.size, { message: 'Activity reads finish before persistence reload' }).toBe(0);
       await page.reload(); await expect(control(page)).toBeEnabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
       await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'true');
       state.policyError = true; await focus(page); await expect(control(page)).toBeDisabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');

@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: 'f0bd089570a0b549b58565afebf43b5674bf7dbef9e14310883eea3705ce074f' };
+const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '6caf06aaab868733a6bb23f8b1ec42aea91443b718b9f0a8510d801e1f77159d' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',

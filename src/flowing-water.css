@@ -43,7 +43,7 @@
   --flow-focus: #f4c6ad;
   --flow-footer-hover: var(--flow-ghost);
 }
-/* Smooth original watercolours; slight overscan keeps the moving artwork edge out of view. */
+/* Fixed framing: only the pigment inside the canvas moves. The still image is its fallback. */
 .flowing-water-background {
   position: fixed; inset: 0; z-index: -2; overflow: hidden;
   pointer-events: none; contain: strict; background: #398b85;
@@ -52,16 +52,17 @@
 .flowing-water-background > * { position: absolute; pointer-events: none; }
 .flowing-water-palette { width: 0; height: 0; overflow: hidden; }
 .flowing-water-image {
-  inset: -4%; width: 108%; height: 108%; max-width: none;
-  object-fit: cover; object-position: center; will-change: transform;
-  animation: flowing-water-drift 18s ease-in-out -4.5s infinite alternate;
+  inset: -1.020408%; width: 102.040816%; height: 102.040816%; max-width: none;
+  object-fit: cover; object-position: center;
 }
-:root[data-theme="dark"] .flowing-water-image { filter: url(#eco-watercolour-night); }
+.flowing-water-canvas { inset: 0; width: 100%; height: 100%; opacity: 0; }
+.flowing-water-background[data-renderer="webgl"] .flowing-water-canvas { opacity: 1; }
+.flowing-water-background[data-renderer="webgl"] .flowing-water-image { visibility: hidden; }
+:root[data-theme="dark"] :is(.flowing-water-image,.flowing-water-canvas) { filter: url(#eco-watercolour-night); }
 .flowing-water-sheen {
   inset: 49% -15% -8%; opacity: .065;
   background: radial-gradient(ellipse 70% 12% at 25% 54%, var(--flow-sheen), transparent), radial-gradient(ellipse 80% 9% at 72% 78%, var(--flow-sheen), transparent);
-  filter: blur(9px); will-change: transform;
-  animation: flowing-water-sheen 12s ease-in-out -3s infinite alternate;
+  filter: blur(9px);
 }
 .flowing-water-shade {
   inset: 0;
@@ -69,14 +70,6 @@
 }
 :root[data-theme="dark"] .flowing-water-shade { background: linear-gradient(110deg, #100f1833, transparent 60%); }
 :root[data-theme="dark"] .flowing-water-sheen { opacity: .035; }
-@keyframes flowing-water-drift {
-  from { transform: translate(-1.7%, .5%) scale(1.025); }
-  to { transform: translate(1.7%, -.5%) scale(1.025); }
-}
-@keyframes flowing-water-sheen {
-  from { transform: translate(-24px, 7px); }
-  to { transform: translate(24px, -7px); }
-}
 
 #root .immersive-app[data-design="flowing-water"] .world-interface {
   flex: 1; min-height: calc(100svh - 80px); max-width: none; width: 100%; margin: 0;
@@ -184,11 +177,8 @@
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-display-controls .ecosystem-feedback { flex-basis: auto; margin: 0; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .entry-screen { min-height: 0; padding: 60px 24px 48px; gap: 35px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .entry-brand { width: min(100%,360px); }
-/* Preserve the same two moving layers on phones; stop both for every pause mode. */
-:root[data-interface="mobile"] .flowing-water-image { animation: flowing-water-drift 18s ease-in-out -4.5s infinite alternate !important; }
-:root[data-interface="mobile"] .flowing-water-sheen { animation: flowing-water-sheen 12s ease-in-out -3s infinite alternate !important; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-preview-banner:not(:empty) { order: -2; margin-bottom: 18px; }
-#root .flowing-water-background[data-paused="true"] > * { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) {
-  #root .flowing-water-background > * { animation: none !important; }
+  #root .flowing-water-background .flowing-water-canvas { opacity: 0; }
+  #root .flowing-water-background .flowing-water-image { visibility: visible; }
 }

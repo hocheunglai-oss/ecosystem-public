@@ -1,19 +1,27 @@
 # Flowing Water artwork
 
-Refined on 27 October 2026 with the built-in image-generation tool. The owner's latest correction explicitly restores the earlier artwork's detailed flowing liquid-watercolour texture while balancing three broad colour regions and lightening its heavy upper-left pool. The intervening flat horizontal washes removed too much texture and are superseded. Keep fine translucent streams, wisps and organic pigment boundaries; do not flatten them into blurred bands or replace them with coarse grain.
+## Original reference
 
-Day mode has teal, mint/turquoise and powder-blue regions. Night must keep the identical image, alpha, geometry, texture and movement while making all three colour families distinguishable: deep plum, muted copper and dusky blue. A brightness-only recolouring collapsed the mint and blue regions into similar copper; retain their RGB differences in the colour mapping instead.
+The owner's latest 27 October 2026 correction uses the supplied image itself, not a newly generated interpretation. `public/flowing-water-reference.jpeg` is byte-for-byte identical to the supplied `image_d7d2febb.jpeg`:
 
-This is a generated still image animated by the interface, not the reference website's video. The native output is a 1672 × 941 PNG despite the larger requested size. No post-generation resizing, sharpening, compression or pixel editing was applied; do not claim 4K output. The original supplied colour-balance reference remains in `public/flowing-water-reference.jpeg`. The texture edit target was the original `public/flowing-water-day.png` from commit `d44d5b9afea165336be8518bc41e8d70a21794ef`.
+- Native dimensions: 1493 × 704 pixels.
+- File size: 369,322 bytes.
+- SHA-256: `96578f550faa3a003a89c672b24af6698e3188f97c23a1a3688761727fd4e1c0`.
 
-- `public/flowing-water-day.png`: 1,955,642 bytes; SHA-256 `365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c`.
+Preserve its soft horizontal teal, mint and powder-blue bands and subtle pigment texture. Only the outer screenshot frame is excluded when displaying it. The generated folded liquid-watercolour image and whole-image side-to-side drift are superseded; do not use them as the primary reference for future work. The previous image remains recoverable in source history.
 
-## Final generation prompt
+No raster generation, resizing, sharpening, compression or pixel editing is applied to this source. Browser rendering does not add native detail: do not describe it as 4K artwork or the source website's original video.
 
-Use case: style-transfer. EDIT IMAGE 1 as the primary artwork. Keep its beautiful detailed flowing liquid-watercolour texture: layered translucent streams, fine wisps, soft folds and organic pigment boundaries, with the same refined image quality and visible depth. IMAGE 2 is ONLY a reference for the lighter, balanced distribution of three broad colours, not a texture reference. Rebalance image 1 into three clearly recognisable broad regions: a medium sea-glass TEAL upper third, a luminous soft MINT/TURQUOISE middle third, and a distinct POWDER-BLUE lower third. Lighten the very dark upper-left pool substantially so no corner dominates and the whole image feels relaxed. Make the large colour regions broadly horizontal, gently flowing; retain the intricate liquid structure inside each region. Preserve the organic detailed texture across the entire canvas including the pale-blue region. Do not smooth it into flat blurred bands or remove the texture; do not create a hazy flat gradient, fog, coarse paper grain, or compression artifacts. Avoid black/deep-green heavy masses, harsh outlines and high-contrast rocky/mountainous-looking ridges. Keep fine translucent flowing veils and delicate undulating striations, crisp enough to see but gentle enough for a professional website background. A calm luminous three-colour liquid-watercolour abstract, full bleed wide landscape, no text, UI, logo, objects, border or frame. Request native 3840x2160 quality. Output finished artwork only.
+## Internal movement
 
-## Integration
+The background uses one source image for a fixed still-image fallback and a fixed graphics surface. Motion comes from gently varying the sampling positions within the picture. The picture frame and interface do not pan, zoom or sway. Spatially different flows keep the watercolour moving internally, using a 48-second phase with continuous position and velocity at the loop boundary. The fixed 1% source inset excludes the screenshot frame. Rendering is capped at 30 draws per second, device-pixel ratio 2 and about three million pixels; high-precision sampling is preferred where supported. These limits control decorative GPU work without changing the source image.
 
-`src/FlowingWaterBackground.tsx` renders one image element and PNG source for both themes. Its static SVG colour mapping uses RGB colour differences and bounded output channels to preserve three distinct night colour families and readable foreground text. It changes colour only: no separate night picture, spatial masks, blur, displacement, crop changes or additional image download.
+Both themes share source pixels, crop, sampling coordinates and clock. Night changes colours only, mapping the original RGB distinctions into deep plum, muted copper and dusky blue. Bounded output channels retain readable foreground text. Do not add a separate night picture, spatial colour mask, additional objects or a second artwork download.
 
-Retain the approved animation and reduced-motion, hidden-tab and workspace pauses. The E/F logo remains a separate unchanged asset, including its original green stroke. Its small tagline uses shared dark entry ink by day and light ink by night. Contribution buttons retain their separate blue tokens; ordinary controls and the logo must not be recoloured by the artwork filter.
+Reduced-motion preference uses the original still picture. Hidden tabs and open workspaces stop rendering and retain the phase for a smooth resume. Unavailable or lost graphics support falls back to the same legible still image. Decorative animation must never affect authentication, workspaces or input responsiveness.
+
+The E/F logo remains a separate unchanged asset, including the original green stroke. Existing layout, words, buttons and contribution colours remain independent of the artwork and its filter.
+
+## Verification
+
+Before release, verify actual internal pixel movement with fixed frame and interface geometry; check continuity immediately around a complete loop and confirm pause, resume and fallback behaviour. Inspect desktop and 320/390 px phone screenshots in both themes, signed-in and signed-out, using Chromium and WebKit. Preserve three distinguishable night colour regions and verify text contrast. Record native browser/device limitations and the exact tested source and deployment in private release evidence.

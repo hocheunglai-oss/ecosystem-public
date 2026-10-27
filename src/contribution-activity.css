@@ -218,7 +218,7 @@
 }
 .trader-hud .contribution-tier { color: #d2e0e7; background: #d2e0e710; border-color: #c1d4df70; }
 .trader-hud .contribution-tier[data-tier="active"] { color: #aeebea; background: #7ac8ca16; border-color: #7ac8caa0; }
-.trader-hud .contribution-tier[data-tier="outstanding"] { color: var(--ui-primary); background: #c5f57412; border-color: var(--ui-primary-border); }
+.trader-hud .contribution-tier[data-tier="outstanding"] { color: var(--ui-recognition); background: #c5f57412; border-color: var(--ui-recognition-border); }
 .trader-hud .hud-resource-activity { gap: 8px; }
 .trader-hud .hud-resource-activity > .contribution-tier { max-width: none; font-size: var(--ui-text-meta); line-height: 1.5; white-space: nowrap; }
 .contribution-activity--compact { font-family: var(--ui-font); }
@@ -230,7 +230,7 @@
   background: linear-gradient(135deg, color-mix(in srgb, var(--tier-accent) 9%, transparent), transparent 70%), var(--activity-panel);
 }
 .activity-tier-summary[data-activity-status="active"] { --tier-accent: var(--activity-accent); }
-.activity-tier-summary[data-activity-status="outstanding"] { --tier-accent: var(--ui-primary); }
+.activity-tier-summary[data-activity-status="outstanding"] { --tier-accent: var(--ui-recognition); }
 .activity-tier-hero { display: grid; grid-template-columns: 68px minmax(0, 1fr); align-items: center; gap: 14px; }
 .activity-tier-emblem { display: block; width: 68px; height: 76px; color: var(--tier-accent); overflow: visible; }
 .activity-emblem-face { fill: color-mix(in srgb, var(--tier-accent) 10%, transparent); stroke: currentColor; stroke-width: 1.5; }
@@ -239,7 +239,7 @@
 .activity-emblem-base, .activity-emblem-spark { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .activity-emblem-base { opacity: .5; }
 .activity-emblem-star { fill: currentColor; stroke: currentColor; stroke-linejoin: round; }
-[data-activity-status="outstanding"] .activity-emblem-mark { stroke: var(--ui-primary-ink); stroke-width: 2.5; }
+[data-activity-status="outstanding"] .activity-emblem-mark { stroke: var(--ui-recognition-ink); stroke-width: 2.5; }
 .activity-tier-identity { min-width: 0; }
 .activity-tier-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .activity-tier-heading .contribution-tier[data-tier] { padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--tier-accent); font-family: var(--ui-font-heading); font-size: var(--ui-text-section); line-height: 1.35; }

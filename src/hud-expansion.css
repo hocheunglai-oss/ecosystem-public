@@ -1,7 +1,7 @@
 /* Dashboard controls extend the account panel. Settings keeps its window. */
 :root[data-interface="desktop"] .home-hud-stack { flex-basis: 24rem; width: 24rem; }
 .trader-hud { --hud-expanded-surface: #23495bf2; }
-:root[data-theme="dark"] .trader-hud { --hud-expanded-surface: #193e50f2; }
+:root[data-theme="dark"] .trader-hud { --hud-expanded-surface: var(--ui-surface); }
 .trader-hud .hud-profile-toggle { border-radius: var(--ui-radius-control); }
 
 .trader-hud .account-inline-slot {
@@ -11,6 +11,12 @@
   --line: #bfd9e33d;
   min-width: 0;
   color: var(--ink);
+}
+:root[data-theme="dark"] .trader-hud .account-inline-slot {
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --surface: var(--ui-surface);
+  --line: var(--ui-line);
 }
 .trader-hud .account-inline-panel,
 .trader-hud .hud-inline-section {
@@ -117,7 +123,7 @@
 .office-comparison-list > button { display: grid; grid-template-columns: minmax(0,1fr) auto auto 14px; align-items: center; gap: 6px; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; font-size: 11px; cursor: pointer; }
 .office-comparison-list > button[aria-pressed="true"] { color: #d0ff88; }
 .office-comparison-list > button > span { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
-.trader-hud .account-inline-slot :is(button,select):focus-visible { outline: 2px solid #c8fa65; outline-offset: 2px; }
+.trader-hud .account-inline-slot :is(button,select):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 @media (pointer:coarse) {
   .trader-hud .account-inline-slot :is(button,select,input) { min-height: 44px; }
   .trader-hud .account-inline-slot :is(.hud-inline-close,.hud-inline-heading>button,.inbox-inline-close) { min-width: 44px; width: 44px; }

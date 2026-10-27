@@ -598,9 +598,9 @@
   margin-bottom: 10px;
 }
 .knowledge-update {
-  background: var(--ui-primary, #c5f574);
-  color: var(--ui-primary-ink, #19301d);
-  border-color: var(--ui-primary-border, #b7df75);
+  background: var(--ui-primary);
+  color: var(--ui-primary-ink);
+  border-color: var(--ui-primary-border);
   font-weight: 600;
 }
 .knowledge-table-wrap :is(td, th) {

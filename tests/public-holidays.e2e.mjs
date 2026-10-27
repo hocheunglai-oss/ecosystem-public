@@ -95,6 +95,8 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         assert.equal(await trigger.locator('.public-holidays-today').count(), 0);
         const normal = await statusColor(trigger);
         const hint = profile.getByRole('tooltip');
+        // Keep this keyboard-only check independent of the preceding row click.
+        await page.mouse.move(1, 1);
         await trigger.focus();
         await expect(hint).toBeVisible();
         await expect(hint).toHaveText('NEXT: 25 DEC 2026 · CHRISTMAS DAY');

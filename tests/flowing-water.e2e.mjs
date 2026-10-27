@@ -418,7 +418,9 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
         await page.goto(`${base}/#token_hash=synthetic-${type}&type=${type}`);
         await expect(page.getByLabel('New password', { exact: true })).toBeVisible();
         await expect(page.getByLabel('Email', { exact: true })).toHaveCount(0);
-        assert.equal(new URL(page.url()).hash, '', 'Activation token is removed from the address bar');
+        await expect.poll(() => new URL(page.url()).hash, {
+          message: 'Activation token is removed from the address bar'
+        }).toBe('');
         await page.getByLabel('New password', { exact: true }).fill('Synthetic Password 8');
         await page.getByLabel('Confirm password', { exact: true }).fill('Different Password 8');
         await page.getByRole('button', { name: 'Set password', exact: true }).click();

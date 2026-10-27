@@ -87,7 +87,7 @@
 }
 #root .immersive-app[data-design="flowing-water"] .world-identity { min-height: 0; width: min(100%,320px); animation: none; }
 #root .immersive-app[data-design="flowing-water"] .brand-lockup { width: 100%; }
-#root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: var(--flow-muted); font-weight: 450; font-size: 17px; }
+#root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: var(--flow-ghost-ink); font-weight: 450; font-size: 17px; }
 #root .immersive-app[data-design="flowing-water"] .world-launcher {
   width: min(100%,296px); max-width: none; margin-top: 38px;
   display: grid; grid-template-columns: minmax(0,1fr); align-items: start; gap: 12px;

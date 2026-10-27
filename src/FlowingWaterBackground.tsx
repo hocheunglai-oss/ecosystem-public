@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-/** Decorative, locally rendered water. Application content never moves with it. */
+/** The supplied water image with gentle motion; application content stays still. */
 export function FlowingWaterBackground({ paused = false }: { paused?: boolean }) {
   const [hidden, setHidden] = useState(() => document.hidden);
   useEffect(() => {
@@ -9,10 +9,8 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
     return () => document.removeEventListener('visibilitychange', update);
   }, []);
   return <div className="flowing-water-background" aria-hidden="true" data-paused={paused || hidden}>
-    <div className="flowing-water-base" />
-    <div className="flowing-water-glow" />
-    <div className="flowing-water-ribbon" />
-    <div className="flowing-water-blue" />
+    <img className="flowing-water-image" src="/flowing-water-reference.jpeg" alt="" decoding="async" fetchPriority="high" />
+    <div className="flowing-water-sheen" />
     <div className="flowing-water-shade" />
   </div>;
 }

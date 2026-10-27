@@ -112,6 +112,14 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
     legacy.knowledgeRecords['country:Canada']={version:2,layoutVersion:2,sections:[{id:'legacy-note',title:'LOCAL OPERATIONS',blocks:[{id:'legacy-text',type:'text',title:'LOCAL NOTE',text:'PRESERVE THIS SYNTHETIC BROWSER NOTE'}]}]};
     const session=await fixture(context,db,theme,admin,legacy),page=await context.newPage(),errors=[];
     page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message));
+    const activityReads=new Set();
+    page.on('request',request=>{if(new URL(request.url()).pathname==='/api/location-knowledge/activity')activityReads.add(request);});
+    page.on('requestfinished',request=>activityReads.delete(request));
+    page.on('requestfailed',request=>activityReads.delete(request));
+    const activityReadyForReload=async tier=>{
+      await expect(page.locator('.contribution-tier')).toHaveAttribute('data-tier',tier);
+      await expect.poll(()=>activityReads.size,{message:'Activity reads finish before persistence reload'}).toBe(0);
+    };
     const name=`${engine}-${width}-${theme}`,shot=async label=>{
       await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
       return page.screenshot({path:`${out}/${name}-${label}.png`});
@@ -139,6 +147,9 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       // Server provenance suppresses a completed import even if this browser's
       // optional local completion marker is lost or cleared.
       await page.evaluate(id=>localStorage.removeItem(`ecosystem.live.v1:${id}:location-imported:v1`),admin.id);
+      // These reloads verify persistence, so complete activity reads first.
+      // Authority-change cancellation remains exercised independently below.
+      await activityReadyForReload('inactive');
       await page.reload();({workspace,profile}=await openProfile(page));
       await expect(button(workspace,'REVIEW IMPORT')).toHaveCount(0);
       let editor=await edit(profile,'SHARED EDIT FROM FIRST ACCOUNT');await button(editor,/^SAVE$/i).click();await expect(editor).toHaveCount(0);
@@ -195,6 +206,7 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       assert.equal(db.envelope.snapshot.knowledgeRecords[portKey].sections[0].blocks[0].text,'CONCURRENT SHARED VALUE');
       assert.equal(await page.evaluate(id=>localStorage.getItem(`ecosystem.live.v1:${id}:state`),admin.id),before);
       assert.ok(await workspace.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'No horizontal workspace overflow');
+      await activityReadyForReload('active');
       page.once('dialog',dialog=>dialog.accept());await page.reload();({workspace,profile}=await openProfile(page));
       // Deliver authority changes through the application's cross-tab session
       // refresh, allowing its effects to abort old activity reads before the

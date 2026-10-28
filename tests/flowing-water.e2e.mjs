@@ -17,7 +17,17 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-smooth.png', width: 2400, height: 1132, hash: 'c9c666850ac18602d5f420f085f66c3d20d54fb707b94adb77b0cf707c36d577' };
+const waterArtwork = { path: '/flowing-water-smooth.png', width: 2400, height: 1132, hash: '7faa3c4bd09f64823cd9bc68e4627addc2107b5d03c0093d76b01dc90b5a1842' };
+const waterMeshVertices = 197630;
+const waterNightMatrix = [.169699, 1.750103, -1.469802, 0, 0, .193543, .340383, -.213926, 0, 0, -.058769, .570944, -.152175, 0, 0, 0, 0, 0, 1, 0];
+// Conservative bounds for this reviewed material/lighting gamut, including
+// channel clipping, a full 1/255 input-conversion allowance and upward output
+// rounding. Identity transfer alone has no useful bound. The unclipped gamut
+// spans jade/icy-blue materials, diffuse [.78,1.08], sky mix [0,.2], and full
+// specular/crest contributions. Bounding its clipped convex cells gives maxima
+// [.452190,.278928,.392745] before conversion allowance. These constants and
+// the exact palette must be reviewed together if the water materials change.
+const waterNightChannelMax = [119, 72, 101].map(value => value / 255);
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -169,6 +179,15 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
   await expect.poll(async () => (await flowState(background)).state !== 'running').toBe(true);
   assert.ok((await animationState(background)).every(animation => animation.state !== 'running'), `${label}: no CSS water motion continues`);
   const before = await flowState(background), bounds = await background.locator('canvas').boundingBox();
+  if (inspectPixels && before.renderer === 'fallback') {
+    const decoded = await background.locator('img').evaluate(async image => {
+      await image.decode();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return { complete: image.complete, width: image.naturalWidth, height: image.naturalHeight };
+    });
+    assert.ok(decoded.complete && decoded.width === waterArtwork.width && decoded.height === waterArtwork.height, `${label}: the still artwork is decoded before compositor sampling`);
+    assert.deepEqual(await flowState(background), before, `${label}: image paint readiness does not advance renderer state`);
+  }
   const plan = inspectPixels ? await waterPixelPlan(page) : null;
   const pixels = plan ? await waterPixels(page, plan) : null;
   await page.waitForTimeout(250);
@@ -215,6 +234,19 @@ async function installControlledPhaseReadback(background, plan) {
     if (!gl || gl.isContextLost()) throw new Error('Controlled readback requires the existing working WebGL context');
     const original = gl.drawArrays, descriptor = Object.getOwnPropertyDescriptor(gl, 'drawArrays');
     const program = gl.getParameter(gl.CURRENT_PROGRAM), phaseLocation = gl.getUniformLocation(program, 'u_phase');
+    const vertexShaders = (gl.getAttachedShaders(program) || []).filter(shader => gl.getShaderParameter(shader, gl.SHADER_TYPE) === gl.VERTEX_SHADER);
+    const vertexSource = vertexShaders.length === 1 ? gl.getShaderSource(vertexShaders[0]) || '' : '';
+    const projection = vertexSource.match(/gl_Position\s*=\s*vec4\(([^;]+)\);/)?.[1] || '';
+    const heightBody = vertexSource.match(/float\s+waterHeight\s*\([^)]*\)\s*\{([^}]+)\}/)?.[1] || '';
+    // Inspect the actual linked vertex stage, without reproducing its wave
+    // formula: phase-driven elevations must alter projected position and depth.
+    const vertexGeometry = {
+      compiled: vertexShaders.length === 1 && gl.getShaderParameter(vertexShaders[0], gl.COMPILE_STATUS),
+      phaseDrivenHeight: /\bu_phase\b/.test(heightBody),
+      heightUsed: /float\s+h\s*=\s*waterHeight\s*\(p\)/.test(vertexSource),
+      projectedElevation: /\bh\b/.test(projection.split(',')[1] || ''),
+      projectedDepth: /\bh\b/.test(projection.split(',')[2] || ''),
+    };
     let buffer = null, latest = null, serial = 0, restored = false;
     const wrapped = function(...args) {
       const result = Reflect.apply(original, this, args);
@@ -237,6 +269,15 @@ async function installControlledPhaseReadback(background, plan) {
         latest = { serial: ++serial, expectedFrame: Number(canvas.dataset.flowFrame || 0) + 1,
           phase: gl.getUniform(program, phaseLocation), sameProgram: gl.getParameter(gl.CURRENT_PROGRAM) === program,
           width, height, bufferBytes: buffer.byteLength, viewportWidth: innerWidth, viewportHeight: innerHeight,
+          vertexGeometry, depthContext: gl.getContextAttributes()?.depth,
+          depthTest: gl.isEnabled(gl.DEPTH_TEST), depthFunction: gl.getParameter(gl.DEPTH_FUNC), depthLEqual: gl.LEQUAL,
+          depthWrite: gl.getParameter(gl.DEPTH_WRITEMASK),
+          mesh: { kind: canvas.dataset.flowGeometry, declaredVertices: Number(canvas.dataset.flowVertices),
+            bufferBytes: gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE),
+            positionBufferBound: gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING) === gl.getParameter(gl.ARRAY_BUFFER_BINDING),
+            positionEnabled: gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_ENABLED),
+            positionSize: gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_SIZE),
+            positionType: gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_TYPE), floatType: gl.FLOAT },
           mode: args[0], first: args[1], count: args[2], triangleStrip: gl.TRIANGLE_STRIP, pixels };
       } catch (error) { latest = { error: String(error.message) }; }
       return result;
@@ -267,7 +308,15 @@ async function controlledPhasePixels(readback, plan) {
   assert.equal(capture.preserved, false, 'Testing does not change the production drawing-buffer setting');
   assert.equal(capture.state.renderer, 'webgl'); assert.equal(capture.state.state, 'running');
   assert.equal(capture.expectedFrame, capture.state.frame, 'Readback belongs to the recorded real draw, whose metadata updates after drawArrays returns');
-  assert.equal(capture.mode, capture.triangleStrip); assert.equal(capture.first, 0); assert.equal(capture.count, 4);
+  assert.equal(capture.mode, capture.triangleStrip); assert.equal(capture.first, 0); assert.equal(capture.count, waterMeshVertices);
+  assert.ok(capture.depthContext && capture.depthTest && capture.depthWrite, 'The actual mesh draw uses a writable depth buffer and depth testing');
+  assert.equal(capture.depthFunction, capture.depthLEqual, 'Overlapping wave geometry retains depth ordering');
+  assert.equal(capture.mesh.kind, 'layered-ocean-mesh');
+  assert.equal(capture.mesh.declaredVertices, waterMeshVertices);
+  assert.equal(capture.mesh.bufferBytes, waterMeshVertices * 2 * Float32Array.BYTES_PER_ELEMENT, 'The actual mesh buffer contains the complete surface grid');
+  assert.ok(capture.mesh.positionBufferBound && capture.mesh.positionEnabled, 'The real draw consumes the bound mesh position buffer');
+  assert.equal(capture.mesh.positionSize, 2); assert.equal(capture.mesh.positionType, capture.mesh.floatType);
+  assert.ok(capture.vertexGeometry.compiled && capture.vertexGeometry.phaseDrivenHeight && capture.vertexGeometry.heightUsed && capture.vertexGeometry.projectedElevation && capture.vertexGeometry.projectedDepth, 'The linked vertex shader moves projected crests and depth with the active wave phase');
   assert.equal(capture.width, capture.canvasWidth); assert.equal(capture.height, capture.canvasHeight);
   assert.equal(capture.viewportWidth, plan.width); assert.equal(capture.viewportHeight, plan.height);
   assert.equal(capture.bufferBytes, capture.width * capture.height * 4);
@@ -377,6 +426,8 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
     }));
     assert.deepEqual(palette.primitives, ['feColorMatrix', 'feComponentTransfer'], 'Night changes only colour: no replacement scene, blur or displacement');
     assert.equal(palette.matrix.length, 20);
+    assert.deepEqual(palette.matrix, waterNightMatrix, 'The approved hue-preserving night palette matches its reviewed material-gamut contrast bound');
+    assert.deepEqual(palette.channels, [[0, 1], [0, 1], [0, 1]], 'Night preserves the brightness ordering of reflections with identity transfers');
     assert.ok(palette.matrix.every(Number.isFinite));
     assert.deepEqual(palette.matrix.slice(15), [0, 0, 0, 1, 0], 'The night matrix preserves the source alpha');
     assert.deepEqual([palette.matrix[3], palette.matrix[8], palette.matrix[13]], [0, 0, 0], 'Source opacity does not change the night colours');
@@ -412,10 +463,13 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
       assert.ok(Math.max(...region.sourceVariation) > .01, 'Each original reference region has measurable source texture');
       assert.ok(Math.max(...region.variation) > Math.max(...region.sourceVariation) * .2, 'Night retains local variation relative to the original subtle source, rather than clipping a region into a flat fill');
     }
-    const [plum, copper, blue] = regions.map(region => region.rgb);
-    assert.ok(plum[2] > plum[0] * 1.2 && plum[0] > plum[1] * 1.2, 'The upper teal region becomes distinctly plum');
-    assert.ok(copper[0] > copper[1] * 1.5 && copper[0] > copper[2] * 1.6, 'The mint middle becomes distinctly copper');
-    assert.ok(blue[2] > blue[0] * 1.5 && blue[2] > blue[1] * 1.3, 'The blue lower region remains distinctly dusky blue');
+    const [upper, , lower] = regions;
+    assert.ok(upper.source[1] > upper.source[0] * 3 && upper.source[2] > upper.source[0] * 3, 'The upper water body retains its jade material');
+    assert.ok(lower.source[2] > lower.source[1] * 1.1 && lower.source[1] > lower.source[0] * 1.2, 'The lower water body retains its icy-blue material');
+    const plum = upper.rgb, blue = lower.rgb;
+    assert.ok(plum[2] > plum[0] * 1.2 && plum[0] > plum[1] * 1.2, 'The upper jade water body becomes distinctly plum');
+    assert.ok(blue[2] > blue[0] * 1.5 && blue[2] > blue[1] * 1.3, 'The lower water body becomes distinctly dusky blue');
+    assert.ok(Math.hypot(...plum.map((channel, index) => channel - blue[index])) > .1, 'The two night water bodies remain visibly distinct without requiring an artificial third band');
   }
   if (verifyBytes) {
     const response = await context.request.get(new URL(expected.path, base).href);
@@ -466,14 +520,13 @@ async function contributionColours(page) {
   }
 }
 async function verifyNightContrast(page) {
-  // Bound the brightest possible backdrop from the colour-map channel maxima,
-  // then conservatively composite a white sheen at its maximum opacity. The
-  // darker shade overlay is ignored, so this remains a safe contrast floor.
-  const backdrop = await page.locator('#eco-watercolour-night').evaluate(node => {
-    const channels = ['feFuncR', 'feFuncG', 'feFuncB'].map(name => Math.max(...node.querySelector(name).getAttribute('tableValues').trim().split(/\s+/).map(Number)));
+  // Use the conservative, quantized material-gamut bounds verified with this
+  // exact palette, then composite fully white sheen at maximum opacity. Ignore
+  // the darker shade overlay, retaining a safe floor for every active phase.
+  const backdrop = await page.locator('#eco-watercolour-night').evaluate((node, channels) => {
     const sheen = Number(getComputedStyle(document.querySelector('.flowing-water-sheen')).opacity);
     return channels.map(channel => channel * (1 - sheen) + sheen);
-  });
+  }, waterNightChannelMax);
   const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
   const contrasts = [];
   const textTokens = await page.locator('.immersive-app').evaluate(node => {
@@ -486,7 +539,7 @@ async function verifyNightContrast(page) {
   });
   for (const { token, ink } of textTokens) {
     const foreground = luminance(ink), background = luminance(backdrop), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
-    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible water surface and sheen (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   }
   const inspect = async (action, state) => {
@@ -499,7 +552,7 @@ async function verifyNightContrast(page) {
     const fill = style.fill.rgb.map((channel, index) => channel * style.fill.alpha + backdrop[index] * (1 - style.fill.alpha));
     const ink = style.ink.rgb.map((channel, index) => channel * style.ink.alpha + fill[index] * (1 - style.ink.alpha));
     const foreground = luminance(ink), background = luminance(fill), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
-    assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible water surface and sheen (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   };
   const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();

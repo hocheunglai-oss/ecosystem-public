@@ -93,6 +93,15 @@ async function neutral(action) {
 }
 
 async function swappedInside(action,page) {
+  // Compare label states using the same loaded font, including a cold hosted visit.
+  const ready = await action.evaluate(async node => {
+    const style=getComputedStyle(node);
+    const font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`, text=node.textContent || '';
+    await document.fonts.load(font,text);
+    await document.fonts.ready;
+    return {loaded:document.fonts.check(font,text),status:document.fonts.status};
+  });
+  assert.ok(ready.loaded && ready.status === 'loaded', 'Button font is loaded before geometry samples');
   await action.evaluate(node=>node.blur());await page.mouse.move(0,0);
   const hint=action.locator('.contribution-action-hint'),label=action.locator('.contribution-action-label');
   await expect(hint).toBeHidden();const before=await action.boundingBox();

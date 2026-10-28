@@ -60,7 +60,7 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
         </filter>
       </defs>
     </svg>
-    <img ref={imageRef} className="flowing-water-image" src="/flowing-water-day.png" alt="" decoding="async" fetchPriority="high" />
+    <img ref={imageRef} className="flowing-water-image" src="/flowing-water-calm.png" alt="" decoding="async" fetchPriority="high" />
     <canvas key={String(reduced)} ref={canvasRef} className="flowing-water-canvas" data-flow-period-ms={FLOW_PERIOD_MS} />
     <div className="flowing-water-sheen" />
     <div className="flowing-water-shade" />

@@ -1,105 +1,148 @@
-/** A fixed, softly lit water surface. No image translation, scaling or UV distortion. */
+/** Two independently moving painted oceans; this is not a fluid simulation. */
 export const FLOW_PERIOD_MS = 48_000;
-export const FLOW_SCENE_ASPECT = 2400 / 1132;
+export const FLOW_SCENE_ASPECT = 1672 / 941;
+export const FLOW_MESH_COLUMNS = 384;
+export const FLOW_MESH_ROWS = 96;
+export const FLOW_LAYER_COUNT = 2;
+export const FLOW_LAYER_VERTEX_COUNT = FLOW_MESH_ROWS * (FLOW_MESH_COLUMNS + 1) * 2 + (FLOW_MESH_ROWS - 1) * 2;
+export const FLOW_MESH_VERTEX_COUNT = FLOW_LAYER_VERTEX_COUNT * FLOW_LAYER_COUNT;
+const PAINTING_SOURCE = '/flowing-water-day.png';
+const OVERLAP_MARGIN = .055;
 
 type FlowState = 'running' | 'paused' | 'fallback';
 export type FlowingWaterRenderer = { setPaused: (paused: boolean) => void; destroy: () => void };
+type Layer = { buffer: WebGLBuffer };
+
+// The single authored front follows the existing pale-blue crest. Geometry,
+// UV and motion match the reviewed two-ocean prototype; only the distant sheet
+// extends beneath the nearer sheet, so no duplicate crest is exposed.
+const CREST = [475, 489, 516, 541, 565, 578, 591, 572, 556, 540, 554, 566, 511, 465, 443, 443, 435, 415].map(y => y / 941);
+const LAYERS = [
+  { direction: 1, front: 1, depth: .25, amplitude: 18, harmonic: 1 },
+  { direction: -1, front: 0, depth: -.25, amplitude: 17, harmonic: 1 },
+];
+function curve(x: number, anchors: number[]) {
+  const q = Math.min(1, Math.max(0, x)) * (anchors.length - 1), i = Math.min(anchors.length - 2, Math.floor(q)), t = q - i;
+  const a = anchors[Math.max(0, i - 1)], b = anchors[i], c = anchors[i + 1], d = anchors[Math.min(anchors.length - 1, i + 2)];
+  return .5 * (2*b + (-a+c)*t + (2*a-5*b+4*c-d)*t*t + (-a+3*b-3*c+d)*t*t*t);
+}
+function createStrip(index: number) {
+  const points = new Float32Array(FLOW_LAYER_VERTEX_COUNT * 6);
+  let offset = 0;
+  const point = (column: number, row: number) => {
+    const x = column / FLOW_MESH_COLUMNS, boundary = curve(x, CREST);
+    const top = index ? boundary : 0, bottom = index ? 1 : boundary;
+    // Original material only: the far sheet's margin remains under the near
+    // sheet throughout their approach-and-return cycle.
+    const start = top, end = index ? 1 : Math.min(1, boundary + OVERLAP_MARGIN);
+    const y = start + (end - start) * row / FLOW_MESH_ROWS;
+    const materialY = y;
+    points[offset++] = x; points[offset++] = y;
+    points[offset++] = (y - top) / (bottom - top);
+    points[offset++] = index ? y - start : 1;
+    points[offset++] = index ? 1 : end - y;
+    points[offset++] = materialY;
+  };
+  for (let row = 0; row < FLOW_MESH_ROWS; row++) {
+    if (row) point(0, row);
+    for (let column = 0; column <= FLOW_MESH_COLUMNS; column++) { point(column, row); point(column, row + 1); }
+    if (row < FLOW_MESH_ROWS - 1) point(FLOW_MESH_COLUMNS, row + 1);
+  }
+  return points;
+}
 
 const VERTEX_SHADER = `
-attribute vec2 a_position;
-varying vec2 v_uv;
-void main() {
-  v_uv = a_position * 0.5 + 0.5;
-  gl_Position = vec4(a_position, 0.0, 1.0);
-}`;
-
-const FRAGMENT_SHADER = `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
-#else
-precision mediump float;
-#endif
+attribute vec3 a_material;
+attribute vec3 a_margins;
 uniform vec2 u_cover;
+uniform vec2 u_viewport;
+uniform float u_travel;
+uniform float u_front;
+uniform float u_depth;
+uniform float u_curl;
 uniform float u_phase;
 varying vec2 v_uv;
-// Analytic slopes of ten shallow waves. Integer time harmonics make the surface
-// and its velocity identical at either end of the 48-second cycle.
-vec2 waveSlope(vec2 p, vec2 direction, float amplitude, float harmonic, float offset) {
-  return amplitude * direction * cos(dot(direction, p) + harmonic * u_phase + offset);
-}
-vec3 waterColour(vec2 p) {
-  // Continuous colour fields retain the reference's quiet, anchored bands.
-  float y = 1.0 - p.y;
-  float boundary = y + 0.009 * sin(p.x * 5.0 + 0.4) + 0.004 * cos(p.x * 10.0);
-  vec3 colour = vec3(90.0,185.0,159.0) / 255.0;
-  colour = mix(colour, vec3(77.0,145.0,132.0) / 255.0, smoothstep(0.045,0.175,boundary));
-  colour = mix(colour, vec3(97.0,192.0,163.0) / 255.0, smoothstep(0.285,0.405,boundary));
-  colour = mix(colour, vec3(91.0,173.0,174.0) / 255.0, smoothstep(0.555,0.620,boundary));
-  colour = mix(colour, vec3(135.0,189.0,228.0) / 255.0, smoothstep(0.690,0.765,boundary));
-  colour = mix(colour, vec3(160.0,204.0,241.0) / 255.0, smoothstep(0.810,1.0,boundary));
-  return colour;
-}
+varying vec2 v_margins;
+varying float v_lip;
 void main() {
-  vec2 p = 0.5 + (v_uv - 0.5) * u_cover;
-  vec2 surface = vec2(p.x * 2.12, p.y);
-  vec2 slope = waveSlope(surface,vec2(1.3,10.0),0.008,1.0,0.2)
-    + waveSlope(surface,vec2(-0.8,19.0),0.004,1.0,1.6)
-    + waveSlope(surface,vec2(1.7,32.0),0.0018,2.0,3.0)
-    + waveSlope(surface,vec2(-1.9,6.0),0.010,1.0,4.1)
-    + waveSlope(surface,vec2(0.7,47.0),0.0007,2.0,2.4)
-    + waveSlope(surface,vec2(-1.1,65.0),0.00035,3.0,5.4)
-    + waveSlope(surface,vec2(6.0,56.0),0.0014,1.0,0.9)
-    + waveSlope(surface,vec2(-4.0,78.0),0.0010,2.0,3.3)
-    + waveSlope(surface,vec2(3.0,110.0),0.00055,2.0,1.1)
-    + waveSlope(surface,vec2(-7.0,145.0),0.00035,3.0,4.7);
-  vec3 normal = normalize(vec3(-slope.x,1.0,-slope.y));
-  vec3 viewDirection = normalize(vec3(0.0,0.65,0.76));
-  vec3 reflection = reflect(-viewDirection,normal);
-  // Broad reflected light gives depth without sharp glints, caustics or foam.
-  float sky = pow(max(dot(reflection,normalize(vec3(0.12,0.86,-0.50))),0.0),10.0);
-  float distantLight = pow(max(dot(reflection,normalize(vec3(-0.42,0.45,-0.78))),0.0),18.0);
-  float light = (sky - 0.54) * 0.100 + (distantLight - 0.16) * 0.045;
-  float nearWater = 1.0 - smoothstep(0.22,0.52,p.y);
-  light *= mix(0.46,1.0,nearWater);
-  vec3 colour = waterColour(p) + light * vec3(0.78,0.94,1.0);
-  gl_FragColor = vec4(clamp(colour,0.0,1.0),1.0);
-}
-`;
+  v_uv = vec2(a_material.x,a_margins.z);
+  v_margins = a_margins.xy;
+  float local = a_material.z;
+  float distance = local - u_front;
+  // Broad interiors stay almost still. Each physical strip has a separate
+  // narrow front that rises/curls; shared source UVs do not slide underneath it.
+  float front = exp(-0.5 * pow(distance / .15, 2.0));
+  float lip = exp(-0.5 * pow(distance / .055, 2.0));
+  float perimeter = smoothstep(0.0,.025,a_material.y)
+    * (1.0-smoothstep(.975,1.0,a_material.y));
+  float curvature = .92 + .08*cos(a_material.x*6.2831853 + u_phase);
+  float movement = u_travel * front * perimeter * curvature;
+  vec2 position = vec2(2.0*a_material.x-1.0,1.0-2.0*a_material.y) / u_cover;
+  position.y -= 2.0*movement/u_viewport.y;
+  float depth = u_depth - .075*u_curl*lip;
+  gl_Position = vec4(position,depth,1.0);
+  v_lip = lip*u_curl;
+}`;
+const FRAGMENT_SHADER = `
+precision highp float;
+uniform sampler2D u_painting;
+varying vec2 v_uv;
+varying vec2 v_margins;
+varying float v_lip;
+void main() {
+  float alpha = smoothstep(0.0,.0045,v_margins.x)
+    * smoothstep(0.0,.0045,v_margins.y);
+  if (alpha < .001) discard;
+  vec3 pigment = texture2D(u_painting,v_uv).rgb;
+  // A bounded 2.5% crease shadow follows only the raised painted lip. At the
+  // reference frame it is zero; there is no new gloss, colour or reflection.
+  pigment *= 1.0-.025*v_lip;
+  gl_FragColor = vec4(pigment,alpha);
+}`;
 
-/** Returns null on unsupported graphics; the phase-zero still stays visible. */
+/** Returns null on unsupported graphics; loading/failure keeps the original painting visible. */
 export function createFlowingWaterRenderer(
   canvas: HTMLCanvasElement,
   initiallyPaused: boolean,
   onState: (state: FlowState) => void,
 ): FlowingWaterRenderer | null {
   const gl = canvas.getContext('webgl', {
-    alpha: false, antialias: false, depth: false, stencil: false,
+    alpha: false, antialias: false, depth: true, stencil: false,
     preserveDrawingBuffer: false, powerPreference: 'low-power',
   });
   if (!gl) return null;
   const shaders: WebGLShader[] = [];
+  const layers: Layer[] = [];
+  const image = new Image();
+  image.decoding = 'async';
   let program: WebGLProgram | null = null;
-  let buffer: WebGLBuffer | null = null;
+  let texture: WebGLTexture | null = null;
   let observer: ResizeObserver | undefined;
   let disposed = false;
-  let stopped = true;
+  let ready = false;
+  let stopped = initiallyPaused;
   let request = 0;
   let previousTimestamp: number | undefined;
   let elapsed = 0;
   let lastDrawTime = -Infinity;
   let frame = 0;
+  let width = 0;
+  let height = 0;
+  const uniforms: Partial<Record<'cover' | 'viewport' | 'phase' | 'travel' | 'front' | 'depth' | 'curl', WebGLUniformLocation>> = {};
 
   const destroy = () => {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(request);
+    request = 0;
     observer?.disconnect();
     window.removeEventListener('resize', resize);
     canvas.removeEventListener('webglcontextlost', lost);
-    gl.deleteBuffer(buffer);
+    for (const layer of layers) gl.deleteBuffer(layer.buffer);
+    gl.deleteTexture(texture);
     gl.deleteProgram(program);
     for (const shader of shaders) gl.deleteShader(shader);
-    // Release this decorative context rather than retaining GPU resources offscreen.
     if (!gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
   };
   const lost = (event: Event) => {
@@ -107,82 +150,147 @@ export function createFlowingWaterRenderer(
     destroy();
     onState('fallback');
   };
-
-  let phaseLocation: WebGLUniformLocation | null;
-  let coverLocation: WebGLUniformLocation | null;
+  const publishState = () => {
+    if (!disposed) onState(!ready || !frame ? 'fallback' : stopped ? 'paused' : 'running');
+  };
+  const bind = (layer: Layer) => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, layer.buffer);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+  };
   const draw = () => {
-    if (disposed) return;
-    gl.uniform1f(phaseLocation, (elapsed % FLOW_PERIOD_MS) / FLOW_PERIOD_MS * Math.PI * 2);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    if (disposed || !ready) return;
+    const phase = (elapsed % FLOW_PERIOD_MS) / FLOW_PERIOD_MS * Math.PI * 2;
+    gl.uniform1f(uniforms.phase!, phase);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    // Two native draws, back to front. Each source-attached UV field belongs
+    // to its own layer; no unmoving duplicate image is drawn under these fronts.
+    for (let index = 0; index < layers.length; index++) {
+      const spec = LAYERS[index];
+      const amplitude = Math.max(4.5, Math.min(18, spec.amplitude * width / 1440));
+      const wave = index === 0 ? (1-Math.cos(phase))*.5
+        : .85*(1-Math.cos(phase))*.5+.15*(1-Math.cos(2*phase))*.5;
+      const travel = spec.direction * amplitude * wave;
+      const curl = (1-Math.cos(spec.harmonic*phase))*.5;
+      bind(layers[index]);
+      gl.uniform1f(uniforms.travel!, travel); gl.uniform1f(uniforms.front!, spec.front);
+      gl.uniform1f(uniforms.depth!, spec.depth); gl.uniform1f(uniforms.curl!, curl);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, FLOW_LAYER_VERTEX_COUNT);
+    }
     canvas.dataset.flowFrame = String(++frame);
     canvas.dataset.flowTimeMs = elapsed.toFixed(3);
+    canvas.dataset.flowDrawsPerFrame = String(layers.length);
     lastDrawTime = elapsed;
   };
-  function resize() {
-    if (disposed) return;
-    const { width, height } = canvas.getBoundingClientRect();
-    if (!width || !height) return;
-    // Keep the procedural surface sharp while bounding high-DPI desktop GPU work.
-    const scale = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3_000_000 / (width * height)));
-    const pixelWidth = Math.max(1, Math.round(width * scale));
-    const pixelHeight = Math.max(1, Math.round(height * scale));
-    if (canvas.width === pixelWidth && canvas.height === pixelHeight && frame) return;
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
-    gl!.viewport(0, 0, pixelWidth, pixelHeight);
-    const viewAspect = width / height;
-    const imageAspect = FLOW_SCENE_ASPECT;
-    gl!.uniform2f(coverLocation, Math.min(1, viewAspect / imageAspect), Math.min(1, imageAspect / viewAspect));
-    draw();
-  }
   const tick = (timestamp: number) => {
-    if (disposed || stopped) return;
+    request = 0;
+    if (disposed || stopped || !ready || !frame) return;
     if (previousTimestamp !== undefined) elapsed += timestamp - previousTimestamp;
     previousTimestamp = timestamp;
-    // RAF synchronizes with paint; limit this decorative surface to 30 actual draws/s.
     if (elapsed - lastDrawTime >= 1000 / 30 - 0.5) draw();
     request = requestAnimationFrame(tick);
   };
+  function resize() {
+    if (disposed || !ready) return;
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    const scale = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3_000_000 / (bounds.width * bounds.height)));
+    const pixelWidth = Math.max(1, Math.round(bounds.width * scale));
+    const pixelHeight = Math.max(1, Math.round(bounds.height * scale));
+    if (canvas.width === pixelWidth && canvas.height === pixelHeight && width === bounds.width && height === bounds.height && frame) return;
+    width = bounds.width; height = bounds.height;
+    canvas.width = pixelWidth; canvas.height = pixelHeight;
+    gl!.viewport(0, 0, pixelWidth, pixelHeight);
+    const viewAspect = width / height;
+    gl!.uniform2f(uniforms.cover!, Math.min(1, viewAspect / FLOW_SCENE_ASPECT), Math.min(1, FLOW_SCENE_ASPECT / viewAspect));
+    gl!.uniform2f(uniforms.viewport!, width, height);
+    draw();
+    publishState();
+    if (!stopped && !request) request = requestAnimationFrame(tick);
+  }
   const setPaused = (paused: boolean) => {
     if (disposed) return;
     cancelAnimationFrame(request);
+    request = 0;
     stopped = paused;
     previousTimestamp = undefined;
-    onState(paused ? 'paused' : 'running');
-    if (!paused) request = requestAnimationFrame(tick);
+    publishState();
+    if (ready && frame && !paused) request = requestAnimationFrame(tick);
+  };
+  const loadPainting = async () => {
+    try {
+      image.src = PAINTING_SOURCE;
+      await image.decode();
+      // Unmount/reduced motion/context loss may happen while decode is pending.
+      // Never upload, publish state or schedule a frame after cleanup.
+      if (disposed) return;
+      if (image.naturalWidth !== 1672 || image.naturalHeight !== 941) throw new Error('Unexpected painting dimensions');
+      texture = gl.createTexture();
+      if (!texture) throw new Error('Decorative texture unavailable');
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.uniform1i(gl.getUniformLocation(program!, 'u_painting'), 0);
+      if (gl.getError() !== gl.NO_ERROR) throw new Error('Decorative texture unavailable');
+      ready = true;
+      observer = new ResizeObserver(resize);
+      observer.observe(canvas);
+      window.addEventListener('resize', resize);
+      resize();
+      setPaused(stopped);
+    } catch {
+      if (disposed) return;
+      destroy();
+      onState('fallback');
+    }
   };
 
   try {
+    onState('fallback');
     for (const [type, source] of [[gl.VERTEX_SHADER, VERTEX_SHADER], [gl.FRAGMENT_SHADER, FRAGMENT_SHADER]] as const) {
       const shader = gl.createShader(type);
       if (!shader) throw new Error('Decorative shader unavailable');
-      shaders.push(shader);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
+      shaders.push(shader); gl.shaderSource(shader, source); gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error('Decorative shader unsupported');
     }
     program = gl.createProgram();
     if (!program) throw new Error('Decorative program unavailable');
     for (const shader of shaders) gl.attachShader(program, shader);
-    gl.bindAttribLocation(program, 0, 'a_position');
+    gl.bindAttribLocation(program, 0, 'a_material');
+    gl.bindAttribLocation(program, 1, 'a_margins');
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('Decorative program unsupported');
     gl.useProgram(program);
-    buffer = gl.createBuffer();
-    if (!buffer) throw new Error('Decorative resources unavailable');
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.DITHER); gl.clearColor(0, 0, 0, 1);
+    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
+    for (let index = 0; index < FLOW_LAYER_COUNT; index++) {
+      const buffer = gl.createBuffer();
+      if (!buffer) throw new Error('Decorative mesh unavailable');
+      layers.push({ buffer });
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, createStrip(index), gl.STATIC_DRAW);
+    }
+    for (const key of ['cover', 'viewport', 'phase', 'travel', 'front', 'depth', 'curl'] as const) {
+      const location = gl.getUniformLocation(program, `u_${key}`);
+      if (!location) throw new Error('Decorative uniform unavailable');
+      uniforms[key] = location;
+    }
     if (gl.getError() !== gl.NO_ERROR) throw new Error('Decorative surface unavailable');
-    phaseLocation = gl.getUniformLocation(program, 'u_phase');
-    coverLocation = gl.getUniformLocation(program, 'u_cover');
     canvas.dataset.flowPeriodMs = String(FLOW_PERIOD_MS);
+    canvas.dataset.flowGeometry = 'painted-layer-mesh';
+    canvas.dataset.flowLayers = String(FLOW_LAYER_COUNT);
+    canvas.dataset.flowVertices = String(FLOW_MESH_VERTEX_COUNT);
+    canvas.dataset.flowVerticesPerLayer = String(FLOW_LAYER_VERTEX_COUNT);
     canvas.addEventListener('webglcontextlost', lost);
-    observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    window.addEventListener('resize', resize);
-    resize();
-    setPaused(initiallyPaused);
+    void loadPainting();
     return { setPaused, destroy };
   } catch {
     destroy();

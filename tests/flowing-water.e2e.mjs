@@ -17,7 +17,11 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-smooth.png', width: 2400, height: 1132, hash: 'c9c666850ac18602d5f420f085f66c3d20d54fb707b94adb77b0cf707c36d577' };
+const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c' };
+const waterLayerCount = 2, waterLayerVertices = 74110, waterVertexFloats = 6;
+const waterMeshVertices = waterLayerCount * waterLayerVertices;
+const waterNightMatrix = [-.315127, 4.299968, -1.352730, 0, -1.626157, .626944, 1.519584, .002427, 0, -.794092, .386135, -3.250374, 1.438371, 0, 1.762207, 0, 0, 0, 1, 0];
+const waterNightChannels = [[.035, .540], [.025, .300], [.065, .440]];
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -169,6 +173,15 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
   await expect.poll(async () => (await flowState(background)).state !== 'running').toBe(true);
   assert.ok((await animationState(background)).every(animation => animation.state !== 'running'), `${label}: no CSS water motion continues`);
   const before = await flowState(background), bounds = await background.locator('canvas').boundingBox();
+  if (inspectPixels && before.renderer === 'fallback') {
+    const decoded = await background.locator('img').evaluate(async image => {
+      await image.decode();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return { complete: image.complete, width: image.naturalWidth, height: image.naturalHeight };
+    });
+    assert.ok(decoded.complete && decoded.width === waterArtwork.width && decoded.height === waterArtwork.height, `${label}: the still artwork is decoded before compositor sampling`);
+    assert.deepEqual(await flowState(background), before, `${label}: image paint readiness does not advance renderer state`);
+  }
   const plan = inspectPixels ? await waterPixelPlan(page) : null;
   const pixels = plan ? await waterPixels(page, plan) : null;
   await page.waitForTimeout(250);
@@ -209,22 +222,107 @@ async function verifyInternalMotion(page, background) {
   }
   return { capability, difference: strongest, elapsed: after.time - before.time, frames: after.frame - before.frame, fixedBounds: true, actualMovementVerified: capability.mode === 'webgl' };
 }
+async function installTextureUploadAudit(page) {
+  // Observe native texture writes from page initialization, so the assertion
+  // concerns the actual GPU source rather than only the hidden fallback image.
+  await page.addInitScript(() => {
+    const prototype = window.WebGLRenderingContext?.prototype, textures = new WeakMap(), hooks = [];
+    if (!prototype) {
+      window.__ecoWaterTextureAudit = { reads: () => [], restore: () => { delete window.__ecoWaterTextureAudit; return true; } };
+      return;
+    }
+    for (const name of ['texImage2D', 'texSubImage2D', 'copyTexImage2D', 'copyTexSubImage2D', 'generateMipmap']) {
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, name), original = prototype[name];
+      const wrapped = function(...args) {
+        const result = Reflect.apply(original, this, args);
+        if (this.canvas?.classList?.contains('flowing-water-canvas')) {
+          const texture = this.getParameter(this.TEXTURE_BINDING_2D);
+          if (texture) {
+            const writes = textures.get(texture) || [], source = args.at(-1);
+            const image = source instanceof HTMLImageElement;
+            writes.push({ method: name, image, path: image ? new URL(source.currentSrc, location.href).pathname : null,
+              sameOrigin: image && new URL(source.currentSrc, location.href).origin === location.origin,
+              width: image ? source.naturalWidth : null, height: image ? source.naturalHeight : null,
+              complete: image && source.complete });
+            textures.set(texture, writes);
+          }
+        }
+        return result;
+      };
+      Object.defineProperty(prototype, name, { ...(descriptor || { configurable: true, writable: true }), value: wrapped });
+      hooks.push({ name, descriptor, original, wrapped });
+    }
+    Object.defineProperty(window, '__ecoWaterTextureAudit', { configurable: true, value: {
+      reads: texture => (textures.get(texture) || []).map(write => ({ ...write })),
+      restore() {
+        if (hooks.some(hook => prototype[hook.name] !== hook.wrapped)) throw new Error('Texture audit ownership changed before cleanup');
+        for (const hook of hooks) {
+          if (hook.descriptor) Object.defineProperty(prototype, hook.name, hook.descriptor); else delete prototype[hook.name];
+        }
+        delete window.__ecoWaterTextureAudit;
+        return hooks.every(hook => prototype[hook.name] === hook.original);
+      },
+    } });
+  });
+}
 async function installControlledPhaseReadback(background, plan) {
-  return background.locator('canvas').evaluateHandle((canvas, plan) => {
+  return background.locator('canvas').evaluateHandle((canvas, { plan, layerCount }) => {
     const gl = canvas.getContext('webgl');
     if (!gl || gl.isContextLost()) throw new Error('Controlled readback requires the existing working WebGL context');
     const original = gl.drawArrays, descriptor = Object.getOwnPropertyDescriptor(gl, 'drawArrays');
-    const program = gl.getParameter(gl.CURRENT_PROGRAM), phaseLocation = gl.getUniformLocation(program, 'u_phase');
-    let buffer = null, latest = null, serial = 0, restored = false;
+    const program = gl.getParameter(gl.CURRENT_PROGRAM);
+    const locations = Object.fromEntries(['phase', 'travel', 'curl', 'depth', 'front', 'painting'].map(name => [name, gl.getUniformLocation(program, `u_${name}`)]));
+    const shaders = gl.getAttachedShaders(program) || [];
+    const vertex = shaders.find(shader => gl.getShaderParameter(shader, gl.SHADER_TYPE) === gl.VERTEX_SHADER);
+    const fragment = shaders.find(shader => gl.getShaderParameter(shader, gl.SHADER_TYPE) === gl.FRAGMENT_SHADER);
+    const vertexSource = vertex ? gl.getShaderSource(vertex) || '' : '', fragmentSource = fragment ? gl.getShaderSource(fragment) || '' : '';
+    // Inspect only the source-coordinate contract, not a duplicate of the wave
+    // formula. Actual uniforms, distinct buffers and changing pixels prove motion.
+    const shaderContract = {
+      compiled: shaders.length === 2 && shaders.every(shader => gl.getShaderParameter(shader, gl.COMPILE_STATUS)),
+      originalCoordinates: /v_uv\s*=\s*vec2\s*\(\s*a_material\.x\s*,\s*a_margins\.z\s*\)\s*;/.test(vertexSource),
+      sampledPainting: /texture2D\s*\(\s*u_painting\s*,\s*v_uv\s*\)/.test(fragmentSource),
+      materialLocation: gl.getAttribLocation(program, 'a_material'), marginsLocation: gl.getAttribLocation(program, 'a_margins'),
+      liveUniforms: Object.values(locations).every(location => location !== null),
+    };
+    const bufferIds = new Map(), textureIds = new Map();
+    const identity = (map, object) => { if (!object) return null; if (!map.has(object)) map.set(object, map.size + 1); return map.get(object); };
+    let buffer = null, latest = null, serial = 0, restored = false, frameBefore = null, draws = [], failure = null;
     const wrapped = function(...args) {
       const result = Reflect.apply(original, this, args);
       try {
-        const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+        if (failure) return result;
+        const frame = Number(canvas.dataset.flowFrame || 0), bound = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+        if (frame !== frameBefore) {
+          if (frameBefore !== null && draws.length !== layerCount) throw new Error('The previous frame did not contain the expected native layer draws');
+          frameBefore = frame; draws = [];
+        }
+        if (draws.length >= layerCount) throw new Error('Unexpected additional layer draw in the same frame');
         if (this !== gl || gl.isContextLost() || gl.getParameter(gl.FRAMEBUFFER_BINDING) !== null) throw new Error('The real decorative draw must target its existing default framebuffer');
+        const texture = gl.getParameter(gl.TEXTURE_BINDING_2D);
+        const attributes = [0, 1].map(index => ({
+          bufferId: identity(bufferIds, gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING)),
+          bound: gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING) === bound,
+          enabled: gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_ENABLED),
+          size: gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_SIZE), type: gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_TYPE),
+          stride: gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_STRIDE), offset: gl.getVertexAttribOffset(index, gl.VERTEX_ATTRIB_ARRAY_POINTER),
+          normalized: gl.getVertexAttrib(index, gl.VERTEX_ATTRIB_ARRAY_NORMALIZED),
+        }));
+        draws.push({ order: draws.length, mode: args[0], first: args[1], count: args[2],
+          sameProgram: gl.getParameter(gl.CURRENT_PROGRAM) === program,
+          bufferId: identity(bufferIds, bound), bufferBytes: gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE), attributes,
+          uniforms: Object.fromEntries(Object.entries(locations).map(([name, location]) => [name, location === null ? null : gl.getUniform(program, location)])),
+          textureId: identity(textureIds, texture), textureWrites: window.__ecoWaterTextureAudit?.reads(texture),
+          textureUnit: gl.getParameter(gl.ACTIVE_TEXTURE) - gl.TEXTURE0,
+          depthContext: gl.getContextAttributes()?.depth, depthTest: gl.isEnabled(gl.DEPTH_TEST),
+          depthWrite: gl.getParameter(gl.DEPTH_WRITEMASK), depthFunction: gl.getParameter(gl.DEPTH_FUNC),
+        });
+        if (draws.length !== layerCount) return result;
+        const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
         if (width <= 0 || height <= 0 || width * height > 3_005_000) throw new Error('Controlled readback exceeds the renderer buffer bound');
         if (!buffer || buffer.length !== width * height * 4) buffer = new Uint8Array(width * height * 4);
-        // Read in the same stack as the actual draw, before the default
-        // preserveDrawingBuffer:false surface may be presented and cleared.
+        // Read only after the FINAL native layer draw, synchronously before the
+        // preserveDrawingBuffer:false surface can be presented and cleared.
         gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
         const readbackError = gl.getError();
         if (readbackError !== gl.NO_ERROR) throw new Error(`Controlled GPU readback failed with WebGL error ${readbackError}`);
@@ -234,11 +332,12 @@ async function installControlledPhaseReadback(background, plan) {
           const offset = (row * width + column) * 4;
           return [buffer[offset], buffer[offset + 1], buffer[offset + 2]];
         });
-        latest = { serial: ++serial, expectedFrame: Number(canvas.dataset.flowFrame || 0) + 1,
-          phase: gl.getUniform(program, phaseLocation), sameProgram: gl.getParameter(gl.CURRENT_PROGRAM) === program,
+        latest = { serial: ++serial, expectedFrame: frame + 1, phase: draws[0].uniforms.phase,
           width, height, bufferBytes: buffer.byteLength, viewportWidth: innerWidth, viewportHeight: innerHeight,
-          mode: args[0], first: args[1], count: args[2], triangleStrip: gl.TRIANGLE_STRIP, pixels };
-      } catch (error) { latest = { error: String(error.message) }; }
+          shaderContract, draws, triangleStrip: gl.TRIANGLE_STRIP, floatType: gl.FLOAT, depthLEqual: gl.LEQUAL,
+          mesh: { kind: canvas.dataset.flowGeometry, declaredVertices: Number(canvas.dataset.flowVertices),
+            layers: Number(canvas.dataset.flowLayers), verticesPerLayer: Number(canvas.dataset.flowVerticesPerLayer) }, pixels };
+      } catch (error) { failure = String(error.message); latest = { error: failure }; }
       return result;
     };
     Object.defineProperty(gl, 'drawArrays', { configurable: true, writable: true, value: wrapped });
@@ -247,6 +346,7 @@ async function installControlledPhaseReadback(background, plan) {
         const node = canvas.closest('.flowing-water-background');
         return { ...latest, state: { renderer: node.dataset.renderer, state: node.dataset.flowState,
           frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0), period: Number(canvas.dataset.flowPeriodMs) },
+          declaredDraws: Number(canvas.dataset.flowDrawsPerFrame),
           retainedCanvas: canvas === document.querySelector('.flowing-water-canvas'), retainedContext: canvas.getContext('webgl') === gl,
           hookInstalled: gl.drawArrays === wrapped, preserved: gl.getContextAttributes()?.preserveDrawingBuffer,
           canvasWidth: canvas.width, canvasHeight: canvas.height };
@@ -258,23 +358,52 @@ async function installControlledPhaseReadback(background, plan) {
         return gl.drawArrays === original && (descriptor ? Object.hasOwn(gl, 'drawArrays') : !Object.hasOwn(gl, 'drawArrays'));
       },
     };
-  }, plan);
+  }, { plan, layerCount: waterLayerCount });
 }
 async function controlledPhasePixels(readback, plan) {
   const capture = await readback.evaluate(probe => probe.capture());
-  assert.equal(capture.error, undefined, 'Synchronous framebuffer capture succeeds after the real draw');
-  assert.ok(capture.retainedCanvas && capture.retainedContext && capture.hookInstalled && capture.sameProgram, 'The loop uses the original canvas, context, program and narrowly scoped readback hook');
+  assert.equal(capture.error, undefined, 'Synchronous framebuffer capture succeeds after the final real layer draw');
+  assert.ok(capture.retainedCanvas && capture.retainedContext && capture.hookInstalled, 'The loop uses the original canvas, context and narrowly scoped readback hook');
   assert.equal(capture.preserved, false, 'Testing does not change the production drawing-buffer setting');
   assert.equal(capture.state.renderer, 'webgl'); assert.equal(capture.state.state, 'running');
-  assert.equal(capture.expectedFrame, capture.state.frame, 'Readback belongs to the recorded real draw, whose metadata updates after drawArrays returns');
-  assert.equal(capture.mode, capture.triangleStrip); assert.equal(capture.first, 0); assert.equal(capture.count, 4);
+  assert.equal(capture.expectedFrame, capture.state.frame, 'Readback belongs to the completed real frame, whose metadata updates after both drawArrays calls return');
+  assert.equal(capture.mesh.kind, 'painted-layer-mesh');
+  assert.equal(capture.mesh.declaredVertices, waterMeshVertices);
+  assert.equal(capture.mesh.layers, waterLayerCount); assert.equal(capture.mesh.verticesPerLayer, waterLayerVertices);
+  assert.equal(capture.declaredDraws, waterLayerCount); assert.equal(capture.draws.length, waterLayerCount);
+  assert.equal(new Set(capture.draws.map(draw => draw.bufferId)).size, waterLayerCount, 'Each layer consumes a distinct actual GPU buffer');
+  assert.ok(capture.draws.every(draw => draw.bufferId !== null && draw.textureId !== null));
+  assert.equal(new Set(capture.draws.map(draw => draw.textureId)).size, 1, 'All layers sample the same original painting texture');
+  const expectedPhase = (capture.state.time % capture.state.period) / capture.state.period * Math.PI * 2;
+  assert.ok(Number.isFinite(capture.phase) && Math.abs(capture.phase - expectedPhase) <= .000001, 'The actual GPU phase uniform matches the recorded active time to float precision');
+  for (const [index, draw] of capture.draws.entries()) {
+    assert.equal(draw.order, index); assert.ok(draw.sameProgram);
+    assert.equal(draw.mode, capture.triangleStrip); assert.equal(draw.first, 0); assert.equal(draw.count, waterLayerVertices);
+    assert.equal(draw.bufferBytes, waterLayerVertices * waterVertexFloats * Float32Array.BYTES_PER_ELEMENT, 'Each actual layer buffer contains six floats per vertex');
+    for (const [attributeIndex, attribute] of draw.attributes.entries()) {
+      assert.ok(attribute.enabled && attribute.bound); assert.equal(attribute.bufferId, draw.bufferId);
+      assert.equal(attribute.size, 3); assert.equal(attribute.type, capture.floatType);
+      assert.equal(attribute.stride, waterVertexFloats * Float32Array.BYTES_PER_ELEMENT); assert.equal(attribute.offset, attributeIndex === 0 ? 0 : 12); assert.equal(attribute.normalized, false);
+    }
+    assert.ok(draw.depthContext && draw.depthTest && draw.depthWrite, 'Every overlapping layer uses a writable depth buffer');
+    assert.equal(draw.depthFunction, capture.depthLEqual);
+    assert.equal(draw.textureUnit, 0); assert.equal(draw.uniforms.painting, 0);
+    assert.deepEqual(draw.textureWrites, [{ method: 'texImage2D', image: true, path: waterArtwork.path, sameOrigin: true,
+      width: waterArtwork.width, height: waterArtwork.height, complete: true }], 'The actual bound GPU texture was uploaded once from the unchanged source image, with no later texture writes');
+    assert.equal(draw.uniforms.phase, capture.phase, 'All layers use the same actual GPU phase');
+    assert.ok(['travel', 'curl', 'front', 'depth'].every(name => Number.isFinite(draw.uniforms[name])));
+    assert.ok(Math.abs(draw.uniforms.travel) <= 18.00001 && draw.uniforms.curl >= 0 && draw.uniforms.curl <= 1, 'Actual travel and curl stay within the gentle layer-motion bounds');
+  }
+  assert.deepEqual(capture.draws.map(draw => draw.uniforms.front), [1, 0], 'The two painted surfaces rise towards their opposing fronts');
+  const depths = capture.draws.map(draw => draw.uniforms.depth);
+  assert.ok(depths.every((depth, index) => index === 0 || depth < depths[index - 1]), 'Both independently positioned layers are drawn back to front');
+  assert.ok(capture.shaderContract.compiled && capture.shaderContract.originalCoordinates && capture.shaderContract.sampledPainting && capture.shaderContract.liveUniforms, 'The linked shader keeps source UVs attached to original pigment while live travel, curl and phase move its geometry');
+  assert.equal(capture.shaderContract.materialLocation, 0); assert.equal(capture.shaderContract.marginsLocation, 1);
   assert.equal(capture.width, capture.canvasWidth); assert.equal(capture.height, capture.canvasHeight);
   assert.equal(capture.viewportWidth, plan.width); assert.equal(capture.viewportHeight, plan.height);
   assert.equal(capture.bufferBytes, capture.width * capture.height * 4);
   assert.ok(capture.bufferBytes <= 12_020_000, 'Only one bounded full-frame scratch buffer is retained');
   assert.equal(capture.pixels.length, plan.points.length * 3);
-  const expectedPhase = (capture.state.time % capture.state.period) / capture.state.period * Math.PI * 2;
-  assert.ok(Number.isFinite(capture.phase) && Math.abs(capture.phase - expectedPhase) <= .000001, 'The actual GPU phase uniform matches the recorded active time to float precision');
   verifyVisibleWaterPixels(capture.pixels, 'Controlled framebuffer phase');
   return capture;
 }
@@ -285,10 +414,14 @@ async function verifyPeriodicFrames(page, background) {
   await page.goto('about:blank');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.clock.install();
+  await installTextureUploadAudit(page);
   await page.goto(base);
   await expect(page.locator('.access-login')).toBeVisible();
   await readyRenderer(page);
-  if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; stable fallback verified separately' };
+  if (!rendererCapabilities.get(page)) {
+    await page.evaluate(() => window.__ecoWaterTextureAudit.restore()); await page.clock.resume();
+    return { verified: false, reason: 'WebGL1 unavailable; stable fallback verified separately' };
+  }
   await expect.poll(async () => (await flowState(background)).frame).toBeGreaterThan(2);
   const plan = await waterPixelPlan(page), readback = await installControlledPhaseReadback(background, plan);
   let evidence;
@@ -305,12 +438,16 @@ async function verifyPeriodicFrames(page, background) {
     assert.ok(repeated.serial > first.serial && repeated.state.frame > first.state.frame, 'The repeated phase is a new real draw, never a reused readback');
     assert.ok(Math.abs(repeated.state.time - first.state.time - period) <= .001, `The comparison advances exactly one renderer period (${JSON.stringify({ first: first.state, repeated: repeated.state })})`);
     assert.equal(repeated.phase, first.phase, 'Exactly one loop repeats the same actual GPU phase uniform');
+    assert.deepEqual(repeated.draws, first.draws, 'Exactly one period repeats both actual buffer, texture, travel, curl and depth inputs');
     assert.deepEqual([repeated.width, repeated.height], [first.width, first.height], 'Period comparison retains fixed framebuffer dimensions');
     assert.ok(repeat.mean <= .12 && repeat.changedFraction <= .005, `The actual framebuffer returns to the same phase after one loop (${JSON.stringify({ repeat, first: first.state, repeated: repeated.state })})`);
     await page.clock.fastForward(period / 4);
     const quarterFrame = await controlledPhasePixels(readback, plan), quarter = pixelDifference(first.pixels, quarterFrame.pixels);
     assert.ok(quarterFrame.serial > repeated.serial && quarterFrame.state.frame > repeated.state.frame, 'The quarter phase comes from a new real draw');
     assert.ok(quarter.mean > .15 && quarter.changedFraction > .01, 'A quarter-loop differs visibly; periodic equality is not a frozen renderer');
+    assert.ok(quarterFrame.draws.some((draw, index) => Math.abs(draw.uniforms.travel - first.draws[index].uniforms.travel) > .1), 'Actual GPU layer travel evolves across the loop');
+    assert.ok(quarterFrame.draws.some((draw, index) => Math.abs(draw.uniforms.curl - first.draws[index].uniforms.curl) > .01), 'Actual GPU layer elevation evolves across the loop');
+    assert.ok(quarterFrame.draws[0].uniforms.travel * quarterFrame.draws[1].uniforms.travel < 0, 'The two actual painted fronts travel in opposing directions');
     const phase = quarterFrame.state.time % period;
     await page.clock.fastForward((period - 96 - phase + period) % period);
     const nearSeam = [await controlledPhasePixels(readback, plan)], phases = [nearSeam[0].state.time % period];
@@ -328,10 +465,14 @@ async function verifyPeriodicFrames(page, background) {
     assert.ok(seam.mean <= Math.max(...neighbours.map(step => step.mean)) * 3 + .12, `The loop boundary has no pixel jump beyond adjacent equal-time steps (${JSON.stringify(steps)})`);
     const captures = [first, repeated, quarterFrame, ...nearSeam].map(({ pixels, ...capture }) => capture);
     evidence = { verified: true, period, repeat, quarter, phases, seam, adjacent: neighbours, captures,
-      provenance: 'Controlled-clock raw WebGL framebuffer readPixels in the same stack immediately after each native drawArrays; real-time composed screenshot movement/freeze evidence is separate and unchanged.' };
+      provenance: 'Controlled-clock raw WebGL framebuffer readPixels in the same stack immediately after the final native layer drawArrays; real-time composed screenshot movement/freeze evidence is separate and unchanged.' };
   } finally {
     try { assert.equal(await readback.evaluate(probe => probe.restore()), true, 'The original drawArrays method/property is restored before later checks'); }
-    finally { await readback.dispose(); await page.clock.resume(); }
+    finally {
+      await readback.dispose();
+      try { assert.equal(await page.evaluate(() => window.__ecoWaterTextureAudit.restore()), true, 'Native texture methods are restored after the scoped source audit'); }
+      finally { await page.clock.resume(); }
+    }
   }
   return { ...evidence, readbackHookRestored: true };
 }
@@ -377,6 +518,8 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
     }));
     assert.deepEqual(palette.primitives, ['feColorMatrix', 'feComponentTransfer'], 'Night changes only colour: no replacement scene, blur or displacement');
     assert.equal(palette.matrix.length, 20);
+    assert.deepEqual(palette.matrix, waterNightMatrix, 'The original-artwork night palette retains its bounded colour-only mapping');
+    assert.deepEqual(palette.channels, waterNightChannels, 'Bounded monotone transfers preserve pigment variation while limiting night brightness');
     assert.ok(palette.matrix.every(Number.isFinite));
     assert.deepEqual(palette.matrix.slice(15), [0, 0, 0, 1, 0], 'The night matrix preserves the source alpha');
     assert.deepEqual([palette.matrix[3], palette.matrix[8], palette.matrix[13]], [0, 0, 0], 'Source opacity does not change the night colours');
@@ -412,10 +555,15 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
       assert.ok(Math.max(...region.sourceVariation) > .01, 'Each original reference region has measurable source texture');
       assert.ok(Math.max(...region.variation) > Math.max(...region.sourceVariation) * .2, 'Night retains local variation relative to the original subtle source, rather than clipping a region into a flat fill');
     }
+    const [upper, middle, lower] = regions;
+    assert.ok(upper.source[1] > upper.source[0] && upper.source[2] > upper.source[0], 'The original upper region retains its teal pigment');
+    assert.ok(middle.source[1] > middle.source[0] && middle.source[1] > middle.source[2] && luminance(middle.source) > luminance(upper.source), 'The original middle retains its lighter mint pigment');
+    assert.ok(lower.source[2] > lower.source[1] && lower.source[1] > lower.source[0], 'The original lower region retains its pale-blue pigment');
     const [plum, copper, blue] = regions.map(region => region.rgb);
     assert.ok(plum[2] > plum[0] * 1.2 && plum[0] > plum[1] * 1.2, 'The upper teal region becomes distinctly plum');
     assert.ok(copper[0] > copper[1] * 1.5 && copper[0] > copper[2] * 1.6, 'The mint middle becomes distinctly copper');
     assert.ok(blue[2] > blue[0] * 1.5 && blue[2] > blue[1] * 1.3, 'The blue lower region remains distinctly dusky blue');
+    for (const [first, second] of [[plum, copper], [copper, blue], [plum, blue]]) assert.ok(Math.hypot(...first.map((channel, index) => channel - second[index])) > .1, 'The original three pigment regions remain visibly distinct at night');
   }
   if (verifyBytes) {
     const response = await context.request.get(new URL(expected.path, base).href);
@@ -466,9 +614,9 @@ async function contributionColours(page) {
   }
 }
 async function verifyNightContrast(page) {
-  // Bound the brightest possible backdrop from the colour-map channel maxima,
-  // then conservatively composite a white sheen at its maximum opacity. The
-  // darker shade overlay is ignored, so this remains a safe contrast floor.
+  // Bound every possible source pixel (including moving layer overlaps) by
+  // the actual colour-transfer maxima, then composite maximum white sheen.
+  // Ignoring the darker shade overlay keeps a conservative contrast floor.
   const backdrop = await page.locator('#eco-watercolour-night').evaluate(node => {
     const channels = ['feFuncR', 'feFuncG', 'feFuncB'].map(name => Math.max(...node.querySelector(name).getAttribute('tableValues').trim().split(/\s+/).map(Number)));
     const sheen = Number(getComputedStyle(document.querySelector('.flowing-water-sheen')).opacity);
@@ -486,7 +634,7 @@ async function verifyNightContrast(page) {
   });
   for (const { token, ink } of textTokens) {
     const foreground = luminance(ink), background = luminance(backdrop), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
-    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible water surface and sheen (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   }
   const inspect = async (action, state) => {
@@ -499,7 +647,7 @@ async function verifyNightContrast(page) {
     const fill = style.fill.rgb.map((channel, index) => channel * style.fill.alpha + backdrop[index] * (1 - style.fill.alpha));
     const ink = style.ink.rgb.map((channel, index) => channel * style.ink.alpha + fill[index] * (1 - style.ink.alpha));
     const foreground = luminance(ink), background = luminance(fill), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
-    assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible water surface and sheen (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   };
   const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();

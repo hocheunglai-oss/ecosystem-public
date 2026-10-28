@@ -72,8 +72,10 @@ void main() {
   float distance = local - u_front;
   // Broad interiors stay almost still. Each physical strip has a separate
   // narrow front that rises/curls; shared source UVs do not slide underneath it.
-  float front = exp(-0.5 * pow(distance / .15, 2.0));
-  float lip = exp(-0.5 * pow(distance / .055, 2.0));
+  float frontDistance = distance / .15;
+  float lipDistance = distance / .055;
+  float front = exp(-0.5 * frontDistance * frontDistance);
+  float lip = exp(-0.5 * lipDistance * lipDistance);
   float perimeter = smoothstep(0.0,.025,a_material.y)
     * (1.0-smoothstep(.975,1.0,a_material.y));
   float curvature = .92 + .08*cos(a_material.x*6.2831853 + u_phase);
@@ -167,7 +169,7 @@ export function createFlowingWaterRenderer(
     // to its own layer; no unmoving duplicate image is drawn under these fronts.
     for (let index = 0; index < layers.length; index++) {
       const spec = LAYERS[index];
-      const amplitude = Math.max(4.5, Math.min(18, spec.amplitude * width / 1440));
+      const amplitude = Math.max(9, Math.min(18, spec.amplitude * width / 1440));
       const wave = index === 0 ? (1-Math.cos(phase))*.5
         : .85*(1-Math.cos(phase))*.5+.15*(1-Math.cos(2*phase))*.5;
       const travel = spec.direction * amplitude * wave;

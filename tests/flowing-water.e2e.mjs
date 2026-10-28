@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-smooth.png', width: 2400, height: 1132, hash: 'c9c666850ac18602d5f420f085f66c3d20d54fb707b94adb77b0cf707c36d577' };
+const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -603,7 +603,10 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     await installStagingCookies(context, base);
     const { state, locations } = await mocks(context);
     await context.addInitScript(value => {
-      if (location.protocol === 'http:' || location.protocol === 'https:') localStorage.setItem('ecosystem.theme.v1', value);
+      if (location.protocol === 'http:' || location.protocol === 'https:') {
+        localStorage.setItem('ecosystem.theme.v1', value);
+        localStorage.setItem('ecosystem.background.v1', 'watercolour');
+      }
     }, theme);
     const page = await context.newPage(), errors = [];
     page.setDefaultTimeout(12000); page.on('pageerror', error => errors.push(error.message));

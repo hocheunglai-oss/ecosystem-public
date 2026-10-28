@@ -44,6 +44,7 @@ import { hatCount } from "./lib/hats";
 import { contributionActivity, contributionPreviewCounts, contributionStatus, type ContributionStatusKey } from "./lib/contributionActivity";
 import { ProfileMenu } from "./ProfileMenu";
 import { FlowingWaterBackground } from "./FlowingWaterBackground";
+import { useWaterBackground, type WaterBackground } from './backgroundPreference';
 import { useMobileInterface } from "./mobile";
 import {
   WorkspaceModule,
@@ -389,6 +390,7 @@ function WorkspaceWindow({
 
 function Workspace() {
   const mobile = useMobileInterface();
+  const { background, chooseBackground } = useWaterBackground();
   const { requested, toggleTheme, pending: themePending, error: themeError } = useTheme({ marine: false, background: 'flowing' });
   const { actor, state, toast, storageWarning, notify } = useDemo();
   const { user: session, signOut: logOut } = useAccess();
@@ -460,7 +462,7 @@ function Workspace() {
       data-interface={mobile ? "mobile" : "desktop"}
       onClickCapture={interceptLegacyLink}
     >
-      <FlowingWaterBackground paused={!motionEnabled || Boolean(active || modal)} />
+      <FlowingWaterBackground background={background} paused={!motionEnabled || Boolean(active || modal)} />
       {!session ? (
         <Login />
       ) : (
@@ -547,6 +549,13 @@ function Workspace() {
       <footer className="flowing-footer">
       <span className="world-controls">ECOSYSTEM | FRATELLI COSULICH</span>
       <div className="home-display-controls">
+        <label className="background-choice">
+          <span>Background</span>
+          <select aria-label="Background" value={background} onChange={event => chooseBackground(event.target.value as WaterBackground)}>
+            <option value="diffuse">Diffuse</option>
+            <option value="watercolour">Watercolour</option>
+          </select>
+        </label>
         {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={15} aria-hidden="true" /> Feedback for ecosystem
         </KnowledgeUpdateButton>}

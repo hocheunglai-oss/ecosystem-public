@@ -139,7 +139,7 @@ try {
       });
       await page.reload();
       await search(page, 'MENU PRIVATE OTHER');
-      await expect(page.getByRole('option')).toHaveCount(0);
+      await expect(page.getByRole('listbox', { name: 'Search results' }).getByRole('option')).toHaveCount(0);
       await expect(page.getByRole('listbox')).toContainText('No results');
       await (await search(page, '9712345', 'Enquiry')).click();
       dialog = page.getByRole('dialog', { name: 'Enquiries', exact: true });

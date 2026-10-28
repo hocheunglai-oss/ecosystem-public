@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-calm.png', width: 1825, height: 862, hash: 'a0c4e996350605f0c178f12020dd3d4b989b02a639bccb27b3746d4df7b1708d' };
+const waterArtwork = { path: '/flowing-water-smooth.png', width: 2400, height: 1132, hash: 'c9c666850ac18602d5f420f085f66c3d20d54fb707b94adb77b0cf707c36d577' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -438,22 +438,9 @@ async function originalLogoColours(page) {
     return layers;
   });
   assert.ok(layers.every(layer => layer.filter === 'none' && layer.opacity === '1' && layer.blend === 'normal'), `The original white/green E/F logo is never recoloured with the water: ${JSON.stringify(layers)}`);
-  const stripes = await logo.evaluate(node => {
-    const image = node.querySelector('image'), mask = node.querySelector('mask');
-    return {
-      imageMask: image.getAttribute('mask'), maskId: mask.id, units: mask.getAttribute('maskUnits'),
-      bounds: ['x', 'y', 'width', 'height'].map(name => Number(mask.getAttribute(name))),
-      rectangles: [...mask.querySelectorAll('rect')].map(rect => ({
-        x: Number(rect.getAttribute('x') || 0), y: Number(rect.getAttribute('y') || 0),
-        width: Number(rect.getAttribute('width')), height: Number(rect.getAttribute('height')), fill: getComputedStyle(rect).fill,
-      })),
-    };
-  });
-  assert.equal(stripes.imageMask, `url(#${stripes.maskId})`, 'Only the original backing logo receives its own stripe mask');
-  assert.equal(stripes.units, 'userSpaceOnUse');
-  assert.deepEqual(stripes.bounds, [0, 0, 1712, 222]);
-  assert.deepEqual(stripes.rectangles[0], { x: 0, y: 0, width: 1712, height: 222, fill: 'rgb(255, 255, 255)' }, 'All original lettering stays visible');
-  assert.deepEqual(stripes.rectangles.slice(1), [64, 85.6, 107.2, 128.8, 150.4].map(x => ({ x, y: 162, width: 9.6, height: 51, fill: 'rgb(0, 0, 0)' })), 'Five narrow vertical gaps divide only the original green bar into six retained green strokes');
+  assert.equal(await logo.locator('mask, clipPath, [data-logo-energy-gap]').count(), 0, 'The recognizable original E/F mark has no stripe cutouts');
+  assert.equal(await logo.locator('image').getAttribute('mask'), null, 'The original solid green lower bar stays unmasked');
+  assert.equal(await logo.locator('image').evaluate(node => getComputedStyle(node).clipPath), 'none', 'The original white lettering and green bar are not clipped');
   const tagline = await page.locator('.brand-tagline text').evaluate(node => {
     const style = getComputedStyle(node), box = node.getBoundingClientRect(), frame = node.ownerSVGElement.getBoundingClientRect();
     return { text: node.textContent.trim(), fill: style.fill, stroke: style.stroke, shadow: style.textShadow, size: parseFloat(style.fontSize), weight: Number(style.fontWeight), left: box.left, right: box.right, top: box.top, bottom: box.bottom, frame: { left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom } };

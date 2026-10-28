@@ -41,7 +41,7 @@
   --flow-focus: #f4c6ad;
   --flow-footer-hover: var(--flow-ghost);
 }
-/* Fixed framing: only the pigment inside the canvas moves. The still image is its fallback. */
+/* Fixed camera and colour bands; surface normals animate the reflected light. */
 .flowing-water-background {
   position: fixed; inset: 0; z-index: -2; overflow: hidden;
   pointer-events: none; contain: strict; background: #398b85;

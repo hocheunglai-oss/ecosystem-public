@@ -6,7 +6,6 @@ import { useSharedFeedback } from './lib/useSharedFeedback';
 import {
   useEffect,
   useCallback,
-  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -72,7 +71,6 @@ const roleLabel = (role: string) =>
         : "Trader";
 
 function Logo() {
-  const stripeMask = useId();
   return (
     <span className="ecosystem-logo">
       <svg
@@ -84,16 +82,7 @@ function Logo() {
         focusable="false"
         style={{ display: "block", width: "100%", height: "auto" }}
       >
-        <defs>
-          <mask id={stripeMask} maskUnits="userSpaceOnUse" x="0" y="0" width="1712" height="222">
-            <rect width="1712" height="222" fill="white" />
-            {/* Cut gaps only in the existing green bar; retain every original letter and colour. */}
-            {[64, 85.6, 107.2, 128.8, 150.4].map(x => (
-              <rect key={x} data-logo-energy-gap x={x} y="162" width="9.6" height="51" fill="black" />
-            ))}
-          </mask>
-        </defs>
-        <image href="/logo-transparent.png" width="1712" height="222" mask={`url(#${stripeMask})`} />
+        <image href="/logo-transparent.png" width="1712" height="222" />
       </svg>
     </span>
   );

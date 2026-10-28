@@ -2,13 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { createFlowingWaterRenderer, FLOW_PERIOD_MS } from './flowingWaterRenderer';
 import type { FlowingWaterRenderer } from './flowingWaterRenderer';
 
-/** Both modes share exactly the same artwork; night changes only its colours. */
+/** Both modes share one smooth water surface and phase; night changes colour only. */
 export function FlowingWaterBackground({ paused = false }: { paused?: boolean }) {
   const [hidden, setHidden] = useState(() => document.hidden);
   const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [flowState, setFlowState] = useState<'running' | 'paused' | 'fallback'>('fallback');
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
   const rendererRef = useRef<FlowingWaterRenderer | null>(null);
   const pausedRef = useRef(paused || hidden);
   pausedRef.current = paused || hidden;
@@ -26,16 +25,10 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
   useEffect(() => {
     if (reduced) return;
     const canvas = canvasRef.current;
-    const image = imageRef.current;
-    if (!canvas || !image) return;
-    let cancelled = false;
-    void image.decode().then(() => {
-      if (cancelled) return;
-      rendererRef.current = createFlowingWaterRenderer(canvas, image, pausedRef.current, setFlowState);
-      if (!rendererRef.current) setFlowState('fallback');
-    }).catch(() => { if (!cancelled) setFlowState('fallback'); });
+    if (!canvas) return;
+    rendererRef.current = createFlowingWaterRenderer(canvas, pausedRef.current, setFlowState);
+    if (!rendererRef.current) setFlowState('fallback');
     return () => {
-      cancelled = true;
       rendererRef.current?.destroy();
       rendererRef.current = null;
     };
@@ -50,7 +43,7 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
       <defs>
         <filter id="eco-watercolour-night" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
           {/* Retain source hue: teal becomes plum, mint copper, and blue stays dusky blue. */}
-          <feColorMatrix type="matrix" values="-0.315127 4.299968 -1.352730 0 -1.626157 0.626944 1.519584 0.002427 0 -0.794092 0.386135 -3.250374 1.438371 0 1.762207 0 0 0 1 0" />
+          <feColorMatrix type="matrix" values="-1.108980 3.778197 -1.176109 0 -0.945068 -0.253977 2.529681 -0.078967 0 -1.001579 1.125867 -3.343851 1.261540 0 1.509044 0 0 0 1 0" />
           <feComponentTransfer>
             <feFuncR type="table" tableValues="0.035 0.540" />
             <feFuncG type="table" tableValues="0.025 0.300" />
@@ -60,7 +53,7 @@ export function FlowingWaterBackground({ paused = false }: { paused?: boolean })
         </filter>
       </defs>
     </svg>
-    <img ref={imageRef} className="flowing-water-image" src="/flowing-water-calm.png" alt="" decoding="async" fetchPriority="high" />
+    <img className="flowing-water-image" src="/flowing-water-smooth.png" alt="" decoding="async" fetchPriority="high" />
     <canvas key={String(reduced)} ref={canvasRef} className="flowing-water-canvas" data-flow-period-ms={FLOW_PERIOD_MS} />
     <div className="flowing-water-sheen" />
     <div className="flowing-water-shade" />

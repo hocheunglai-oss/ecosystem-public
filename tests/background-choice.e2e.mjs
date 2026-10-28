@@ -68,6 +68,22 @@ async function ready(page,choice){
   else await expect.poll(()=>bg.getAttribute('data-renderer')).toMatch(/webgl|fallback/);
   return bg;
 }
+async function motionPreference(page, reducedMotion) {
+  await page.emulateMedia({ reducedMotion });
+  await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches),
+    { timeout: 15000, message: 'Browser applied the requested motion preference' }).toBe(reducedMotion === 'reduce');
+}
+async function motionDiagnostics(page) {
+  return page.evaluate(() => ({
+    reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    hidden: document.hidden, visibility: document.visibilityState,
+    events: window.__motionEvents,
+    background: { ...document.querySelector('.flowing-water-background')?.dataset },
+    videos: [...document.querySelectorAll('.flowing-water-background video')].map(video => ({
+      readyState: video.readyState, networkState: video.networkState, paused: video.paused, time: video.currentTime,
+    })),
+  })).catch(() => null);
+}
 const toggle=p=>p.locator('.home-display-controls').getByRole('button',{name:/^(Dark|Light) mode$/});
 async function tap(p,locator,width){if(width<760)await locator.tap();else await locator.click();}
 async function authenticationNavigation(page, path, action, signedIn = true) {
@@ -89,6 +105,13 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
     if(process.env.ECO_TEST_WIDTH&&+process.env.ECO_TEST_WIDTH!==width)continue;
     const context=await browser.newContext({viewport:{width,height:width<760?844:960},hasTouch:width<760,isMobile:width<760,colorScheme:'light',reducedMotion:'no-preference'});
     await installStagingCookies(context,base); const state=await mocks(context); const page=await context.newPage();const errors=[];
+    await page.addInitScript(() => {
+      window.__motionEvents = [];
+      const motion = matchMedia('(prefers-reduced-motion: reduce)');
+      motion.addEventListener('change', event => window.__motionEvents.push({
+        matches: event.matches, at: performance.now(), hidden: document.hidden,
+      }));
+    });
     page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
     const media=[];context.on('request',r=>{if(/flowing-water.*\.(mp4|jpg)/.test(r.url()))media.push(new URL(r.url()).pathname);});
     try{
@@ -137,16 +160,16 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         results.push({engine,width,choice,passed:true,day,night,persistence:true});
       }
       await page.getByLabel('Background',{exact:true}).selectOption('diffuse');await ready(page,'diffuse');
-      await page.emulateMedia({reducedMotion:'reduce'});await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');await expect(page.locator('video.flowing-water-video')).toHaveCount(0);
+      await motionPreference(page,'reduce');await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');await expect(page.locator('video.flowing-water-video')).toHaveCount(0);
       await expect(page.locator('.flowing-water-image')).toBeVisible();await shot(page,`${engine}-${width}-reduced-motion`);
-      await page.emulateMedia({reducedMotion:'no-preference'});await ready(page,'diffuse');
+      await motionPreference(page,'no-preference');await ready(page,'diffuse');
       await page.locator('video.flowing-water-video').evaluate(v=>v.dispatchEvent(new Event('error')));
       await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');await expect(page.locator('.flowing-water-image')).toBeVisible();
       assert.deepEqual([...new Set(media.filter(p=>p.endsWith('.mp4')))], [width<760?'/flowing-water-diffuse-mobile.mp4':'/flowing-water-diffuse.mp4'],'Only matching rendition; no night video');
       assert.deepEqual(errors,[]);assert.deepEqual(state.unexpected,[]);
       assert.deepEqual(state.writes,['/api/access/login','/api/access/logout','/api/access/login','/api/access/logout']);
       console.log(`PASS ${engine} ${width}: both backgrounds, actual night pixels, touch and saved preferences`);
-    }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
+    }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
     finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await context.close();}
   }}finally{await browser.close();}
 }

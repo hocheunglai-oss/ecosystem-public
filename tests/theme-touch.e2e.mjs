@@ -66,10 +66,70 @@ async function screenshot(page, name) {
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal overflow');
 }
+async function motionPreference(page, reducedMotion) {
+  await page.emulateMedia({ reducedMotion });
+  // Confirm the browser query reflects the requested emulation before DOM checks.
+  // Bound that delivery separately; keep the following media/DOM checks strict.
+  await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches),
+    { timeout: 15000, message: 'Browser applied the requested motion preference' }).toBe(reducedMotion === 'reduce');
+}
+async function motionDiagnostics(page) {
+  return page.evaluate(() => ({
+    reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    hidden: document.hidden, visibility: document.visibilityState,
+    events: window.__motionEvents,
+    background: { ...document.querySelector('.flowing-water-background')?.dataset },
+    videos: [...document.querySelectorAll('.flowing-water-background video')].map(video => ({
+      readyState: video.readyState, networkState: video.networkState, paused: video.paused, time: video.currentTime,
+    })),
+  })).catch(() => null);
+}
+async function motionSubscriptionSnapshot(page, name) {
+  for (const choice of ['watercolour', 'diffuse']) {
+    await page.evaluate(() => {
+      const original = window.matchMedia.bind(window);
+      const probe = { reduced: false, initialSnapshot: null, subscriptions: 0 };
+      window.__motionSnapshot = probe;
+      window.__restoreMotionQuery = () => { window.matchMedia = original; };
+      window.matchMedia = query => {
+        const media = original(query);
+        if (query !== '(prefers-reduced-motion: reduce)') return media;
+        return new Proxy(media, { get(target, key) {
+          if (key === 'matches') {
+            probe.initialSnapshot ??= probe.reduced;
+            return probe.reduced;
+          }
+          if (key === 'addEventListener') return (type, ...args) => {
+            // Change after render's snapshot but before a listener can hear it.
+            // No change event is dispatched: subscription must resync the value.
+            if (type === 'change') { probe.reduced = true; probe.subscriptions++; }
+            return target.addEventListener(type, ...args);
+          };
+          const value = Reflect.get(target, key, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        } });
+      };
+    });
+    try {
+      await page.getByLabel('Background', { exact: true }).selectOption(choice);
+      const background = page.locator('.flowing-water-background');
+      await expect(background).toHaveAttribute('data-background', choice);
+      await expect.poll(() => page.evaluate(() => window.__motionSnapshot.subscriptions)).toBeGreaterThan(0);
+      assert.equal(await page.evaluate(() => window.__motionSnapshot.initialSnapshot), false);
+      assert.equal(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches), true);
+      await expect(background).toHaveAttribute('data-paused', 'true');
+      await expect(background).toHaveAttribute('data-renderer', 'fallback');
+      await expect(background.locator('video')).toHaveCount(0);
+      await expect(background.locator('img')).toBeVisible();
+      await mode(page, 'dark');
+      await screenshot(page, `${name}-${choice}-preference-snapshot`);
+    } finally { await page.evaluate(() => window.__restoreMotionQuery()); }
+  }
+}
 async function reducedMotionReload(page, context, name) {
   const background = page.locator('.flowing-water-background');
   await expect(background).toHaveAttribute('data-renderer', 'video');
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await motionPreference(page, 'reduce');
   await expect(background.locator('video')).toHaveCount(0);
   let release;
   const gate = new Promise(resolve => { release = resolve; });
@@ -82,7 +142,7 @@ async function reducedMotionReload(page, context, name) {
   };
   await context.route(pattern, hold);
   try {
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await motionPreference(page, 'no-preference');
     await expect(background.locator('video')).toHaveCount(1);
     await expect.poll(() => requests).toBeGreaterThan(0);
     assert.equal(await background.locator('video').evaluate(video => video.readyState), 0, 'Replacement media is genuinely undecoded behind the request gate');
@@ -109,6 +169,11 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
     await installStagingCookies(context, base);
     const state = await mocks(context), errors = [];
     await context.addInitScript(() => {
+      window.__motionEvents = [];
+      const motion = matchMedia('(prefers-reduced-motion: reduce)');
+      motion.addEventListener('change', event => window.__motionEvents.push({
+        matches: event.matches, at: performance.now(), hidden: document.hidden,
+      }));
       // A delayed or discarded native snapshot must never delay a flowing-mode
       // theme choice. This reproduces the formerly deferred-commit failure path.
       window.__themeTouchProbe = { snapshots: 0, callbacks: [] };
@@ -158,14 +223,17 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await authenticationNavigation(page, 'logout', () => activate(page.getByRole('button', { name: 'Sign out', exact: true }), mobile), false);
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
       await authenticationNavigation(page, 'session', () => page.reload(), false); await mode(page, 'dark');
-      if (width === 390) await reducedMotionReload(page, context, `${engine}-${width}`);
+      if (width === 390) {
+        await reducedMotionReload(page, context, `${engine}-${width}`);
+        await motionSubscriptionSnapshot(page, `${engine}-${width}`);
+      }
       assert.equal(await page.evaluate(() => window.__themeTouchProbe.snapshots), 0, 'Flowing mode never captures stale animated media in a page transition');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
       assert.deepEqual(state.writes, ['/api/access/login', '/api/access/logout']);
-      results.push({ engine, width, passed: true, signedOut: true, signedIn: true, rapidReversal: true, delayedSnapshot: true, delayedMediaReload: width === 390, storageAcrossReloadAndSignOut: true });
+      results.push({ engine, width, passed: true, signedOut: true, signedIn: true, rapidReversal: true, delayedSnapshot: true, delayedMediaReload: width === 390, motionSubscriptionSnapshot: width === 390, storageAcrossReloadAndSignOut: true });
       console.log(`PASS ${engine} ${width}: touch/navigation, immediate theme commit, reload/sign-out persistence`);
     } catch (error) {
-      results.push({ engine, width, passed: false, error: error.message, unexpected: state.unexpected, errors });
+      results.push({ engine, width, passed: false, error: error.message, unexpected: state.unexpected, errors, motion: await motionDiagnostics(page) });
       await page.screenshot({ path: `${out}/${engine}-${width}-failure.png`, fullPage: true }).catch(() => {});
       throw error;
     } finally {

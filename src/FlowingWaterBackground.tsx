@@ -26,6 +26,7 @@ function PaintedWaterBackground({ paused }: { paused: boolean }) {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setReduced(query.matches);
     query.addEventListener('change', update);
+    update(); // Catch preference changes between the initial render and subscription.
     return () => query.removeEventListener('change', update);
   }, []);
   useEffect(() => {
@@ -100,6 +101,7 @@ function DiffuseWaterBackground({ paused }: { paused: boolean }) {
     };
     document.addEventListener('visibilitychange', visibility);
     preference.addEventListener('change', motion);
+    motion(); // Catch preference changes between the initial render and subscription.
     return () => {
       document.removeEventListener('visibilitychange', visibility);
       preference.removeEventListener('change', motion);

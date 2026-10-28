@@ -135,6 +135,8 @@ jobs:
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
               tests/flowing-water.e2e.mjs
+              tests/theme-touch.e2e.mjs
+              tests/background-choice.e2e.mjs
             artifacts: |
               output/administration-ui
               output/contribution-actions-ui
@@ -143,6 +145,8 @@ jobs:
               output/shared-contribution-availability
               output/eco-release-gates-ui
               output/flowing-water-ui
+              output/theme-touch-ui
+              output/background-choice-ui
           - group: suppliers
             label: Suppliers
             scripts: |
@@ -262,6 +266,12 @@ jobs:
           ECO_FLOWING_UI_ORIGIN: http://127.0.0.1:4286
           ECO_FLOWING_UI_OUTPUT: ${{ runner.temp }}/eco-flowing-water-ui
           ECO_FLOWING_REPORT_OUTPUT: output/flowing-water-ui
+          ECO_THEME_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_THEME_UI_OUTPUT: ${{ runner.temp }}/eco-theme-touch-ui
+          ECO_THEME_REPORT_OUTPUT: output/theme-touch-ui
+          ECO_BACKGROUND_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_BACKGROUND_UI_OUTPUT: ${{ runner.temp }}/eco-background-choice-ui
+          ECO_BACKGROUND_REPORT_OUTPUT: output/background-choice-ui
           ECO_TEST_OUTPUT: output/shared-contribution-availability
           ECO_SUPPLIER_UI_ORIGIN: http://127.0.0.1:4286
           ECO_SUPPLIER_UI_OUTPUT: output/shared-suppliers-ui

@@ -73,10 +73,16 @@ export function useTheme({ marine = true, background = 'harbour' }: { marine?: b
       if (!mounted.current || ticket !== request.current) return;
       flushSync(() => setTheme(target));
     };
+    if (background === 'flowing') {
+      // The moving background already supports both palettes. Commit the user's
+      // choice in this tap, without a deferred whole-page snapshot of live media.
+      // Later touches, interrupted transitions and navigation must not leave the
+      // requested mode ahead of the displayed or persisted mode.
+      commit();
+      return;
+    }
     try {
-      // The CSS water scene is already present in both themes. Never hold its
-      // theme switch hostage to downloading artwork that this interface doesn't use.
-      if (background === 'harbour') await prepareHarbourTheme(target);
+      await prepareHarbourTheme(target);
       if (!mounted.current || ticket !== request.current) return;
       const animate = !matchMedia("(prefers-reduced-motion: reduce)").matches && !document.hidden;
       if (typeof document.startViewTransition === "function" && animate) {
@@ -89,7 +95,7 @@ export function useTheme({ marine = true, background = 'harbour' }: { marine?: b
         void active.finished.catch(() => {}).finally(() => {
           if (transition.current === active) transition.current = null;
         });
-      } else if (background === 'harbour' && !marineMode.current && animate) {
+      } else if (!marineMode.current && animate) {
         const active = transitionMobileHarbour(commit);
         transition.current = active;
         void active?.finished.finally(() => {

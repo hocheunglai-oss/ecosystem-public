@@ -73,7 +73,17 @@ const roleLabel = (role: string) =>
 function Logo() {
   return (
     <span className="ecosystem-logo">
-      <img src="/logo-transparent.png" alt="ECOSYSTEM" width={1712} height={222} />
+      <svg
+        viewBox="0 0 1712 222"
+        width={1712}
+        height={222}
+        role="img"
+        aria-label="ECOSYSTEM"
+        focusable="false"
+        style={{ display: "block", width: "100%", height: "auto" }}
+      >
+        <image href="/logo-transparent.png" width="1712" height="222" />
+      </svg>
     </span>
   );
 }

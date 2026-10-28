@@ -41,7 +41,7 @@
   --flow-focus: #f4c6ad;
   --flow-footer-hover: var(--flow-ghost);
 }
-/* Fixed framing: only the pigment inside the canvas moves. The still image is its fallback. */
+/* Fixed camera and colour bands; surface normals animate the reflected light. */
 .flowing-water-background {
   position: fixed; inset: 0; z-index: -2; overflow: hidden;
   pointer-events: none; contain: strict; background: #398b85;
@@ -80,7 +80,7 @@
 }
 #root .immersive-app[data-design="flowing-water"] .world-identity { min-height: 0; width: min(100%,320px); animation: none; }
 #root .immersive-app[data-design="flowing-water"] .brand-lockup { width: 100%; }
-#root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: var(--flow-ghost-ink); font-weight: 600; font-size: 22px; }
+#root .immersive-app[data-design="flowing-water"] .brand-tagline { margin-top: 15px; fill: #ffffff; font-weight: 600; font-size: 22px; }
 #root .immersive-app[data-design="flowing-water"] .brand-tagline text { stroke: none; }
 #root .immersive-app[data-design="flowing-water"] .world-launcher {
   width: min(100%,296px); max-width: none; margin-top: 38px;

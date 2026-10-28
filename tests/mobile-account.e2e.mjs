@@ -185,8 +185,14 @@ try {
     try {
       await page.goto(BASE, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('[data-mobile-artwork]')).toHaveAttribute('data-mobile-artwork', 'light');
+      const logo = page.locator('.ecosystem-logo svg image');
+      await logo.evaluate(node => {
+        node.dataset.testLoad = 'pending';
+        node.addEventListener('load', () => { node.dataset.testLoad = 'loaded'; }, { once: true });
+        node.addEventListener('error', () => { node.dataset.testLoad = 'error'; }, { once: true });
+      });
       release();
-      await page.waitForFunction(() => document.querySelector('.ecosystem-logo img').complete);
+      await expect(logo).toHaveAttribute('data-test-load', 'loaded');
       const gapError = () => page.evaluate(() => {
         const lettering = document.querySelector('.brand-tagline').getBoundingClientRect().bottom;
         const lighthouse = document.querySelector('[data-mobile-lighthouse-anchor]').getBoundingClientRect().top;

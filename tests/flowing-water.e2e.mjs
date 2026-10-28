@@ -17,7 +17,7 @@ await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
-const waterArtwork = { path: '/flowing-water-day.png', width: 1672, height: 941, hash: '365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c' };
+const waterArtwork = { path: '/flowing-water-smooth.png', width: 2400, height: 1132, hash: 'c9c666850ac18602d5f420f085f66c3d20d54fb707b94adb77b0cf707c36d577' };
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -425,7 +425,11 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
   }
 }
 async function originalLogoColours(page) {
-  const layers = await page.locator('.ecosystem-logo img').evaluate(node => {
+  const logo = page.locator('.ecosystem-logo > svg');
+  await expect(logo).toHaveAttribute('role', 'img');
+  await expect(logo).toHaveAttribute('aria-label', 'ECOSYSTEM');
+  await expect(logo).toHaveAttribute('viewBox', '0 0 1712 222');
+  const layers = await logo.locator('image').evaluate(node => {
     const layers = [];
     for (let layer = node; layer; layer = layer.parentElement) {
       const style = getComputedStyle(layer);
@@ -434,11 +438,15 @@ async function originalLogoColours(page) {
     return layers;
   });
   assert.ok(layers.every(layer => layer.filter === 'none' && layer.opacity === '1' && layer.blend === 'normal'), `The original white/green E/F logo is never recoloured with the water: ${JSON.stringify(layers)}`);
+  assert.equal(await logo.locator('mask, clipPath, [data-logo-energy-gap]').count(), 0, 'The recognizable original E/F mark has no stripe cutouts');
+  assert.equal(await logo.locator('image').getAttribute('mask'), null, 'The original solid green lower bar stays unmasked');
+  assert.equal(await logo.locator('image').evaluate(node => getComputedStyle(node).clipPath), 'none', 'The original white lettering and green bar are not clipped');
   const tagline = await page.locator('.brand-tagline text').evaluate(node => {
     const style = getComputedStyle(node), box = node.getBoundingClientRect(), frame = node.ownerSVGElement.getBoundingClientRect();
-    return { text: node.textContent.trim(), stroke: style.stroke, shadow: style.textShadow, size: parseFloat(style.fontSize), weight: Number(style.fontWeight), left: box.left, right: box.right, top: box.top, bottom: box.bottom, frame: { left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom } };
+    return { text: node.textContent.trim(), fill: style.fill, stroke: style.stroke, shadow: style.textShadow, size: parseFloat(style.fontSize), weight: Number(style.fontWeight), left: box.left, right: box.right, top: box.top, bottom: box.bottom, frame: { left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom } };
   });
   assert.equal(tagline.text, 'FRATELLI COSULICH MARINE ENERGY');
+  assert.equal(tagline.fill, 'rgb(255, 255, 255)', 'The existing tagline stays white in both themes');
   assert.equal(tagline.stroke, 'none', 'The existing tagline has solid letters without an outline in either theme');
   assert.equal(tagline.shadow, 'none');
   assert.equal(tagline.size, 22);
@@ -623,9 +631,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await verifyArtwork(page, context, theme, true);
       await expect(page.locator('.world-launcher')).toHaveCount(0);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-      const logo = page.locator('.ecosystem-logo img');
-      await expect(logo).toHaveAttribute('src', '/logo-transparent.png');
-      await expect.poll(() => logo.evaluate(image => image.complete && image.naturalWidth === 1712 && image.naturalHeight === 222)).toBe(true);
+      const logo = page.locator('.ecosystem-logo svg image');
+      await expect(logo).toHaveAttribute('href', '/logo-transparent.png');
+      const logoSize = await logo.evaluate(async node => {
+        const image = new Image(); image.src = node.href.baseVal; await image.decode();
+        return { width: image.naturalWidth, height: image.naturalHeight, renderedWidth: node.width.baseVal.value, renderedHeight: node.height.baseVal.value };
+      });
+      assert.deepEqual(logoSize, { width: 1712, height: 222, renderedWidth: 1712, renderedHeight: 222 });
       const logoResponse = await context.request.get(new URL('/logo-transparent.png', base).href);
       assert.equal(createHash('sha256').update(await logoResponse.body()).digest('hex'), originalLogoHash, 'Original E/F logo pixels retained');
       await originalLogoColours(page);

@@ -51,16 +51,16 @@ async function mode(page, theme) {
 }
 const homeToggle = page => page.locator('.home-display-controls .theme-toggle:not(.ecosystem-feedback)');
 async function activate(locator, mobile) { if (mobile) await locator.tap(); else await locator.click(); }
-async function authenticatedNavigation(page, path, action) {
+async function authenticationNavigation(page, path, action, signedIn = true) {
   // Authentication is asynchronous. Wait for its actual response before checking
   // the resulting workspace, including on slower mobile WebKit CI workers.
   const [response] = await Promise.all([
     page.waitForResponse(response => response.url() === `${base}/api/access/${path}`
-      && response.request().method() === (path === 'login' ? 'POST' : 'GET'), { timeout: 15000 }),
+      && response.request().method() === (path === 'session' ? 'GET' : 'POST'), { timeout: 15000 }),
     action(),
   ]);
-  assert.equal(response.status(), 200, 'Synthetic authentication succeeded');
-  await expect(page.locator('.world-launcher')).toBeVisible({ timeout: 15000 });
+  assert.equal(response.status(), path === 'session' && !signedIn ? 401 : 200, 'Synthetic authentication response matches the expected session');
+  await expect(page.locator(signedIn ? '.world-launcher' : '.access-login')).toBeVisible({ timeout: 15000 });
 }
 async function screenshot(page, name) {
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
@@ -129,7 +129,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await page.getByLabel('Email', { exact: true }).fill(member.email);
       await page.getByLabel('Password', { exact: true }).fill('Synthetic Password 8');
       await mode(page, 'dark'); await screenshot(page, `${engine}-${width}-signed-out-dark`);
-      await authenticatedNavigation(page, 'login', () => activate(page.getByRole('button', { name: 'Sign in', exact: true }), mobile));
+      await authenticationNavigation(page, 'login', () => activate(page.getByRole('button', { name: 'Sign in', exact: true }), mobile));
       await mode(page, 'dark');
       await activate(page.getByRole('button', { name: 'Trading', exact: true }), mobile);
       await activate(page.getByRole('button', { name: 'Enquiries', exact: true }), mobile);
@@ -140,7 +140,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await activate(dialogToggle, mobile); await mode(page, 'dark');
       await activate(page.getByRole('button', { name: 'Close workspace', exact: true }), mobile);
       await mode(page, 'dark');
-      await authenticatedNavigation(page, 'session', () => page.reload()); await mode(page, 'dark');
+      await authenticationNavigation(page, 'session', () => page.reload()); await mode(page, 'dark');
       await activate(page.locator('.world-identity'), mobile); await mode(page, 'dark');
       await screenshot(page, `${engine}-${width}-signed-in-dark`);
       await activate(homeToggle(page), mobile); await mode(page, 'light');
@@ -155,9 +155,9 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       assert.equal(immediate.first.theme, 'dark'); assert.equal(immediate.first.stored, 'dark');
       assert.equal(immediate.last.theme, 'dark'); assert.equal(immediate.last.themePending, 'false');
       await mode(page, 'dark');
-      await activate(page.getByRole('button', { name: 'Sign out', exact: true }), mobile);
+      await authenticationNavigation(page, 'logout', () => activate(page.getByRole('button', { name: 'Sign out', exact: true }), mobile), false);
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
-      await page.reload(); await mode(page, 'dark');
+      await authenticationNavigation(page, 'session', () => page.reload(), false); await mode(page, 'dark');
       if (width === 390) await reducedMotionReload(page, context, `${engine}-${width}`);
       assert.equal(await page.evaluate(() => window.__themeTouchProbe.snapshots), 0, 'Flowing mode never captures stale animated media in a page transition');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);

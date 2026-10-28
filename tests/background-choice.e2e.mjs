@@ -70,6 +70,17 @@ async function ready(page,choice){
 }
 const toggle=p=>p.locator('.home-display-controls').getByRole('button',{name:/^(Dark|Light) mode$/});
 async function tap(p,locator,width){if(width<760)await locator.tap();else await locator.click();}
+async function authenticationNavigation(page, path, action, signedIn = true) {
+  // Authentication is asynchronous. Wait for its actual response before checking
+  // the resulting workspace, including on slower mobile WebKit CI workers.
+  const [response] = await Promise.all([
+    page.waitForResponse(response => response.url() === `${base}/api/access/${path}`
+      && response.request().method() === (path === 'session' ? 'GET' : 'POST'), { timeout: 15000 }),
+    action(),
+  ]);
+  assert.equal(response.status(), path === 'session' && !signedIn ? 401 : 200, 'Synthetic authentication response matches the expected session');
+  await expect(page.locator(signedIn ? '.world-launcher' : '.access-login')).toBeVisible({ timeout: 15000 });
+}
 for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
   if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
   const executablePath=process.env[engine==='chromium'?'ECO_CHROMIUM_EXECUTABLE':'ECO_WEBKIT_EXECUTABLE'];
@@ -95,9 +106,9 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         assert.ok((await pixels(page)).mean<day.mean*.7,'Touching another control does not restore light pixels');
         await shot(page,`${engine}-${width}-${choice}-signed-out-dark`);
         await page.getByLabel('Email',{exact:true}).fill(member.email);await page.getByLabel('Password',{exact:true}).fill('Synthetic Password 8');
-        await tap(page,page.getByRole('button',{name:'Sign in',exact:true}),width);await expect(page.locator('.world-launcher')).toBeVisible();
+        await authenticationNavigation(page,'login',()=>tap(page,page.getByRole('button',{name:'Sign in',exact:true}),width));
         await ready(page,choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
-        await page.reload();await expect(page.locator('.world-launcher')).toBeVisible();await ready(page,choice);
+        await authenticationNavigation(page,'session',()=>page.reload());await ready(page,choice);
         await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);
         const mediaNode=page.locator(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas');
@@ -121,8 +132,8 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           const paused=await v.evaluate(n=>n.currentTime);await page.waitForTimeout(200);assert.equal(await v.evaluate(n=>n.currentTime),paused);
           await page.getByRole('button',{name:'Close workspace',exact:true}).click();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(false);
         }
-        await tap(page,page.getByRole('button',{name:'Sign out',exact:true}),width);await expect(page.locator('.access-login')).toBeVisible();
-        await page.reload();await expect(page.locator('.access-login')).toBeVisible();await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
+        await authenticationNavigation(page,'logout',()=>tap(page,page.getByRole('button',{name:'Sign out',exact:true}),width),false);
+        await authenticationNavigation(page,'session',()=>page.reload(),false);await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
         results.push({engine,width,choice,passed:true,day,night,persistence:true});
       }
       await page.getByLabel('Background',{exact:true}).selectOption('diffuse');await ready(page,'diffuse');

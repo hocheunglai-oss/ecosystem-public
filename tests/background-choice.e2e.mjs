@@ -54,16 +54,39 @@ async function pixels(page) {
     return {count:colours.length, mean:colours.flat().reduce((a,b)=>a+b,0)/(colours.length*3), spread:Math.max(...colours.flat())-Math.min(...colours.flat())};
   },'data:image/png;base64,'+bytes.toString('base64'));
 }
+async function renderedPixels(page, accepts, message) {
+  let current, previous;
+  // A loaded image or submitted WebGL draw does not establish painted pixels.
+  // Require two actual captures with the expected artwork before comparing modes.
+  try {
+    await expect.poll(async () => {
+      current = await pixels(page);
+      const ready = accepts(current) && previous !== undefined && accepts(previous);
+      previous = current;
+      return ready;
+    }, { timeout: 15000, message }).toBe(true);
+  } catch (error) {
+    throw new Error(`${error.message}\nLast rendered pixels: ${JSON.stringify(current)}`, { cause: error });
+  }
+  return current;
+}
 async function shot(page,name){
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal overflow');
   const choice=page.getByLabel('Background',{exact:true});
   await expect(choice).toBeVisible();
   const box=await choice.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=await page.evaluate(()=>innerWidth)+1&&box.height>=44,'Readable selector fits phone');
+  const theme=await page.locator('html').getAttribute('data-theme');
+  await renderedPixels(page,p=>p.count>100&&p.spread>30&&(theme==='light'?p.mean>80:p.mean<100),'Screenshot artwork reached the compositor');
   await page.screenshot({path:`${out}/${name}.png`,fullPage:true});
 }
 async function ready(page,choice){
   const bg=page.locator('.flowing-water-background'); await expect(bg).toHaveAttribute('data-background',choice);
-  await expect.poll(()=>bg.locator('img').evaluate(i=>i.complete&&i.naturalWidth>0)).toBe(true);
+  await bg.locator('img').evaluate(image => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Background image did not decode and paint within 15 seconds')), 15000);
+    image.decode().then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+      clearTimeout(timeout); resolve();
+    })), error => { clearTimeout(timeout); reject(error); });
+  }));
   if(choice==='diffuse') await expect(bg).toHaveAttribute('data-renderer','video',{timeout:30000});
   else await expect.poll(()=>bg.getAttribute('data-renderer')).toMatch(/webgl|fallback/);
   return bg;
@@ -129,9 +152,9 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       for(const choice of ['diffuse','watercolour']){
         await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
         await expect(page.locator('html')).toHaveAttribute('data-theme','light');
-        const day=await pixels(page);await shot(page,`${engine}-${width}-${choice}-signed-out-light`);
+        const day=await renderedPixels(page,p=>p.count>100&&p.mean>80&&p.spread>30,'Day artwork reached the compositor');await shot(page,`${engine}-${width}-${choice}-signed-out-light`);
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
-        await page.waitForTimeout(350);const night=await pixels(page);
+        const night=await renderedPixels(page,p=>p.count>100&&p.mean<day.mean*.7&&p.spread>30,'Night artwork reached the compositor');
         assert.ok(day.count>100&&night.count>100&&night.mean<day.mean*.7&&night.spread>30,`Actual mobile compositor stays dark and retains detail: ${JSON.stringify({day,night})}`);
         await tap(page,page.getByLabel('Email',{exact:true}),width);await page.waitForTimeout(150);
         await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
@@ -144,10 +167,19 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);
         const mediaNode=page.locator(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas');
-        const retained=await mediaNode.elementHandle();const phase=await mediaNode.evaluate(n=>n.currentTime??Number(n.dataset.flowTimeMs));
+        const retained=await mediaNode.elementHandle();
+        const phase=await mediaNode.evaluate(n=>({time:n.currentTime??Number(n.dataset.flowTimeMs),duration:n.duration,at:performance.now()}));
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         assert.ok(await retained.evaluate(n=>n.isConnected),'Theme preserves media element');
-        if(Number.isFinite(phase)) assert.ok(await mediaNode.evaluate(n=>n.currentTime??Number(n.dataset.flowTimeMs))>=phase,'Theme does not reset phase');
+        if(Number.isFinite(phase.time)) {
+          const next=await mediaNode.evaluate(n=>({time:n.currentTime??Number(n.dataset.flowTimeMs),at:performance.now()}));
+          if(choice==='diffuse') {
+            assert.ok(Number.isFinite(phase.duration)&&phase.duration>0,'Playing video has a known loop duration');
+            const forward=(next.time-phase.time+phase.duration)%phase.duration;
+            // A real loop can wrap to zero; allow 250ms for media-clock sampling.
+            assert.ok(forward<=(next.at-phase.at)/1000+.25,'Theme preserves forward video phase across a natural loop');
+          } else assert.ok(next.time>=phase.time,'Theme does not reset cumulative canvas phase');
+        }
         else {
           await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');
           await expect(page.locator('.flowing-water-image')).toBeVisible();

@@ -87,7 +87,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       dialog = await open(page, 'Credit Requests'); await expect(dialog.locator('.credit-workspace')).toBeVisible();
       // Admin contextual links and modal remain usable.
       await dialog.getByRole('button', { name: 'Credit request', exact: true }).click(); await expect(page.getByRole('dialog').last().locator('form')).toBeVisible(); await page.keyboard.press('Escape'); await close(page);
-      const search = page.getByRole('combobox', { name: 'Search ECO' }); await search.fill('ECO20001'); await expect(page.getByRole('option').first()).toContainText('Buyer'); await search.press('Escape'); await search.fill('');
+      const search = page.getByRole('combobox', { name: 'Search ECO' }); await search.fill('ECO20001'); await expect(page.getByRole('listbox', { name: 'Search results' }).getByRole('option').first()).toContainText('Buyer'); await search.press('Escape'); await search.fill('');
       for (const [role, label] of roles) {
         await changePreview(page, label);
         const before = state.buyerFetches;
@@ -98,7 +98,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
           await expect(dialog.locator('.buyer-profile, .buyer-profile-directory, .credit-workspace')).toHaveCount(0);
           if (role === 'trader') await shot(name === 'Buyer Profiles' ? 'buyer-gate' : 'credit-gate'); await close(page);
         }
-        await search.fill('ECO20001'); await expect(page.getByRole('option')).toHaveCount(0); await expect(page.getByText('No results', { exact: true })).toBeVisible(); await search.fill('');
+        await search.fill('ECO20001'); await expect(page.getByRole('listbox', { name: 'Search results' }).getByRole('option')).toHaveCount(0); await expect(page.getByText('No results', { exact: true })).toBeVisible(); await search.fill('');
         dialog = await open(page, 'Enquiries'); await expect(dialog.getByRole('region', { name: 'Client credit' }).locator('.release-notice:visible')).toHaveText(notice);
         await dialog.getByRole('tab', { name: 'Buyers and Credit', exact: true }).click(); await expect(dialog.locator('#center-panel-Credit .release-notice')).toHaveText(notice); await expect(dialog.locator('.buyer-profile, .credit-usage')).toHaveCount(0);
         if (role === 'trader') await shot('enquiry-credit-gate'); await close(page);

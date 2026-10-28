@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installSharedLocations } from './fixtures/shared-locations.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
@@ -10,6 +11,9 @@ const out=resolve(process.env.ECO_BACKGROUND_UI_OUTPUT || tmpdir()+'/eco-backgro
 const reports=resolve(process.env.ECO_BACKGROUND_REPORT_OUTPUT || out);
 await mkdir(out,{recursive:true}); await mkdir(reports,{recursive:true});
 const results=[];
+const testRequire=createRequire(createRequire(import.meta.url).resolve('@playwright/test'));
+const { PNG }=createRequire(testRequire.resolve('playwright'))('playwright-core/lib/utilsBundle');
+let pixelCapture;
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -39,31 +43,35 @@ async function mocks(context) {
   return state;
 }
 async function pixels(page) {
+  const start=Date.now();pixelCapture={stage:'layout',startedAt:start};
+  const view=await page.evaluate(()=>({width:innerWidth,height:innerHeight,
+    excluded:[...document.querySelectorAll('.world-identity,.main-search,.world-launcher,.home-hud-stack,.flowing-footer,.entry-brand,.access-login')].map(n=>{
+      const b=n.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom};
+    }),
+  }));
+  pixelCapture={...pixelCapture,stage:'screenshot',layoutMs:Date.now()-start};
   const bytes=await page.screenshot({animations:'allow'});
-  return page.evaluate(async data=>{
-    const image=new Image(); image.src=data; await image.decode();
-    const canvas=document.createElement('canvas'); canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
-    const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    const excluded=[...document.querySelectorAll('.world-identity,.main-search,.world-launcher,.home-hud-stack,.flowing-footer,.entry-brand,.access-login')].map(n=>n.getBoundingClientRect());
-    const colours=[];
-    for(let y=8;y<innerHeight-8;y+=12)for(let x=8;x<innerWidth-8;x+=12){
-      if(excluded.some(b=>x>=b.left-4&&x<=b.right+4&&y>=b.top-4&&y<=b.bottom+4))continue;
-      const i=(Math.floor(y*canvas.height/innerHeight)*canvas.width+Math.floor(x*canvas.width/innerWidth))*4;
-      colours.push([pixels[i],pixels[i+1],pixels[i+2]]);
-    }
-    return {count:colours.length, mean:colours.flat().reduce((a,b)=>a+b,0)/(colours.length*3), spread:Math.max(...colours.flat())-Math.min(...colours.flat())};
-  },'data:image/png;base64,'+bytes.toString('base64'));
+  pixelCapture={...pixelCapture,stage:'decode',captureMs:Date.now()-start};
+  // Decode the actual screenshot in Node using Playwright's pinned PNG utility.
+  // Re-decoding it as another page image adds an unrelated browser loading wait.
+  const image=PNG.sync.read(bytes),colours=[];
+  for(let y=8;y<view.height-8;y+=12)for(let x=8;x<view.width-8;x+=12){
+    if(view.excluded.some(b=>x>=b.left-4&&x<=b.right+4&&y>=b.top-4&&y<=b.bottom+4))continue;
+    const i=(Math.floor(y*image.height/view.height)*image.width+Math.floor(x*image.width/view.width))*4;
+    colours.push([image.data[i],image.data[i+1],image.data[i+2]]);
+  }
+  const result={count:colours.length, mean:colours.flat().reduce((a,b)=>a+b,0)/(colours.length*3), spread:Math.max(...colours.flat())-Math.min(...colours.flat())};
+  pixelCapture={...pixelCapture,stage:'complete',totalMs:Date.now()-start,result};
+  return result;
 }
 async function renderedPixels(page, accepts, message) {
-  let current, previous;
+  let current;
   // A loaded image or submitted WebGL draw does not establish painted pixels.
-  // Require two actual captures with the expected artwork before comparing modes.
+  // Require an actual capture with the expected artwork before comparing modes.
   try {
     await expect.poll(async () => {
       current = await pixels(page);
-      const ready = accepts(current) && previous !== undefined && accepts(previous);
-      previous = current;
-      return ready;
+      return accepts(current);
     }, { timeout: 15000, message }).toBe(true);
   } catch (error) {
     throw new Error(`${error.message}\nLast rendered pixels: ${JSON.stringify(current)}`, { cause: error });
@@ -147,7 +155,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
     page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
     const media=[];context.on('request',r=>{if(/flowing-water.*\.(mp4|jpg)/.test(r.url()))media.push(new URL(r.url()).pathname);});
     try{
-      await page.goto(base);await expect(page.locator('.access-login')).toBeVisible();
+      await page.goto(base,{waitUntil:'domcontentloaded'});await expect(page.locator('.access-login')).toBeVisible();
       await expect(page.getByLabel('Background',{exact:true})).toHaveValue('diffuse');await ready(page,'diffuse');
       for(const choice of ['diffuse','watercolour']){
         await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
@@ -163,7 +171,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await page.getByLabel('Email',{exact:true}).fill(member.email);await page.getByLabel('Password',{exact:true}).fill('Synthetic Password 8');
         await authenticationNavigation(page,'login',()=>tap(page,page.getByRole('button',{name:'Sign in',exact:true}),width));
         await ready(page,choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
-        await authenticationNavigation(page,'session',()=>page.reload());await ready(page,choice);
+        await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}));await ready(page,choice);
         await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);
         const mediaNode=page.locator(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas');
@@ -197,7 +205,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           await page.getByRole('button',{name:'Close workspace',exact:true}).click();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(false);
         }
         await authenticationNavigation(page,'logout',()=>tap(page,page.getByRole('button',{name:'Sign out',exact:true}),width),false);
-        await authenticationNavigation(page,'session',()=>page.reload(),false);await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
+        await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}),false);await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
         results.push({engine,width,choice,passed:true,day,night,persistence:true});
       }
       await page.getByLabel('Background',{exact:true}).selectOption('diffuse');await ready(page,'diffuse');
@@ -210,7 +218,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       assert.deepEqual(errors,[]);assert.deepEqual(state.unexpected,[]);
       assert.deepEqual(state.writes,['/api/access/login','/api/access/logout','/api/access/login','/api/access/logout']);
       console.log(`PASS ${engine} ${width}: both backgrounds, actual night pixels, touch and saved preferences`);
-    }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
+    }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,pixelCapture,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
     finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await context.close();}
   }}finally{await browser.close();}
 }

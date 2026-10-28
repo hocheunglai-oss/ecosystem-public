@@ -220,7 +220,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await activate(dialogToggle, mobile); await mode(page, 'dark');
       await activate(page.getByRole('button', { name: 'Close workspace', exact: true }), mobile);
       await mode(page, 'dark');
-      await authenticationNavigation(page, 'session', () => page.reload()); await mode(page, 'dark');
+      await authenticationNavigation(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' })); await mode(page, 'dark');
       await activate(page.locator('.world-identity'), mobile); await mode(page, 'dark');
       await screenshot(page, `${engine}-${width}-signed-in-dark`);
       await activate(homeToggle(page), mobile); await mode(page, 'light');
@@ -237,7 +237,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await mode(page, 'dark');
       await authenticationNavigation(page, 'logout', () => activate(page.getByRole('button', { name: 'Sign out', exact: true }), mobile), false);
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
-      await authenticationNavigation(page, 'session', () => page.reload(), false); await mode(page, 'dark');
+      await authenticationNavigation(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' }), false); await mode(page, 'dark');
       if (width === 390) {
         await reducedMotionReload(page, context, `${engine}-${width}`);
         await motionSubscriptionSnapshot(page, `${engine}-${width}`);

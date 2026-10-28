@@ -104,7 +104,12 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         const retained=await mediaNode.elementHandle();const phase=await mediaNode.evaluate(n=>n.currentTime??Number(n.dataset.flowTimeMs));
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         assert.ok(await retained.evaluate(n=>n.isConnected),'Theme preserves media element');
-        assert.ok(await mediaNode.evaluate(n=>n.currentTime??Number(n.dataset.flowTimeMs))>=phase,'Theme does not reset phase');await retained.dispose();
+        if(Number.isFinite(phase)) assert.ok(await mediaNode.evaluate(n=>n.currentTime??Number(n.dataset.flowTimeMs))>=phase,'Theme does not reset phase');
+        else {
+          await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');
+          await expect(page.locator('.flowing-water-image')).toBeVisible();
+        }
+        await retained.dispose();
         await shot(page,`${engine}-${width}-${choice}-signed-in-light`);
         if(choice==='diffuse'){
           const v=page.locator('video.flowing-water-video');const source=await v.getAttribute('src');

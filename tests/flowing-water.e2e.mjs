@@ -88,13 +88,284 @@ const contentPositions = page => page.locator('.world-identity, .main-search, .w
   const box = node.getBoundingClientRect();
   return { name: node.className, x: box.x, y: box.y, width: box.width, height: box.height };
 }));
+async function waterPixelPlan(page) {
+  return page.evaluate(() => {
+    const excluded = [...document.querySelectorAll('.world-identity,.main-search,.world-launcher,.home-hud-stack,.flowing-footer,.entry-brand,.access-login,[role="dialog"],[role="region"][aria-label="Notifications"]')].map(node => node.getBoundingClientRect());
+    const points = [];
+    for (let y = 8; y < innerHeight - 8; y += 8) for (let x = 8; x < innerWidth - 8; x += 8) {
+      if (!excluded.some(box => box.width && box.height && x >= box.left - 4 && x <= box.right + 4 && y >= box.top - 4 && y <= box.bottom + 4)) points.push([x, y]);
+    }
+    return { width: innerWidth, height: innerHeight, points };
+  });
+}
+async function waterPixels(page, plan) {
+  // Read real compositor output, including the displayed night filter. The
+  // detached decoder changes no page pixels, canvas state or animation clock.
+  const bytes = await page.screenshot({ animations: 'allow' });
+  return page.evaluate(async ({ data, plan }) => {
+    const image = new Image(); image.src = data; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    return plan.points.flatMap(([x, y]) => {
+      const offset = (Math.floor(y * canvas.height / plan.height) * canvas.width + Math.floor(x * canvas.width / plan.width)) * 4;
+      return [pixels[offset], pixels[offset + 1], pixels[offset + 2]];
+    });
+  }, { data: `data:image/png;base64,${bytes.toString('base64')}`, plan });
+}
+function pixelDifference(first, second) {
+  assert.equal(first.length, second.length, 'The same unoccluded artwork pixels are compared');
+  assert.ok(first.length >= 300, 'Motion is measured across at least 100 visible background points');
+  let total = 0, changed = 0, maximum = 0;
+  for (let index = 0; index < first.length; index += 3) {
+    const channels = [0, 1, 2].map(channel => Math.abs(first[index + channel] - second[index + channel]));
+    total += channels.reduce((sum, value) => sum + value, 0);
+    maximum = Math.max(maximum, ...channels);
+    if (Math.max(...channels) >= 2) changed++;
+  }
+  return { mean: total / first.length, changedFraction: changed / (first.length / 3), maximum, points: first.length / 3 };
+}
+function verifyVisibleWaterPixels(pixels, label) {
+  const channels = [0, 1, 2].map(channel => pixels.filter((_value, index) => index % 3 === channel));
+  const spread = channels.map(values => {
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return { range: Math.max(...values) - Math.min(...values), deviation: Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length) };
+  });
+  assert.ok(spread.filter(channel => channel.range > 20).length >= 2 && Math.max(...spread.map(channel => channel.deviation)) > 6, `${label}: visible water retains multiple colour regions instead of a blank cleared canvas (${JSON.stringify(spread)})`);
+}
+const rendererCapabilities = new WeakMap();
+async function readyRenderer(page) {
+  const background = page.locator('.flowing-water-background');
+  await expect.poll(() => background.locator('img').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+  if (!rendererCapabilities.has(page)) {
+    const supported = await page.evaluate(() => {
+      const probe = document.createElement('canvas');
+      const gl = probe.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'low-power' });
+      const available = Boolean(gl && !gl.isContextLost());
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+      return available;
+    });
+    rendererCapabilities.set(page, supported);
+    if (process.platform === 'darwin' || process.env.ECO_REQUIRE_WEBGL === '1') assert.ok(supported, 'This verification host must provide WebGL1 to prove actual internal movement');
+  }
+  const supported = rendererCapabilities.get(page), reduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+  await expect(background).toHaveAttribute('data-renderer', supported && !reduced ? 'webgl' : 'fallback');
+  const image = background.locator('img'), canvas = background.locator('canvas');
+  await expect(canvas).toHaveCount(1);
+  if (supported && !reduced) {
+    await expect(image).toBeHidden(); await expect(canvas).toBeVisible();
+    assert.equal(await canvas.evaluate(node => getComputedStyle(node).opacity), '1');
+  } else {
+    await expect(image).toBeVisible();
+    assert.equal(await canvas.evaluate(node => getComputedStyle(node).opacity), '0');
+  }
+  return { supported, reduced, mode: supported && !reduced ? 'webgl' : 'fallback' };
+}
+const flowState = background => background.evaluate(node => {
+  const canvas = node.querySelector('canvas');
+  return { renderer: node.dataset.renderer, state: node.dataset.flowState, frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0), period: Number(canvas.dataset.flowPeriodMs) };
+});
+async function verifyStillWater(page, background, label, inspectPixels = true) {
+  await expect.poll(async () => (await flowState(background)).state !== 'running').toBe(true);
+  assert.ok((await animationState(background)).every(animation => animation.state !== 'running'), `${label}: no CSS water motion continues`);
+  const before = await flowState(background), bounds = await background.locator('canvas').boundingBox();
+  const plan = inspectPixels ? await waterPixelPlan(page) : null;
+  const pixels = plan ? await waterPixels(page, plan) : null;
+  await page.waitForTimeout(250);
+  assert.deepEqual(await flowState(background), before, `${label}: the actual render frame and active time stay frozen`);
+  assert.ok(boxDifference(await background.locator('canvas').boundingBox(), bounds) < .1, `${label}: framing stays fixed`);
+  if (plan) {
+    verifyVisibleWaterPixels(pixels, label);
+    const difference = pixelDifference(pixels, await waterPixels(page, plan));
+    assert.ok(difference.mean <= .05 && difference.maximum <= 1, `${label}: the displayed background pixels stay still (${JSON.stringify(difference)})`);
+  }
+}
+async function verifyInternalMotion(page, background) {
+  const capability = await readyRenderer(page), canvas = background.locator('canvas');
+  const imageBox = () => background.locator('img').evaluate(node => { const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height }; });
+  const stationary = await contentPositions(page), bounds = await canvas.boundingBox(), imageBounds = await imageBox();
+  assert.equal((await animationState(background)).length, 0, 'No panning image, moving sheen or other CSS motion can masquerade as internal flow');
+  assert.equal(await canvas.evaluate(node => getComputedStyle(node).transform), 'none', 'The canvas is never translated or zoomed');
+  const plan = await waterPixelPlan(page), first = await waterPixels(page, plan), before = await flowState(background), changes = [];
+  if (capability.mode === 'webgl') await expect(background).toHaveAttribute('data-flow-state', 'running');
+  // Real wall-clock movement proof. No mocked clock, seeking, playback-rate
+  // changes, hidden elements or altered pixels participate in these samples.
+  for (let sample = 0; sample < 8; sample++) {
+    await page.waitForTimeout(500);
+    changes.push(pixelDifference(first, await waterPixels(page, plan)));
+    assert.ok(boxDifference(await canvas.boundingBox(), bounds) < .1, 'Internal flow never pans or zooms its canvas');
+    assert.ok(boxDifference(await imageBox(), imageBounds) < .1, 'The original fallback image keeps fixed framing');
+    const contentAfter = await contentPositions(page);
+    assert.equal(contentAfter.length, stationary.length);
+    for (let index = 0; index < stationary.length; index++) assert.ok(boxDifference(contentAfter[index], stationary[index]) < .1, `Water never moves ${stationary[index].name}`);
+  }
+  const after = await flowState(background), strongest = changes.reduce((best, item) => item.mean > best.mean ? item : best);
+  if (capability.mode === 'webgl') {
+    assert.ok(after.frame > before.frame && after.time > before.time + 3500, 'Real internal animation frames and active time advance');
+    assert.ok(strongest.mean > .15 && strongest.changedFraction > .01, `Visible water pixels change inside the stationary frame (${JSON.stringify(strongest)})`);
+  } else {
+    assert.deepEqual(after, before, 'A genuinely unsupported WebGL host keeps the still fallback');
+    assert.ok(strongest.mean <= .05 && strongest.maximum <= 1, 'Unsupported graphics still renders a stable usable image');
+  }
+  return { capability, difference: strongest, elapsed: after.time - before.time, frames: after.frame - before.frame, fixedBounds: true, actualMovementVerified: capability.mode === 'webgl' };
+}
+async function installControlledPhaseReadback(background, plan) {
+  return background.locator('canvas').evaluateHandle((canvas, plan) => {
+    const gl = canvas.getContext('webgl');
+    if (!gl || gl.isContextLost()) throw new Error('Controlled readback requires the existing working WebGL context');
+    const original = gl.drawArrays, descriptor = Object.getOwnPropertyDescriptor(gl, 'drawArrays');
+    const program = gl.getParameter(gl.CURRENT_PROGRAM), phaseLocation = gl.getUniformLocation(program, 'u_phase');
+    let buffer = null, latest = null, serial = 0, restored = false;
+    const wrapped = function(...args) {
+      const result = Reflect.apply(original, this, args);
+      try {
+        const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+        if (this !== gl || gl.isContextLost() || gl.getParameter(gl.FRAMEBUFFER_BINDING) !== null) throw new Error('The real decorative draw must target its existing default framebuffer');
+        if (width <= 0 || height <= 0 || width * height > 3_005_000) throw new Error('Controlled readback exceeds the renderer buffer bound');
+        if (!buffer || buffer.length !== width * height * 4) buffer = new Uint8Array(width * height * 4);
+        // Read in the same stack as the actual draw, before the default
+        // preserveDrawingBuffer:false surface may be presented and cleared.
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
+        const readbackError = gl.getError();
+        if (readbackError !== gl.NO_ERROR) throw new Error(`Controlled GPU readback failed with WebGL error ${readbackError}`);
+        const pixels = plan.points.flatMap(([x, y]) => {
+          const column = Math.floor(x * width / plan.width), row = height - 1 - Math.floor(y * height / plan.height);
+          if (column < 0 || column >= width || row < 0 || row >= height) throw new Error('Controlled sample falls outside the framebuffer');
+          const offset = (row * width + column) * 4;
+          return [buffer[offset], buffer[offset + 1], buffer[offset + 2]];
+        });
+        latest = { serial: ++serial, expectedFrame: Number(canvas.dataset.flowFrame || 0) + 1,
+          phase: gl.getUniform(program, phaseLocation), sameProgram: gl.getParameter(gl.CURRENT_PROGRAM) === program,
+          width, height, bufferBytes: buffer.byteLength, viewportWidth: innerWidth, viewportHeight: innerHeight,
+          mode: args[0], first: args[1], count: args[2], triangleStrip: gl.TRIANGLE_STRIP, pixels };
+      } catch (error) { latest = { error: String(error.message) }; }
+      return result;
+    };
+    Object.defineProperty(gl, 'drawArrays', { configurable: true, writable: true, value: wrapped });
+    return {
+      capture() {
+        const node = canvas.closest('.flowing-water-background');
+        return { ...latest, state: { renderer: node.dataset.renderer, state: node.dataset.flowState,
+          frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0), period: Number(canvas.dataset.flowPeriodMs) },
+          retainedCanvas: canvas === document.querySelector('.flowing-water-canvas'), retainedContext: canvas.getContext('webgl') === gl,
+          hookInstalled: gl.drawArrays === wrapped, preserved: gl.getContextAttributes()?.preserveDrawingBuffer,
+          canvasWidth: canvas.width, canvasHeight: canvas.height };
+      },
+      restore() {
+        if (restored || gl.drawArrays !== wrapped) throw new Error('Controlled readback ownership changed before cleanup');
+        if (descriptor) Object.defineProperty(gl, 'drawArrays', descriptor); else delete gl.drawArrays;
+        buffer = null; latest = null; restored = true;
+        return gl.drawArrays === original && (descriptor ? Object.hasOwn(gl, 'drawArrays') : !Object.hasOwn(gl, 'drawArrays'));
+      },
+    };
+  }, plan);
+}
+async function controlledPhasePixels(readback, plan) {
+  const capture = await readback.evaluate(probe => probe.capture());
+  assert.equal(capture.error, undefined, 'Synchronous framebuffer capture succeeds after the real draw');
+  assert.ok(capture.retainedCanvas && capture.retainedContext && capture.hookInstalled && capture.sameProgram, 'The loop uses the original canvas, context, program and narrowly scoped readback hook');
+  assert.equal(capture.preserved, false, 'Testing does not change the production drawing-buffer setting');
+  assert.equal(capture.state.renderer, 'webgl'); assert.equal(capture.state.state, 'running');
+  assert.equal(capture.expectedFrame, capture.state.frame, 'Readback belongs to the recorded real draw, whose metadata updates after drawArrays returns');
+  assert.equal(capture.mode, capture.triangleStrip); assert.equal(capture.first, 0); assert.equal(capture.count, 4);
+  assert.equal(capture.width, capture.canvasWidth); assert.equal(capture.height, capture.canvasHeight);
+  assert.equal(capture.viewportWidth, plan.width); assert.equal(capture.viewportHeight, plan.height);
+  assert.equal(capture.bufferBytes, capture.width * capture.height * 4);
+  assert.ok(capture.bufferBytes <= 12_020_000, 'Only one bounded full-frame scratch buffer is retained');
+  assert.equal(capture.pixels.length, plan.points.length * 3);
+  const expectedPhase = (capture.state.time % capture.state.period) / capture.state.period * Math.PI * 2;
+  assert.ok(Number.isFinite(capture.phase) && Math.abs(capture.phase - expectedPhase) <= .000001, 'The actual GPU phase uniform matches the recorded active time to float precision');
+  verifyVisibleWaterPixels(capture.pixels, 'Controlled framebuffer phase');
+  return capture;
+}
+async function verifyPeriodicFrames(page, background) {
+  // Separate controlled-loop proof from the unchanged real-time composed
+  // screenshots above. Raw pixels are read synchronously from the real draw;
+  // this does not claim to capture a browser compositor presentation fence.
+  await page.goto('about:blank');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.clock.install();
+  await page.goto(base);
+  await expect(page.locator('.access-login')).toBeVisible();
+  await readyRenderer(page);
+  if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; stable fallback verified separately' };
+  await expect.poll(async () => (await flowState(background)).frame).toBeGreaterThan(2);
+  const plan = await waterPixelPlan(page), readback = await installControlledPhaseReadback(background, plan);
+  let evidence;
+  try {
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+    const beforePrime = await flowState(background);
+    await page.clock.fastForward(48);
+    const first = await controlledPhasePixels(readback, plan);
+    assert.ok(first.state.frame > beforePrime.frame && first.state.time > beforePrime.time, 'The baseline starts at an actual newly drawn phase');
+    const period = first.state.period;
+    assert.equal(period, 48000, 'The full internal loop retains its declared 48-second period');
+    await page.clock.fastForward(period);
+    const repeated = await controlledPhasePixels(readback, plan), repeat = pixelDifference(first.pixels, repeated.pixels);
+    assert.ok(repeated.serial > first.serial && repeated.state.frame > first.state.frame, 'The repeated phase is a new real draw, never a reused readback');
+    assert.ok(Math.abs(repeated.state.time - first.state.time - period) <= .001, `The comparison advances exactly one renderer period (${JSON.stringify({ first: first.state, repeated: repeated.state })})`);
+    assert.equal(repeated.phase, first.phase, 'Exactly one loop repeats the same actual GPU phase uniform');
+    assert.deepEqual([repeated.width, repeated.height], [first.width, first.height], 'Period comparison retains fixed framebuffer dimensions');
+    assert.ok(repeat.mean <= .12 && repeat.changedFraction <= .005, `The actual framebuffer returns to the same phase after one loop (${JSON.stringify({ repeat, first: first.state, repeated: repeated.state })})`);
+    await page.clock.fastForward(period / 4);
+    const quarterFrame = await controlledPhasePixels(readback, plan), quarter = pixelDifference(first.pixels, quarterFrame.pixels);
+    assert.ok(quarterFrame.serial > repeated.serial && quarterFrame.state.frame > repeated.state.frame, 'The quarter phase comes from a new real draw');
+    assert.ok(quarter.mean > .15 && quarter.changedFraction > .01, 'A quarter-loop differs visibly; periodic equality is not a frozen renderer');
+    const phase = quarterFrame.state.time % period;
+    await page.clock.fastForward((period - 96 - phase + period) % period);
+    const nearSeam = [await controlledPhasePixels(readback, plan)], phases = [nearSeam[0].state.time % period];
+    for (let sample = 0; sample < 4; sample++) {
+      await page.clock.fastForward(48);
+      const next = await controlledPhasePixels(readback, plan), previous = nearSeam.at(-1);
+      assert.ok(next.serial > previous.serial && next.state.frame > previous.state.frame, 'Every seam sample is a new real draw');
+      assert.ok(Math.abs(next.state.time - previous.state.time - 48) <= .001, 'Seam samples retain equal48ms active-time steps');
+      nearSeam.push(next); phases.push(next.state.time % period);
+    }
+    const wrap = phases.findIndex((value, index) => index > 0 && value < phases[index - 1]);
+    assert.ok(wrap > 0 && wrap < phases.length - 1, `Samples cross the real period boundary (${phases.join(', ')})`);
+    const steps = nearSeam.slice(1).map((frame, index) => pixelDifference(nearSeam[index].pixels, frame.pixels));
+    const neighbours = steps.filter((_step, index) => index !== wrap - 1), seam = steps[wrap - 1];
+    assert.ok(seam.mean <= Math.max(...neighbours.map(step => step.mean)) * 3 + .12, `The loop boundary has no pixel jump beyond adjacent equal-time steps (${JSON.stringify(steps)})`);
+    const captures = [first, repeated, quarterFrame, ...nearSeam].map(({ pixels, ...capture }) => capture);
+    evidence = { verified: true, period, repeat, quarter, phases, seam, adjacent: neighbours, captures,
+      provenance: 'Controlled-clock raw WebGL framebuffer readPixels in the same stack immediately after each native drawArrays; real-time composed screenshot movement/freeze evidence is separate and unchanged.' };
+  } finally {
+    try { assert.equal(await readback.evaluate(probe => probe.restore()), true, 'The original drawArrays method/property is restored before later checks'); }
+    finally { await readback.dispose(); await page.clock.resume(); }
+  }
+  return { ...evidence, readbackHookRestored: true };
+}
+async function verifyContextLossFallback(page, background) {
+  if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial fallback verified' };
+  const available = await background.locator('canvas').evaluate(node => {
+    const gl = node.getContext('webgl'), extension = gl?.getExtension('WEBGL_lose_context');
+    if (!extension) return false;
+    extension.loseContext(); return true;
+  });
+  assert.ok(available, 'The supported test renderer exposes deterministic context loss');
+  await expect(background).toHaveAttribute('data-renderer', 'fallback');
+  await expect(background).toHaveAttribute('data-flow-state', 'fallback');
+  await expect(background.locator('img')).toBeVisible();
+  assert.equal(await background.locator('canvas').evaluate(node => getComputedStyle(node).opacity), '0');
+  await verifyStillWater(page, background, 'Lost graphics context');
+  return { verified: true, originalStillImageVisible: true };
+}
 async function verifyArtwork(page, context, theme, verifyBytes = false) {
   const expected = waterArtwork, image = page.locator('.flowing-water-image');
   await expect(image).toHaveCount(1);
   await expect(image).toHaveAttribute('src', expected.path);
-  await expect(image).toBeVisible();
+  await readyRenderer(page);
   await expect.poll(() => image.evaluate((image, expected) => image.complete && image.naturalWidth === expected.width && image.naturalHeight === expected.height && new URL(image.currentSrc).pathname === expected.path, expected)).toBe(true);
+  const framing = await page.locator('.flowing-water-image,.flowing-water-canvas').evaluateAll(nodes => nodes.map(node => {
+    const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+    return { x: box.x, y: box.y, width: box.width, height: box.height, viewportWidth: innerWidth, viewportHeight: innerHeight, fit: style.objectFit, tag: node.tagName };
+  }));
+  for (const frame of framing) {
+    assert.ok(Math.abs(frame.x) < .1 && Math.abs(frame.y) < .1 && Math.abs(frame.width - frame.viewportWidth) < .1 && Math.abs(frame.height - frame.viewportHeight) < .1, 'The full-bleed PNG and animated canvas share fixed viewport bounds without a screenshot-border inset');
+    if (frame.tag === 'IMG') assert.equal(frame.fit, 'cover');
+  }
   const filter = await image.evaluate(node => getComputedStyle(node).filter);
+  assert.equal(await page.locator('.flowing-water-canvas').evaluate(node => getComputedStyle(node).filter), filter, 'The canvas and still reference share exactly the same colour-only theme treatment');
   if (theme === 'light') assert.equal(filter, 'none', 'Day mode displays the original approved artwork colours');
   else {
     assert.ok(filter.includes('#eco-watercolour-night'), 'Night applies its colour filter to the same visible image');
@@ -117,7 +388,7 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
       const clamp = value => Math.max(0, Math.min(1, value));
       return [[.08, .30], [.39, .63], [.73, .95]].map(([top, bottom]) => {
-        const source = [0, 0, 0], night = [0, 0, 0], squares = [0, 0, 0]; let count = 0;
+        const source = [0, 0, 0], sourceSquares = [0, 0, 0], night = [0, 0, 0], squares = [0, 0, 0]; let count = 0;
         for (let y = Math.floor(canvas.height * top); y < canvas.height * bottom; y += 8) {
           for (let x = Math.floor(canvas.width * .1); x < canvas.width * .9; x += 8) {
             const offset = (y * canvas.width + x) * 4, rgb = [0, 1, 2].map(channel => pixels[offset + channel] / 255);
@@ -125,19 +396,21 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
               const row = palette.matrix.slice(channel * 5, channel * 5 + 5), input = clamp(rgb.reduce((sum, value, index) => sum + value * row[index], row[4]));
               const table = palette.channels[channel], position = input * (table.length - 1), index = Math.min(Math.floor(position), table.length - 2);
               const value = table[index] + (table[index + 1] - table[index]) * (position - index);
-              source[channel] += rgb[channel]; night[channel] += value; squares[channel] += value * value;
+              source[channel] += rgb[channel]; sourceSquares[channel] += rgb[channel] ** 2; night[channel] += value; squares[channel] += value * value;
             }
             count++;
           }
         }
         const rgb = night.map(value => value / count);
-        return { source: source.map(value => value / count), rgb, variation: squares.map((value, channel) => Math.sqrt(Math.max(0, value / count - rgb[channel] ** 2))) };
+        const sourceMean = source.map(value => value / count);
+        return { source: sourceMean, sourceVariation: sourceSquares.map((value, channel) => Math.sqrt(Math.max(0, value / count - sourceMean[channel] ** 2))), rgb, variation: squares.map((value, channel) => Math.sqrt(Math.max(0, value / count - rgb[channel] ** 2))) };
       });
     }, palette);
     const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
     for (const region of regions) {
       assert.ok(luminance(region.rgb) < luminance(region.source), 'Each night region is darker than its corresponding day region');
-      assert.ok(Math.max(...region.variation) > .03, 'Night retains local colour variation instead of clipping a region into a flat fill');
+      assert.ok(Math.max(...region.sourceVariation) > .01, 'Each original reference region has measurable source texture');
+      assert.ok(Math.max(...region.variation) > Math.max(...region.sourceVariation) * .2, 'Night retains local variation relative to the original subtle source, rather than clipping a region into a flat fill');
     }
     const [plum, copper, blue] = regions.map(region => region.rgb);
     assert.ok(plum[2] > plum[0] * 1.2 && plum[0] > plum[1] * 1.2, 'The upper teal region becomes distinctly plum');
@@ -161,6 +434,16 @@ async function originalLogoColours(page) {
     return layers;
   });
   assert.ok(layers.every(layer => layer.filter === 'none' && layer.opacity === '1' && layer.blend === 'normal'), `The original white/green E/F logo is never recoloured with the water: ${JSON.stringify(layers)}`);
+  const tagline = await page.locator('.brand-tagline text').evaluate(node => {
+    const style = getComputedStyle(node), box = node.getBoundingClientRect(), frame = node.ownerSVGElement.getBoundingClientRect();
+    return { text: node.textContent.trim(), stroke: style.stroke, shadow: style.textShadow, size: parseFloat(style.fontSize), weight: Number(style.fontWeight), left: box.left, right: box.right, top: box.top, bottom: box.bottom, frame: { left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom } };
+  });
+  assert.equal(tagline.text, 'FRATELLI COSULICH MARINE ENERGY');
+  assert.equal(tagline.stroke, 'none', 'The existing tagline has solid letters without an outline in either theme');
+  assert.equal(tagline.shadow, 'none');
+  assert.equal(tagline.size, 22);
+  assert.equal(tagline.weight, 600);
+  assert.ok(tagline.left >= tagline.frame.left - 1 && tagline.right <= tagline.frame.right + 1 && tagline.top >= tagline.frame.top - 1 && tagline.bottom <= tagline.frame.bottom + 1, 'The stronger solid tagline fits its existing SVG lockup without clipping');
 }
 async function contributionColours(page) {
   const actions = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => {
@@ -226,29 +509,41 @@ async function verifyNightContrast(page) {
 async function verifyHiddenPause(page, background, waterImage) {
   // Isolated visibility fixture: exercise the same event used for a background
   // tab without relying on the host window focus or disturbing another browser.
-  await page.evaluate(() => {
+  const canvas = await background.locator('canvas').elementHandle();
+  assert.ok(canvas, 'The current decorative canvas exists before pausing');
+  const supported = rendererCapabilities.get(page);
+  await expect(background).toHaveAttribute('data-flow-state', supported ? 'running' : 'fallback');
+  const beforePause = await background.evaluate(node => {
+    const canvas = node.querySelector('canvas');
+    const state = { renderer: node.dataset.renderer, frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0) };
     for (const key of ['hidden', 'visibilityState']) {
       if (Object.hasOwn(document, key)) throw new Error(`Unexpected own visibility property: ${key}`);
     }
     Object.defineProperties(document, { hidden: { configurable: true, value: true }, visibilityState: { configurable: true, value: 'hidden' } });
     document.dispatchEvent(new Event('visibilitychange'));
+    return state;
   });
   try {
     await expect(background).toHaveAttribute('data-paused', 'true');
-    await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBe(0);
-    await background.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.ready)));
-    const still = await waterImage.boundingBox(), paused = await animationState(background);
-    await page.waitForTimeout(200);
-    assert.ok(boxDifference(await waterImage.boundingBox(), still) < 0.1, 'A hidden document freezes the theme artwork');
-    assert.deepEqual(await animationState(background), paused, 'A hidden document pauses every decorative animation');
+    await expect(background).toHaveAttribute('data-flow-state', supported ? 'paused' : 'fallback');
+    const paused = await flowState(background);
+    assert.equal(paused.renderer, beforePause.renderer, 'Visibility pauses the existing renderer without replacing it with another picture');
+    assert.ok(await canvas.evaluate(node => node === document.querySelector('.flowing-water-canvas')), 'Pausing preserves the existing canvas');
+    assert.ok(paused.frame >= beforePause.frame && paused.time >= beforePause.time, 'Pausing retains the current phase without restarting the renderer');
+    // Start pixel retention evidence at the first confirmed paused frame. A
+    // running screenshot can advance during encoding, decoding and transport.
+    // The unchanged strict pixel/clock and nonblank checks prove this real
+    // running-to-paused transition retains its rendered picture.
+    await verifyStillWater(page, background, 'Hidden document');
   } finally {
     await page.evaluate(() => {
       delete document.hidden; delete document.visibilityState;
       document.dispatchEvent(new Event('visibilitychange'));
     });
+    await canvas.dispose();
   }
   await expect(background).toHaveAttribute('data-paused', 'false');
-  await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBeGreaterThan(0);
+  if (rendererCapabilities.get(page)) await expect(background).toHaveAttribute('data-flow-state', 'running');
 }
 async function noOverflow(page, name) {
   const bounds = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
@@ -339,11 +634,21 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.ok((await page.locator('.access-login input').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).textTransform))).every(value => value === 'none'), 'Email and password case must remain exact');
       await shot('signed-out');
       // Broken/absent old harbour artwork must never block theme switching.
+      const retainedCanvas = await background.locator('canvas').elementHandle();
+      const themeFlow = await flowState(background), themeBounds = await background.locator('canvas').boundingBox();
+      const verifyThemeContinuity = async () => {
+        assert.ok(await retainedCanvas.evaluate(node => node === document.querySelector('.flowing-water-canvas')), 'Theme changes retain the same animation canvas');
+        assert.ok(boxDifference(await background.locator('canvas').boundingBox(), themeBounds) < .1, 'Theme changes preserve the exact animated frame bounds');
+        assert.ok((await flowState(background)).time >= themeFlow.time, 'Theme changes never reset the shared animation phase');
+      };
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
       await expect(toggle()).toHaveAttribute('aria-busy', 'false');
       await verifyArtwork(page, context, theme === 'light' ? 'dark' : 'light', true);
+      await verifyThemeContinuity();
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await verifyArtwork(page, context, theme);
+      await verifyThemeContinuity();
+      await retainedCanvas.dispose();
       await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       await expect(page.getByRole('alert')).toHaveText('Synthetic sign-in rejected.');
       await expect(page.getByLabel('Email', { exact: true })).toHaveValue(member.email);
@@ -357,24 +662,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await originalLogoColours(page);
       await contributionColours(page);
       const nightContrastMinimum = theme === 'dark' ? await verifyNightContrast(page) : null;
-      const stationary = await contentPositions(page);
       await expect(background).toHaveAttribute('data-paused', 'false');
-      await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBeGreaterThan(0);
-      const before = await animationState(background), imageSamples = [await waterImage.boundingBox()];
-      // Measure the visible range, not only net start/end displacement: a slow
-      // alternate animation can cross its turning point during this interval.
-      // Sample the live animation without changing its clock or playback rate.
-      for (let sample = 0; sample < 8; sample++) {
-        await page.waitForTimeout(500);
-        imageSamples.push(await waterImage.boundingBox());
-        const contentAfter = await contentPositions(page);
-        assert.equal(contentAfter.length, stationary.length);
-        for (let index = 0; index < stationary.length; index++) assert.ok(boxDifference(contentAfter[index], stationary[index]) < 0.1, `Water never moves ${stationary[index].name}`);
-      }
-      const after = await animationState(background);
-      assert.notDeepEqual(after.map(a => a.time), before.map(a => a.time), 'Decorative water advances');
-      const waterMotionPixels = Math.max(...['x', 'y', 'width', 'height'].map(key => Math.max(...imageSamples.map(box => box[key])) - Math.min(...imageSamples.map(box => box[key]))));
-      assert.ok(waterMotionPixels >= 0.3, `The theme artwork visibly moves across four seconds (${waterMotionPixels.toFixed(2)}px)`);
+      const internalMotion = await verifyInternalMotion(page, background);
       await verifyHiddenPause(page, background, waterImage);
       await shot('home');
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
@@ -403,7 +692,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
           await nav.getByRole('button', { name: label, exact: true }).click();
           const dialog = page.getByRole('dialog', { name: label, exact: true }); await expect(dialog).toBeVisible();
           await expect(background).toHaveAttribute('data-paused', 'true');
-          assert.ok((await animationState(background)).every(a => a.state !== 'running'), 'Working windows pause background movement');
+          await verifyStillWater(page, background, `${label} workspace`, false);
           const surface = await dialog.evaluate(node => getComputedStyle(node).backgroundColor);
           assert.ok(/^rgb\(/.test(surface) || /^rgba\([^,]+,[^,]+,[^,]+,\s*1\)/.test(surface), `${label}: working content has an opaque reading surface`);
           if (label === 'Supplier Profiles') await shot('workspace');
@@ -414,12 +703,10 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       }
       const opened = nav.locator('.launcher-toggle[aria-expanded="true"]'); if (await opened.count()) await opened.click();
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await expect.poll(async () => (await animationState(background)).filter(animation => animation.state === 'running').length).toBe(0);
-      await background.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.ready)));
-      const reduced = await animationState(background), reducedImage = await waterImage.boundingBox(); await page.waitForTimeout(200);
-      assert.ok(reduced.every(a => a.state !== 'running'), 'Reduced motion has no running water animation');
-      assert.deepEqual(await animationState(background), reduced, 'Reduced motion freezes the water');
-      assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Reduced motion leaves the theme artwork still');
+      await readyRenderer(page);
+      await expect(background).toHaveAttribute('data-flow-state', 'fallback');
+      await verifyStillWater(page, background, 'Reduced motion');
+      const reducedImage = await waterImage.boundingBox();
       const reducedArtworkStyle = await waterImage.evaluate(node => { const style = getComputedStyle(node); return { fit: style.objectFit, position: style.objectPosition, filter: style.filter }; });
       await toggle().focus(); await toggle().press('Enter');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
@@ -469,12 +756,14 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
         await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
         expectedWrites.push('/api/access/logout');
       }
+      const periodicity = width === 1440 || width === 320 ? await verifyPeriodicFrames(page, background) : { verified: false, reason: 'Same renderer period is exercised at desktop and narrow-phone widths' };
+      const contextLoss = width === 1440 || width === 320 ? await verifyContextLossFallback(page, background) : { verified: false, reason: 'Context loss is exercised at desktop and narrow-phone widths' };
       assert.deepEqual(state.writes, expectedWrites);
       assert.deepEqual(locations.requests, [], 'Navigation and theme changes never save shared location data');
       assert.deepEqual(state.harbour, [], 'Flowing Water does not request retired harbour assets');
       assert.ok(state.water.length > 0 && state.water.every(path => path === waterArtwork.path), 'Day and night use exactly the same artwork with no alternate scene requested');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      results.push({ engine, width, theme, passed: true, geometry, waterMotionPixels, nightContrastMinimum, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
+      results.push({ engine, width, theme, passed: true, geometry, internalMotion, periodicity, contextLoss, nightContrastMinimum, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
       console.log(`PASS ${engine} ${width} ${theme}: sign-in/out, navigation, theme, motion, role gate`);
     } catch (error) {
       results.push({ engine, width, theme, passed: false, error: error.message, unexpected: state.unexpected, errors });

@@ -72,6 +72,15 @@ async function motionPreference(page, reducedMotion) {
   // Bound that delivery separately; keep the following media/DOM checks strict.
   await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches),
     { timeout: 15000, message: 'Browser applied the requested motion preference' }).toBe(reducedMotion === 'reduce');
+  if (reducedMotion === 'reduce') {
+    // CI recorded the correct fallback just after the default assertion deadline.
+    // Bound this asynchronous transition separately, then keep the strict checks.
+    await expect.poll(() => page.locator('.flowing-water-background').evaluate(background => ({
+      paused: background.dataset.paused, renderer: background.dataset.renderer,
+      videos: background.querySelectorAll('video').length,
+    })), { timeout: 15000, message: 'Background completed the reduced-motion transition' })
+      .toEqual({ paused: 'true', renderer: 'fallback', videos: 0 });
+  }
 }
 async function motionDiagnostics(page) {
   return page.evaluate(() => ({
@@ -120,6 +129,12 @@ async function motionSubscriptionSnapshot(page, name) {
       await expect(background).toHaveAttribute('data-paused', 'true');
       await expect(background).toHaveAttribute('data-renderer', 'fallback');
       await expect(background.locator('video')).toHaveCount(0);
+      await background.locator('img').evaluate(image => new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Background image did not decode and paint within 15 seconds')), 15000);
+        image.decode().then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+          clearTimeout(timeout); resolve();
+        })), error => { clearTimeout(timeout); reject(error); });
+      }));
       await expect(background.locator('img')).toBeVisible();
       await mode(page, 'dark');
       await screenshot(page, `${name}-${choice}-preference-snapshot`);

@@ -72,6 +72,15 @@ async function motionPreference(page, reducedMotion) {
   await page.emulateMedia({ reducedMotion });
   await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches),
     { timeout: 15000, message: 'Browser applied the requested motion preference' }).toBe(reducedMotion === 'reduce');
+  if (reducedMotion === 'reduce') {
+    // CI recorded the correct fallback just after the default assertion deadline.
+    // Bound this asynchronous transition separately, then keep the strict checks.
+    await expect.poll(() => page.locator('.flowing-water-background').evaluate(background => ({
+      paused: background.dataset.paused, renderer: background.dataset.renderer,
+      videos: background.querySelectorAll('video').length,
+    })), { timeout: 15000, message: 'Background completed the reduced-motion transition' })
+      .toEqual({ paused: 'true', renderer: 'fallback', videos: 0 });
+  }
 }
 async function motionDiagnostics(page) {
   return page.evaluate(() => ({

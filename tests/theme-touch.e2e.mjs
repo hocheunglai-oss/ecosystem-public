@@ -51,6 +51,17 @@ async function mode(page, theme) {
 }
 const homeToggle = page => page.locator('.home-display-controls .theme-toggle:not(.ecosystem-feedback)');
 async function activate(locator, mobile) { if (mobile) await locator.tap(); else await locator.click(); }
+async function authenticatedNavigation(page, path, action) {
+  // Authentication is asynchronous. Wait for its actual response before checking
+  // the resulting workspace, including on slower mobile WebKit CI workers.
+  const [response] = await Promise.all([
+    page.waitForResponse(response => response.url() === `${base}/api/access/${path}`
+      && response.request().method() === (path === 'login' ? 'POST' : 'GET'), { timeout: 15000 }),
+    action(),
+  ]);
+  assert.equal(response.status(), 200, 'Synthetic authentication succeeded');
+  await expect(page.locator('.world-launcher')).toBeVisible({ timeout: 15000 });
+}
 async function screenshot(page, name) {
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal overflow');
@@ -118,8 +129,8 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await page.getByLabel('Email', { exact: true }).fill(member.email);
       await page.getByLabel('Password', { exact: true }).fill('Synthetic Password 8');
       await mode(page, 'dark'); await screenshot(page, `${engine}-${width}-signed-out-dark`);
-      await activate(page.getByRole('button', { name: 'Sign in', exact: true }), mobile);
-      await expect(page.locator('.world-launcher')).toBeVisible(); await mode(page, 'dark');
+      await authenticatedNavigation(page, 'login', () => activate(page.getByRole('button', { name: 'Sign in', exact: true }), mobile));
+      await mode(page, 'dark');
       await activate(page.getByRole('button', { name: 'Trading', exact: true }), mobile);
       await activate(page.getByRole('button', { name: 'Enquiries', exact: true }), mobile);
       const workspace = page.getByRole('dialog', { name: 'Enquiries', exact: true }); await expect(workspace).toBeVisible();
@@ -129,7 +140,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await activate(dialogToggle, mobile); await mode(page, 'dark');
       await activate(page.getByRole('button', { name: 'Close workspace', exact: true }), mobile);
       await mode(page, 'dark');
-      await page.reload(); await expect(page.locator('.world-launcher')).toBeVisible(); await mode(page, 'dark');
+      await authenticatedNavigation(page, 'session', () => page.reload()); await mode(page, 'dark');
       await activate(page.locator('.world-identity'), mobile); await mode(page, 'dark');
       await screenshot(page, `${engine}-${width}-signed-in-dark`);
       await activate(homeToggle(page), mobile); await mode(page, 'light');

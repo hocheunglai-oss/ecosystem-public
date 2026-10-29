@@ -2,68 +2,24 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import type { RefObject } from 'react';
 import { drawWaterNightStill } from './waterNightPalette';
 import { createVideoNightPalette } from './flowingWaterVideoPalette';
-import { createFlowingWaterRenderer, FLOW_PERIOD_MS } from './flowingWaterRenderer';
-import type { FlowingWaterRenderer } from './flowingWaterRenderer';
 import type { WaterBackground } from './backgroundPreference';
 
-/** Both modes share exactly the same artwork; night changes only its colours. */
-export function FlowingWaterBackground({ paused = false, background }: { paused?: boolean; background: WaterBackground }) {
-  return background === 'diffuse' ? <DiffuseWaterBackground paused={paused} /> : <PaintedWaterBackground paused={paused} />;
-}
+const backgroundMedia = {
+  diffuse: {
+    desktop: '/flowing-water-diffuse.mp4', mobile: '/flowing-water-diffuse-mobile.mp4',
+    poster: '/flowing-water-diffuse-poster.jpg', periodMs: 24000,
+  },
+  watercolour: {
+    desktop: '/flowing-water-watercolour.mp4', mobile: '/flowing-water-watercolour-mobile.mp4',
+    poster: '/flowing-water-watercolour-poster.jpg', periodMs: 6000,
+  },
+} as const;
 
-function PaintedWaterBackground({ paused }: { paused: boolean }) {
-  const night = useNightPalette();
-  const nightRef = useRef(night); nightRef.current = night;
-  const [hidden, setHidden] = useState(() => document.hidden);
-  const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const [flowState, setFlowState] = useState<'running' | 'paused' | 'fallback'>('fallback');
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const rendererRef = useRef<FlowingWaterRenderer | null>(null);
-  const pausedRef = useRef(paused || hidden);
-  pausedRef.current = paused || hidden;
-  useEffect(() => {
-    const update = () => setHidden(document.hidden);
-    document.addEventListener('visibilitychange', update);
-    return () => document.removeEventListener('visibilitychange', update);
-  }, []);
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(query.matches);
-    query.addEventListener('change', update);
-    update(); // Catch preference changes between the initial render and subscription.
-    return () => query.removeEventListener('change', update);
-  }, []);
-  useEffect(() => {
-    if (reduced) return;
-    const canvas = canvasRef.current;
-    const image = imageRef.current;
-    if (!canvas || !image) return;
-    let cancelled = false;
-    void image.decode().then(() => {
-      if (cancelled) return;
-      rendererRef.current = createFlowingWaterRenderer(canvas, image, pausedRef.current, setFlowState, nightRef.current);
-      if (!rendererRef.current) setFlowState('fallback');
-    }).catch(() => { if (!cancelled) setFlowState('fallback'); });
-    return () => {
-      cancelled = true;
-      rendererRef.current?.destroy();
-      rendererRef.current = null;
-    };
-  }, [reduced]);
-  useEffect(() => {
-    if (reduced) setFlowState('fallback');
-    else rendererRef.current?.setPaused(paused || hidden);
-  }, [paused, hidden, reduced]);
-  useLayoutEffect(() => { rendererRef.current?.setNight(night); }, [night]);
-  return <div className="flowing-water-background" data-background="watercolour" aria-hidden="true" data-paused={paused || hidden || reduced}
-    data-renderer={flowState === 'fallback' || reduced ? 'fallback' : 'webgl'} data-flow-state={reduced ? 'fallback' : flowState}>
-    <img ref={imageRef} className="flowing-water-image" src="/flowing-water-day.png" alt="" decoding="async" fetchPriority="high" />
-    <NightStill imageRef={imageRef} />
-    <canvas key={String(reduced)} ref={canvasRef} className="flowing-water-canvas" data-flow-period-ms={FLOW_PERIOD_MS} />
-    <div className="flowing-water-sheen" />
-    <div className="flowing-water-shade" />
-  </div>;
+/** Each choice shares one video and playback phase between day and night. */
+export function FlowingWaterBackground({ paused = false, background }: { paused?: boolean; background: WaterBackground }) {
+  // Reset media and its matching still only when choosing different artwork.
+  // A theme change must keep the existing element, rendition and playback time.
+  return <VideoWaterBackground key={background} paused={paused} background={background} />;
 }
 
 function subscribeNightPalette(notify: () => void) {
@@ -89,7 +45,8 @@ function NightStill({ imageRef }: { imageRef: RefObject<HTMLImageElement | null>
   return <canvas ref={canvasRef} className="flowing-water-night-still" data-ready={ready} />;
 }
 
-function DiffuseWaterBackground({ paused }: { paused: boolean }) {
+function VideoWaterBackground({ paused, background }: { paused: boolean; background: WaterBackground }) {
+  const media = backgroundMedia[background];
   const night = useNightPalette();
   const [hidden, setHidden] = useState(() => document.hidden);
   const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -98,7 +55,7 @@ function DiffuseWaterBackground({ paused }: { paused: boolean }) {
   // Keep the loaded rendition through rotation/resizes; changing theme must not
   // download a different movie or restart its phase.
   const [source] = useState(() => matchMedia('(max-width: 760px)').matches
-    ? '/flowing-water-diffuse-mobile.mp4' : '/flowing-water-diffuse.mp4');
+    ? media.mobile : media.desktop);
   const videoRef = useRef<HTMLVideoElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const paletteCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -155,13 +112,13 @@ function DiffuseWaterBackground({ paused }: { paused: boolean }) {
     paletteRef.current?.setActive(night && !stopped, night);
   }, [night, stopped, reduced, failed]);
   const playing = ready && !failed && !reduced && (!night || paletteReady);
-  return <div className="flowing-water-background" data-background="diffuse" aria-hidden="true"
+  return <div className="flowing-water-background" data-background={background} aria-hidden="true"
     data-paused={stopped} data-night-ready={paletteReady} data-renderer={playing ? 'video' : 'fallback'}
     data-flow-state={playing ? stopped ? 'paused' : 'running' : 'fallback'}>
-    <img ref={imageRef} className="flowing-water-image" src="/flowing-water-diffuse-poster.jpg" alt="" decoding="async" fetchPriority="high" />
+    <img ref={imageRef} className="flowing-water-image" src={media.poster} alt="" decoding="async" fetchPriority="high" />
     <NightStill imageRef={imageRef} />
     {!reduced && !failed && <video ref={videoRef} className="flowing-water-video" src={source}
-      muted loop playsInline preload="auto" disablePictureInPicture tabIndex={-1} data-flow-period-ms="24000"
+      muted loop playsInline preload="auto" disablePictureInPicture tabIndex={-1} data-flow-period-ms={media.periodMs}
       onPlaying={event => {
         const video = event.currentTarget;
         if (video !== videoRef.current) return;

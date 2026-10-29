@@ -91,7 +91,7 @@ async function shot(page,name){
   if(theme==='dark'){
     const bg=page.locator('.flowing-water-background');
     if(await bg.getAttribute('data-renderer')==='fallback') await expect(bg.locator('.flowing-water-night-still')).toHaveCSS('opacity','1');
-    else if(await bg.getAttribute('data-background')==='diffuse'){
+    else if(await bg.getAttribute('data-renderer')==='video'){
       await expect(bg).toHaveAttribute('data-night-ready','true');
       await expect(bg.locator('.flowing-water-video-palette')).toHaveCSS('opacity','1');
     }
@@ -117,9 +117,9 @@ async function ready(page,choice,forceFallback=false){
   }));
   const reduced=await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches);
   const supported=await graphicsAvailable(page),night=await page.locator('html').getAttribute('data-theme')==='dark';
-  if(reduced||forceFallback||(!supported&&(choice==='watercolour'||night))) await expect(bg).toHaveAttribute('data-renderer','fallback',{timeout:15000});
-  else if(choice==='diffuse') await expect(bg).toHaveAttribute('data-renderer','video',{timeout:30000});
-  else await expect(bg).toHaveAttribute('data-renderer','webgl',{timeout:15000});
+  if(reduced||forceFallback||(!supported&&night)) await expect(bg).toHaveAttribute('data-renderer','fallback',{timeout:15000});
+  else await expect(bg).toHaveAttribute('data-renderer','video',{timeout:30000});
+  await expect(bg.locator('img')).toHaveAttribute('src',`/flowing-water-${choice}-poster.jpg`);
   return bg;
 }
 async function motionPreference(page, reducedMotion) {
@@ -149,7 +149,7 @@ async function motionDiagnostics(page) {
   })).catch(() => null);
 }
 const mediaPhase = node => node.evaluate(n => ({
-  time:n.currentTime??Number(n.dataset.flowTimeMs),duration:n.duration,at:performance.now(),
+  time:n.currentTime,duration:n.duration,at:performance.now(),
   src:n.getAttribute('src'),currentSrc:n.currentSrc,paused:n.paused,seeking:n.seeking,
   readyState:n.readyState,networkState:n.networkState,events:window.__mediaPhaseEvents,
 }));
@@ -228,7 +228,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         const day=await renderedPixels(page,p=>p.count>100&&p.mean>80&&p.spread>30,'Day artwork reached the compositor');await shot(page,`${engine}-${width}-${choice}-signed-out-light`);
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await expect(toggle(page)).toHaveAttribute('aria-checked','true');await ready(page,choice);
-        if(choice==='diffuse'&&await graphicsAvailable(page)){
+        if(await graphicsAvailable(page)){
           const palette=page.locator('.flowing-water-video-palette'),start=Number(await palette.getAttribute('data-source-time'));
           assert.ok(Number.isFinite(start),'Night colour pass has drawn a real source frame');
           const duration=await page.locator('video.flowing-water-video').evaluate(video=>video.duration);
@@ -246,44 +246,38 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}));await ready(page,choice);
         await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);
-        const mediaNode=page.locator(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas');
-        if(choice==='diffuse')await expect.poll(()=>mediaNode.evaluate(video=>
+        const mediaNode=page.locator('.flowing-water-video');
+        await expect.poll(()=>mediaNode.evaluate(video=>
           !video.seeking&&video.currentTime>.5&&video.currentTime<video.duration-.5),
         {timeout:15000,message:'Post-reload decoder clock progressed beyond startup before theme comparison'}).toBe(true);
         const retained=await mediaNode.elementHandle();
         const phase=await mediaPhase(mediaNode);
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         await expect(toggle(page)).toHaveAttribute('aria-checked','false');
-        assert.ok(await retained.evaluate((n,choice)=>n===document.querySelector(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas'),choice),'Theme preserves the exact media element');
-        if(Number.isFinite(phase.time)) {
-          const next=await mediaPhase(mediaNode);
-          if(choice==='diffuse') {
-            assert.ok(Number.isFinite(phase.duration)&&phase.duration>0,'Playing video has a known loop duration');
-            const delta=next.time-phase.time,elapsed=(next.at-phase.at)/1000;
-            // One 30fps source frame may be reported just behind the preceding
-            // sample. Do not modulo that tiny correction into a whole 24s loop.
-            const clockCorrection=delta<0&&delta>=-1/30-1e-6;
-            const forward=clockCorrection?0:(delta+phase.duration)%phase.duration;
-            const evidence={kind:'playing',before:phase,after:next,delta,elapsed,clockCorrection,forward};phaseDiagnostics.push(evidence);
-            assert.equal(next.src,phase.src,'Theme retains video source attribute');
-            assert.equal(next.currentSrc,phase.currentSrc,'Theme retains decoded video source');
-            // Genuine loops retain the original wall-time bound; the separate
-            // nonzero paused check below rejects actual theme-triggered resets.
-            assert.ok(forward<=elapsed+.25,`Theme preserves forward video phase across a natural loop: ${JSON.stringify(evidence)}`);
-          } else assert.ok(next.time>=phase.time,'Theme does not reset cumulative canvas phase');
-        }
-        else {
-          await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');
-          await expect(page.locator('.flowing-water-image')).toBeVisible();
-        }
+        assert.ok(await retained.evaluate(n=>n===document.querySelector('.flowing-water-video')),'Theme preserves the exact media element');
+        assert.ok(Number.isFinite(phase.time)&&Number.isFinite(phase.duration)&&phase.duration>0,'Playing video has a known loop duration');
+        const next=await mediaPhase(mediaNode);
+        const delta=next.time-phase.time,elapsed=(next.at-phase.at)/1000;
+        // Both supplied clips are 30fps. One decoder sample may be reported one
+        // frame behind; do not modulo that correction into a whole loop.
+        const clockCorrection=delta<0&&delta>=-1/30-1e-6;
+        const forward=clockCorrection?0:(delta+phase.duration)%phase.duration;
+        const evidence={kind:'playing',choice,before:phase,after:next,delta,elapsed,clockCorrection,forward};phaseDiagnostics.push(evidence);
+        assert.equal(next.src,phase.src,'Theme retains video source attribute');
+        assert.equal(next.currentSrc,phase.currentSrc,'Theme retains decoded video source');
+        // Genuine loops retain the wall-time bound; the separate nonzero paused
+        // check below rejects actual theme-triggered resets in either direction.
+        assert.ok(forward<=elapsed+.25,`Theme preserves forward video phase across a natural loop: ${JSON.stringify(evidence)}`);
         await retained.dispose();
         await shot(page,`${engine}-${width}-${choice}-signed-in-light`);
-        if(choice==='diffuse'){
+        {
           const v=page.locator('video.flowing-water-video');const source=await v.getAttribute('src');
-          assert.equal(source,width<760?'/flowing-water-diffuse-mobile.mp4':'/flowing-water-diffuse.mp4');
+          assert.equal(source,`/flowing-water-${choice}${width<760?'-mobile':''}.mp4`);
+          assert.equal(await v.getAttribute('data-flow-period-ms'),choice==='diffuse'?'24000':'6000');
+          assert.ok(Math.abs(await v.evaluate(n=>n.duration)-(choice==='diffuse'?24:6))<1/30,'The selected supplied clip retains its native duration');
           assert.ok(await v.evaluate(n=>n.muted&&n.loop&&n.playsInline&&!n.controls));
-          const t=await v.evaluate(n=>n.currentTime);await expect.poll(()=>v.evaluate(n=>n.currentTime)).toBeGreaterThan(t+.1);
-          await expect.poll(()=>v.evaluate(n=>!n.seeking&&n.currentTime>1.25&&n.currentTime<n.duration-2),
+          const t=await v.evaluate(n=>n.currentTime);await expect.poll(()=>v.evaluate((n,t)=>(n.currentTime-t+n.duration)%n.duration,t)).toBeGreaterThan(.1);
+          await expect.poll(()=>v.evaluate(n=>!n.seeking&&n.currentTime>1.25&&n.currentTime<Math.min(2.5,n.duration-2)),
             {timeout:15000,message:'A decoded nonzero phase is available for the paused theme check'}).toBe(true);
           await page.getByRole('button',{name:'Trading',exact:true}).click();await page.getByRole('button',{name:'Enquiries',exact:true}).click();
           await expect(page.getByRole('dialog',{name:'Enquiries',exact:true})).toBeVisible();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(true);
@@ -312,11 +306,19 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         await motionPreference(page,'no-preference');await ready(page,choice);
       }
-      await page.locator('video.flowing-water-video').evaluate(v=>v.dispatchEvent(new Event('error')));
-      await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');await expect(page.locator('.flowing-water-image')).toBeVisible();
-      await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
-      await shot(page,`${engine}-${width}-video-error-dark`);
-      assert.deepEqual([...new Set(media.filter(p=>p.endsWith('.mp4')))], [width<760?'/flowing-water-diffuse-mobile.mp4':'/flowing-water-diffuse.mp4'],'Only matching rendition; no night video');
+      for(const choice of ['watercolour','diffuse']){
+        await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
+        await page.locator('video.flowing-water-video').evaluate(v=>v.dispatchEvent(new Event('error')));
+        await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');
+        await expect(page.locator('.flowing-water-image')).toBeVisible();
+        await expect(page.locator('.flowing-water-image')).toHaveAttribute('src',`/flowing-water-${choice}-poster.jpg`);
+        await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+        await shot(page,`${engine}-${width}-${choice}-video-error-dark`);
+        await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+      }
+      assert.deepEqual([...new Set(media.filter(p=>p.endsWith('.mp4')))].sort(),
+        ['diffuse','watercolour'].map(choice=>`/flowing-water-${choice}${width<760?'-mobile':''}.mp4`).sort(),
+        'Only matching renditions of the two selected clips load; no alternate night movie');
       assert.deepEqual(errors,[]);assert.deepEqual(state.unexpected,[]);
       assert.deepEqual(state.writes,['/api/access/login','/api/access/logout','/api/access/login','/api/access/logout']);
       console.log(`PASS ${engine} ${width}: both backgrounds, actual night pixels, touch and saved preferences`);
@@ -337,7 +339,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       try{
         await fallbackPage.goto(base,{waitUntil:'domcontentloaded'});await expect(fallbackPage.locator('.access-login')).toBeVisible();
         for(const choice of ['diffuse','watercolour']){
-          await fallbackPage.getByLabel('Background',{exact:true}).selectOption(choice);await ready(fallbackPage,choice,choice==='watercolour');
+          await fallbackPage.getByLabel('Background',{exact:true}).selectOption(choice);await ready(fallbackPage,choice);
           const source=await fallbackPage.locator('.flowing-water-image').getAttribute('src');
           const day=await renderedPixels(fallbackPage,p=>p.count>100&&p.mean>80&&p.spread>30,'Unsupported-WebGL day artwork is painted');
           await shot(fallbackPage,`${engine}-${width}-${choice}-no-webgl-light`);

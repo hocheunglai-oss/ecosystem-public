@@ -1,6 +1,6 @@
 # Flowing Water background comparison
 
-The owner’s latest 28 October 2026 request restores the textured screenshot version alongside the faithful diffuse animation, so they can choose a final background. This supersedes the single smooth procedural proposal. The functional selector uses BACKGROUND with DIFFUSE and WATERCOLOUR, in the existing footer. DIFFUSE is the initial default; `ecosystem.background.v1` stores a browser-local choice independently of the theme. Sign-in, sign-out, navigation and reload must retain both choices.
+The owner’s 29 October 2026 request replaces WATERCOLOUR with the latest six-second directional-wave video from their “Continue Request” chat. DIFFUSE remains available and unchanged. This supersedes the former 48-second watercolour graphics effect, not the shared layout or display controls. The functional selector uses BACKGROUND with DIFFUSE and WATERCOLOUR in the existing footer. DIFFUSE remains the initial default; `ecosystem.background.v1` stores the browser-local choice independently of the theme. Sign-in, sign-out, navigation and reload retain both choices.
 
 ## Diffuse
 
@@ -14,9 +14,13 @@ Compression and colour conversion introduce small differences from the lossless 
 
 ## Watercolour
 
-The restored artwork is `public/flowing-water-day.png` (1672 × 941), SHA-256 `365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c`. It is the earlier generated watercolour artwork shown in the owner’s 11:19 screenshot. Do not substitute the superseded `flowing-water-calm.png` or smooth procedural still. `src/flowingWaterRenderer.ts` restores the corresponding single-image renderer, with bounded local texture-coordinate flow over a seamless 48-second period. This is a graphics effect applied to the painted source, not a physical ocean simulation. It does not pan or zoom the whole image or combine resized copies of it.
+The owner selected the latest directional-wave revision from “Continue Request” on 29 October 2026. Its source package is `ECO-directional-background-website-package.zip`; the desktop and mobile H.264 videos and JPEG poster are copied byte-for-byte into the public assets below. The video is 1440 × 810, 30 fps, six seconds and silent; its smaller rendition is 960 × 540. This is the rightward/slightly upward directional revision, not the earlier sixteen-second swirl. No generation service, re-encoding, blur, extra deformation, moving overlay or whole-image transform is added by ECO.
 
-The canvas keeps fixed centered cover framing, capped at 30 frames/second and a bounded rendering resolution. Unsupported/lost graphics and reduced motion show the exact source still. Hidden tabs and open workspaces freeze active phase and rendering.
+The package describes a fixed overall turquoise-to-blue composition with forward texture transport and staggered internal phase blending. This is an artistic animation, not physical ocean footage. A compressed loop is not a promise of pixel-identical endpoint frames or flawless scheduling on every device. Verify the actual browser wrap and movement rather than relying on the package’s validation claims.
+
+Both choices use the shared inline video component. Only changing the background choice remounts it; theme changes retain the same element, source and playback time. WATERCOLOUR uses fixed centered cover framing with no extra inset. DIFFUSE alone retains its original frame-removal crop. Matching stills cover loading, reduced motion, failed playback and unsupported night compositing. Hidden tabs and open workspaces pause playback.
+
+For recovery, the earlier `public/flowing-water-day.png` (1672 × 941, SHA-256 `365ee9400a431fdd03079e40bb86bec7f78e5f6fbe0555aaaa596145bcaaf59c`) and `src/flowingWaterRenderer.ts` remain in source history/current archived files. They are not used by the selected WATERCOLOUR entry background.
 
 ## Themes and branding
 
@@ -32,8 +36,13 @@ Check both choices in day/night, signed-in/out, desktop and 320/390 px phones, C
 
 | Asset | Dimensions | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
+| flowing-water-watercolour.mp4 | 1440 × 810 | 2,903,247 | `4f3f318280ad48e6bab0bdb9f84c09346a80c413fa1424fcbbaa9e14155143ef` |
+| flowing-water-watercolour-mobile.mp4 | 960 × 540 | 801,408 | `428fd8fd05c42ac5d331e215dc2d2a056ff4b8b964a697d9d8256fb082e3e079` |
+| flowing-water-watercolour-poster.jpg | 1440 × 810 | 202,411 | `b66d9f876c074587b33afce458fbb265832967942692a0f093144d104e1494ee` |
 | flowing-water-diffuse.mp4 | 1492 × 704 | 10,890,624 | `0770af0fee2b0c95be4f516618071e6b1a0b5483293158ced64289919eae0621` |
 | flowing-water-diffuse-mobile.mp4 | 960 × 454 | 2,945,116 | `7c89cde66b676842448ba06ac1c6bd171a9ec11663aefdad9da2676e46c8a027` |
 | flowing-water-diffuse-poster.jpg | 1492 × 704 | 144,241 | `930e622da7bea1a8a1c5fc623e284b6e7d2fa00e7a829ffe1681038d1a88c5c2` |
 
-Encoding: software H.264 High, slow CRF 12 with grain tuning, YUV420P limited range, 30 fps, 24 seconds. Explicit VUI/container tags use BT.709 primaries/matrix and IEC 61966-2-1 (sRGB) transfer. These tags matter: relying on defaults lifted the artwork’s colours in browsers. The JPEG is a quality-95 format conversion of the first lossless source frame. Source-frame SHA, encoder comparisons, normal-rate playback and screenshot colour measurements are retained in private release evidence. The compressed wrap difference averages below 1/255 across RGB, although it exceeds ordinary adjacent predictive-codec texture differences; do not claim pixel-identical endpoints.
+WATERCOLOUR package SHA-256: `732782de1744823af6c4e99dd4780a9d75ab37cd88238345a3cf9d96c993b171`. Preserve these supplied compressed assets without repeated re-encoding; any future creative replacement needs the owner’s direction.
+
+DIFFUSE encoding: software H.264 High, slow CRF 12 with grain tuning, YUV420P limited range, 30 fps, 24 seconds. Explicit VUI/container tags use BT.709 primaries/matrix and IEC 61966-2-1 (sRGB) transfer. These tags matter: relying on defaults lifted the artwork’s colours in browsers. The JPEG is a quality-95 format conversion of the first lossless source frame. Source-frame SHA, encoder comparisons, normal-rate playback and screenshot colour measurements are retained in private release evidence. The compressed wrap difference averages below 1/255 across RGB, although it exceeds ordinary adjacent predictive-codec texture differences; do not claim pixel-identical endpoints.

@@ -127,6 +127,7 @@ jobs:
           - group: administration
             label: Administration
             scripts: |
+              tests/flowing-water.e2e.mjs
               tests/theme-toggle.e2e.mjs
               tests/theme-touch.e2e.mjs
               tests/background-choice.e2e.mjs
@@ -137,7 +138,6 @@ jobs:
               tests/admin-health-refresh.e2e.mjs
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
-              tests/flowing-water.e2e.mjs
             artifacts: |
               output/administration-ui
               output/contribution-actions-ui

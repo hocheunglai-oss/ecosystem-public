@@ -187,17 +187,81 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
   await expect.poll(async () => (await flowState(background)).state !== 'running').toBe(true);
   assert.ok((await animationState(background)).every(animation => animation.state !== 'running'), `${label}: no CSS water motion continues`);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const before = await flowState(background), bounds = await background.boundingBox();
-  const plan = inspectPixels ? await waterPixelPlan(page) : null;
-  const pixels = plan ? await waterPixels(page, plan) : null;
-  await page.waitForTimeout(250);
-  assert.deepEqual(await flowState(background), before, `${label}: the displayed video time stays frozen`);
-  assert.ok(boxDifference(await background.boundingBox(), bounds) < .1, `${label}: framing stays fixed`);
-  if (plan) {
-    verifyVisibleWaterPixels(pixels, label);
-    const difference = pixelDifference(pixels, await waterPixels(page, plan));
-    assert.ok(difference.mean <= .05 && difference.maximum <= 1, `${label}: the displayed background pixels stay still (${JSON.stringify(difference)})`);
+  if (await background.getAttribute('data-renderer') === 'video') {
+    // A pause can coincide with the native loop seek. Finish only that bounded
+    // readiness transition before taking the immutable paused-time baseline.
+    await expect.poll(() => background.locator('video.flowing-water-video').evaluate(node => ({ paused: node.paused, seeking: node.seeking })),
+      { timeout: 1000, message: `${label}: native paused frame is no longer seeking` }).toEqual({ paused: true, seeking: false });
   }
+  const before = await flowState(background), bounds = await background.boundingBox();
+  const video = before.renderer === 'video' ? await background.locator('video.flowing-water-video').elementHandle() : null;
+  const nativeState = async () => video ? video.evaluate(node => {
+    const quality = node.getVideoPlaybackQuality?.();
+    return { time: node.currentTime, paused: node.paused, seeking: node.seeking, source: node.getAttribute('src'), currentSrc: node.currentSrc,
+      readyState: node.readyState, decoded: node.webkitDecodedFrameCount,
+      totalFrames: quality?.totalVideoFrames, droppedFrames: quality?.droppedVideoFrames,
+      frames: node.__ecoPauseTrace?.frames ?? [], events: node.__ecoPauseTrace?.events ?? [] };
+  }) : null;
+  const initial = await nativeState(), samples = [];
+  const diagnostics = { label, before, initial, samples, settleBudgetMs: 1000, holdSamples: 3, holdIntervalMs: 250 };
+  const invariant = async () => {
+    assert.deepEqual(await flowState(background), before, `${label}: the displayed video time stays frozen`);
+    assert.ok(boxDifference(await background.boundingBox(), bounds) < .1, `${label}: framing stays fixed`);
+    if (video) {
+      assert.ok(await video.evaluate(node => node === document.querySelector('video.flowing-water-video')), `${label}: the same media node is retained`);
+      const actual = await nativeState();
+      assert.equal(actual.paused, true, `${label}: native playback remains paused`);
+      assert.equal(actual.seeking, false, `${label}: native playback cannot seek`);
+      for (const key of ['time', 'source', 'currentSrc']) assert.equal(actual[key], initial[key], `${label}: exact native ${key} stays frozen`);
+      return actual;
+    }
+    return null;
+  };
+  try {
+    await invariant();
+    if (!inspectPixels) { await page.waitForTimeout(250); await invariant(); return; }
+    const plan = await waterPixelPlan(page);
+    const capture = async (kind, reference) => {
+      const sample = { kind, startedAtMs: performance.now(), before: await nativeState() }; samples.push(sample);
+      await invariant();
+      sample.captureStartedAtMs = performance.now();
+      const pixels = await waterPixels(page, plan);
+      sample.finishedAtMs = performance.now(); sample.screenshotCallMs = sample.finishedAtMs - sample.captureStartedAtMs;
+      sample.after = await nativeState();
+      if (reference) sample.difference = pixelDifference(reference, pixels);
+      await invariant(); verifyVisibleWaterPixels(pixels, label);
+      return pixels;
+    };
+    const stable = difference => difference.mean <= .05 && difference.maximum <= 1;
+    // pause() freezes the native clock before its final queued frame necessarily
+    // reaches the compositor. Admit only a bounded presentation-settling phase,
+    // keeping that exact original clock/node/source invariant for every capture.
+    const started = performance.now(), deadline = started + 1000;
+    let baseline = await capture('initial');
+    if (video) {
+      let consecutive = 0;
+      while (consecutive < 2) {
+        assert.ok(performance.now() < deadline, `${label}: native presentation must settle within 1000ms`);
+        const next = await capture('settling', baseline), difference = samples.at(-1).difference;
+        assert.ok(performance.now() <= deadline, `${label}: native presentation must settle within 1000ms`);
+        consecutive = stable(difference) ? consecutive + 1 : 0;
+        baseline = next;
+      }
+    }
+    diagnostics.baselineAcceptedMs = performance.now() - started;
+    // Each independent hold compares to the one accepted baseline, so small
+    // cumulative changes or a decoder that resumes cannot disappear in retries.
+    for (let index = 0; index < 3; index++) {
+      await page.waitForTimeout(250);
+      await capture('hold', baseline);
+      const difference = samples.at(-1).difference;
+      assert.ok(stable(difference), `${label}: the displayed background pixels stay still (${JSON.stringify(difference)})`);
+    }
+  } catch (error) {
+    diagnostics.error = error.message;
+    await writeFile(`${out}/pause-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`, JSON.stringify(diagnostics, null, 2));
+    throw error;
+  } finally { await video?.dispose(); }
 }
 async function verifyInternalMotion(page, background) {
   const capability = await readyRenderer(page), video = background.locator('video.flowing-water-video');
@@ -514,6 +578,20 @@ async function verifyHiddenPause(page, background, waterImage) {
   const video = await background.locator('video.flowing-water-video').elementHandle();
   assert.ok(video, 'The current supplied video exists before pausing');
   const beforePause = await flowState(background);
+  await video.evaluate(node => {
+    const trace = { frames: [], events: [] }; node.__ecoPauseTrace = trace;
+    const record = event => { trace.events.push({ type: event.type, at: performance.now(), time: node.currentTime, paused: node.paused }); if (trace.events.length > 24) trace.events.shift(); };
+    const types = ['pause', 'playing', 'seeking', 'seeked', 'ended', 'timeupdate'];
+    for (const type of types) node.addEventListener(type, record);
+    let request = 0;
+    const frame = (now, metadata) => {
+      trace.frames.push({ at: now, mediaTime: metadata.mediaTime, presentedFrames: metadata.presentedFrames, expectedDisplayTime: metadata.expectedDisplayTime });
+      if (trace.frames.length > 24) trace.frames.shift();
+      request = node.requestVideoFrameCallback(frame);
+    };
+    if (node.requestVideoFrameCallback) request = node.requestVideoFrameCallback(frame);
+    node.__ecoStopPauseTrace = () => { if (request) node.cancelVideoFrameCallback(request); for (const type of types) node.removeEventListener(type, record); delete node.__ecoStopPauseTrace; };
+  });
   await page.evaluate(() => {
     for (const key of ['hidden', 'visibilityState']) if (Object.hasOwn(document, key)) throw new Error(`Unexpected own visibility property: ${key}`);
     Object.defineProperties(document, { hidden: { configurable: true, value: true }, visibilityState: { configurable: true, value: 'hidden' } });
@@ -532,6 +610,7 @@ async function verifyHiddenPause(page, background, waterImage) {
     assert.ok(forward < 1000, 'Pausing retains the current phase, including a natural boundary wrap');
     await verifyStillWater(page, background, 'Hidden document');
   } finally {
+    await video.evaluate(node => node.__ecoStopPauseTrace?.());
     await page.evaluate(() => { delete document.hidden; delete document.visibilityState; document.dispatchEvent(new Event('visibilitychange')); });
     await video.dispose();
   }

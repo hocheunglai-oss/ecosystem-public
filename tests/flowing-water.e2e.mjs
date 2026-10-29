@@ -334,25 +334,26 @@ async function verifyPeriodicFrames(page, background) {
     const classifyStep = step => {
       const sourceFrames = Math.round(step.delta / frameSeconds);
       // rVFC is dispatched on the main thread after compositor submission. Its
-      // callback delay is not the display interval. Bound both compositor clocks
-      // and the freshness/phase of the pixels read in this callback instead.
+      // callback delay is not the frame interval. expectedDisplayTime is only a
+      // forecast; bound recorded submission times and pixel freshness/phase.
+      const freshNativePixels = native
+        && step.callbackLagSeconds.every(value => Number.isFinite(value) && value >= -1e-6 && value <= .1 + 1e-6)
+        && step.phaseDistanceSeconds.every(value => Number.isFinite(value) && value <= .1 + 1e-6);
       const closelySampled = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 3 + 1e-6
         && (native
           ? sourceFrames >= 1 && sourceFrames <= 3 && Math.abs(step.delta - sourceFrames * frameSeconds) <= 1e-6
             && Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta >= 1 && step.presentedFramesDelta <= sourceFrames
-            && [step.displaySeconds, step.presentationSeconds].every(value => Number.isFinite(value) && value > 0 && value <= .1 + 1e-6)
-            && step.callbackLagSeconds.every(value => Number.isFinite(value) && Math.abs(value) <= .1 + 1e-6)
-            && step.phaseDistanceSeconds.every(value => Number.isFinite(value) && value <= .1 + 1e-6)
+            && Number.isFinite(step.presentationSeconds) && step.presentationSeconds > 0 && step.presentationSeconds <= .1 + 1e-6
+            && freshNativePixels
           : step.wallSeconds > 0 && step.wallSeconds <= .15);
       if (closelySampled) return 'closely-sampled';
       // A missed callback is proven only when compositor frame counts explain
-      // the media advance and both display and wall clocks agree. A media jump
+      // the media advance and recorded submission times agree. A media jump
       // with only one presented frame, or an unexplained stall, cannot pass.
-      const missed = native && step.presentedFramesDelta > 1
+      const missed = freshNativePixels && Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta > 1
         && Math.abs(step.delta - step.presentedFramesDelta * frameSeconds) <= frameSeconds + 1e-6
-        && step.displaySeconds > 0 && step.wallSeconds > 0
-        && Math.abs(step.displaySeconds - step.delta) <= .1
-        && Math.abs(step.wallSeconds - step.displaySeconds) <= .2;
+        && Number.isFinite(step.presentationSeconds) && step.presentationSeconds > 0
+        && Math.abs(step.presentationSeconds - step.delta) <= .1;
       return missed ? 'missed-callbacks' : 'unexplained-gap';
     };
     const seams = () => wraps.filter(wrap => wrap.stepIndex !== null).map(wrap => ({
@@ -384,7 +385,7 @@ async function verifyPeriodicFrames(page, background) {
         const current = { time: metadata?.mediaTime ?? video.currentTime, now, observedAt,
           presentedFrames: metadata?.presentedFrames, expectedDisplayTime: metadata?.expectedDisplayTime,
           presentationTime: metadata?.presentationTime, nativeTime: video.currentTime };
-        if (native && Number.isFinite(current.expectedDisplayTime)) maximumCallbackLagMs = Math.max(maximumCallbackLagMs, observedAt - current.expectedDisplayTime);
+        if (native && Number.isFinite(current.presentationTime)) maximumCallbackLagMs = Math.max(maximumCallbackLagMs, observedAt - current.presentationTime);
         if (!previous || Math.abs(current.time - previous.time) > 1e-6) {
           const crossing = previous && current.time < previous.time - period / 2;
           let timing, status;
@@ -394,7 +395,7 @@ async function verifyPeriodicFrames(page, background) {
               wallSeconds: (now - previous.now) / 1000,
               displaySeconds: native ? (current.expectedDisplayTime - previous.expectedDisplayTime) / 1000 : null,
               presentationSeconds: native ? (current.presentationTime - previous.presentationTime) / 1000 : null,
-              callbackLagSeconds: native ? [previous, current].map(frame => (frame.observedAt - frame.expectedDisplayTime) / 1000) : null,
+              callbackLagSeconds: native ? [previous, current].map(frame => (frame.observedAt - frame.presentationTime) / 1000) : null,
               phaseDistanceSeconds: native ? [previous, current].map(phaseDistance) : null,
               presentedFramesDelta: native ? current.presentedFrames - previous.presentedFrames : null };
             status = classifyStep(timing);

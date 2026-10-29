@@ -116,7 +116,7 @@ jobs:
 
   browser:
     name: Browser verification · ${{ matrix.label }}
-    runs-on: ${{ matrix.group == 'administration' && 'macos-15' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.group == 'administration' && 'macos-15-intel' || 'ubuntu-24.04' }}
     # Administration includes the full Chromium/WebKit water-motion matrix;
     # allow the same bounded budget as the knowledge browser group.
     timeout-minutes: ${{ (matrix.group == 'knowledge' || matrix.group == 'administration') && 35 || 20 }}

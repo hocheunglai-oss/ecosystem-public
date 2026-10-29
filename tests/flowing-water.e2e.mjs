@@ -315,6 +315,33 @@ async function verifyInternalMotion(page, background) {
   }
   return { capability, difference: strongest, elapsed, wraps, fixedBounds: true, actualMovementVerified: capability.mode === 'video' };
 }
+function summarizeLoopEvidence(evidence, report) {
+  const { wraps, gaps, seams, ...metadata } = evidence;
+  return { report, ...metadata, wrapCount: wraps.length, gapCount: gaps.length, seamCount: seams.length };
+}
+async function persistLoopEvidence(report, evidence) {
+  // Keep full timing evidence out of the aggregate. If a busy decoder produces
+  // many gap records, preserve every record in bounded companion reports.
+  if (Buffer.byteLength(JSON.stringify(evidence)) <= 192 * 1024) {
+    await writeFile(`${reports}/${report}`, JSON.stringify(evidence));
+    return;
+  }
+  const gapReports = []; let chunk = [], bytes = 2;
+  const flush = async () => {
+    if (!chunk.length) return;
+    const filename = report.replace(/\.json$/, `-gaps-${gapReports.length + 1}.json`);
+    await writeFile(`${reports}/${filename}`, JSON.stringify(chunk));
+    gapReports.push({ report: filename, count: chunk.length }); chunk = []; bytes = 2;
+  };
+  for (const gap of evidence.gaps) {
+    const size = Buffer.byteLength(JSON.stringify(gap)) + 1;
+    if (bytes + size > 96 * 1024) await flush();
+    chunk.push(gap); bytes += size;
+  }
+  await flush();
+  const { gaps, ...metadata } = evidence;
+  await writeFile(`${reports}/${report}`, JSON.stringify({ ...metadata, gapCount: gaps.length, gapReports }));
+}
 async function verifyPeriodicFrames(page, background) {
   await page.goto('about:blank');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -433,9 +460,10 @@ async function verifyPeriodicFrames(page, background) {
   }));
   const { engine, width, theme } = pauseEvidence.get(page);
   const report = `loop-${engine}-${width}-${theme}.json`;
-  pauseEvidence.get(page).loopDiagnostics = { report, ...evidence };
+  const summary = summarizeLoopEvidence(evidence, report);
+  pauseEvidence.get(page).loopDiagnostics = summary;
   // Persist native timing and all observed/missed wraps before any assertion.
-  await writeFile(`${reports}/${report}`, JSON.stringify({ engine, width, theme, ...evidence }, null, 2));
+  await persistLoopEvidence(report, { engine, width, theme, ...evidence });
   assert.equal(evidence.error, undefined, `Native loop observation failed: ${evidence.error}; see ${report}`);
   assert.ok(Math.abs(evidence.period - 6) < 1 / 30, 'The exact supplied video retains its six-second loop');
   assert.ok(evidence.samples > 100 && evidence.wraps.length >= 2 && evidence.seams.length >= 2, 'Native decoding presented moving frames through two qualified real wraps');
@@ -445,7 +473,7 @@ async function verifyPeriodicFrames(page, background) {
     assert.ok(adjacent.length >= 3, 'Loop comparison includes independently decoded neighbouring frames');
     assert.ok(seam.rate <= Math.max(...adjacent.map(step => step.rate)) * 3 + 4, `The decoded boundary has no anomalous jump relative to neighbouring motion: ${JSON.stringify({ seam, adjacent })}`);
   }
-  return { verified: true, report, ...evidence, provenance: 'Unmodified native playback, decoded source pixels at two natural wraps sampled at most three frames (100ms) apart; positively identified missed callbacks are recorded, never treated as measured seams. Separate real-compositor motion and pause checks remain in this suite.' };
+  return { verified: true, ...summary, provenance: 'Unmodified native playback, decoded source pixels at two natural wraps sampled at most three frames (100ms) apart; positively identified missed callbacks are recorded, never treated as measured seams. Separate real-compositor motion and pause checks remain in this suite.' };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial night fallback verified' };

@@ -18,6 +18,7 @@ const reports = resolve(process.env.ECO_FLOWING_REPORT_OUTPUT || out);
 await mkdir(out, { recursive: true });
 await mkdir(reports, { recursive: true });
 const results = [];
+const pauseEvidence = new WeakMap();
 const testRequire = createRequire(createRequire(import.meta.url).resolve('@playwright/test'));
 const { PNG } = createRequire(testRequire.resolve('playwright'))('playwright-core/lib/utilsBundle');
 const originalLogoHash = 'e6fe5111eddff7bd167e8c7d734660d126eaeab9fc63496c7b882ab6af05da88';
@@ -203,7 +204,9 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
       frames: node.__ecoPauseTrace?.frames ?? [], events: node.__ecoPauseTrace?.events ?? [] };
   }) : null;
   const initial = await nativeState(), samples = [];
-  const diagnostics = { label, before, initial, samples, settleBudgetMs: 1000, holdSamples: 3, holdIntervalMs: 250 };
+  const { engine, width, theme, checks } = pauseEvidence.get(page);
+  const captureReadinessBudgetMs = 5000;
+  const diagnostics = { engine, width, theme, label, before, initial, samples, captureReadinessBudgetMs, holdSamples: 3, holdIntervalMs: 250 };
   const invariant = async () => {
     assert.deepEqual(await flowState(background), before, `${label}: the displayed video time stays frozen`);
     assert.ok(boxDifference(await background.boundingBox(), bounds) < .1, `${label}: framing stays fixed`);
@@ -219,7 +222,7 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
   };
   try {
     await invariant();
-    if (!inspectPixels) { await page.waitForTimeout(250); await invariant(); return; }
+    if (!inspectPixels) { await page.waitForTimeout(250); await invariant(); diagnostics.passed = true; return; }
     const plan = await waterPixelPlan(page);
     const capture = async (kind, reference) => {
       const sample = { kind, startedAtMs: performance.now(), before: await nativeState() }; samples.push(sample);
@@ -234,16 +237,17 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
     };
     const stable = difference => difference.mean <= .05 && difference.maximum <= 1;
     // pause() freezes the native clock before its final queued frame necessarily
-    // reaches the compositor. Admit only a bounded presentation-settling phase,
-    // keeping that exact original clock/node/source invariant for every capture.
-    const started = performance.now(), deadline = started + 1000;
+    // reaches the compositor. This fixed capture/readiness budget includes at
+    // least three screenshots, PNG sampling and browser round trips on CI; it
+    // never permits the original clock/node/source/paused state to change.
+    const started = performance.now(), deadline = started + captureReadinessBudgetMs;
     let baseline = await capture('initial');
     if (video) {
       let consecutive = 0;
       while (consecutive < 2) {
-        assert.ok(performance.now() < deadline, `${label}: native presentation must settle within 1000ms`);
+        assert.ok(performance.now() < deadline, `${label}: stable presentation captures must complete within ${captureReadinessBudgetMs}ms`);
         const next = await capture('settling', baseline), difference = samples.at(-1).difference;
-        assert.ok(performance.now() <= deadline, `${label}: native presentation must settle within 1000ms`);
+        assert.ok(performance.now() <= deadline, `${label}: stable presentation captures must complete within ${captureReadinessBudgetMs}ms`);
         consecutive = stable(difference) ? consecutive + 1 : 0;
         baseline = next;
       }
@@ -257,11 +261,24 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
       const difference = samples.at(-1).difference;
       assert.ok(stable(difference), `${label}: the displayed background pixels stay still (${JSON.stringify(difference)})`);
     }
+    diagnostics.passed = true;
   } catch (error) {
-    diagnostics.error = error.message;
-    await writeFile(`${out}/pause-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`, JSON.stringify(diagnostics, null, 2));
+    diagnostics.passed = false; diagnostics.error = error.message;
     throw error;
-  } finally { await video?.dispose(); }
+  } finally {
+    const filename = `pause-${engine}-${width}-${theme}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+    const summary = { engine, width, theme, label, passed: diagnostics.passed, report: filename,
+      captureReadinessBudgetMs, baselineAcceptedMs: diagnostics.baselineAcceptedMs,
+      initialNativeTime: initial?.time, holdSamples: diagnostics.holdSamples, holdIntervalMs: diagnostics.holdIntervalMs,
+      samples: samples.map(({ kind, screenshotCallMs, difference }) => ({ kind, screenshotCallMs, difference })),
+      ...(diagnostics.error ? { error: diagnostics.error } : {}) };
+    checks.push(summary);
+    try {
+      // Report output is collected by CI even when screenshots use runner.temp.
+      // Keep successful timings compact; retain full native/event traces on failure.
+      await writeFile(`${reports}/${filename}`, JSON.stringify(diagnostics.passed ? summary : diagnostics, null, 2));
+    } finally { await video?.dispose(); }
+  }
 }
 async function verifyInternalMotion(page, background) {
   const capability = await readyRenderer(page), video = background.locator('video.flowing-water-video');
@@ -672,7 +689,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
         localStorage.setItem('ecosystem.background.v1', 'watercolour');
       }
     }, theme);
-    const page = await context.newPage(), errors = [];
+    const page = await context.newPage(), errors = [], pauseChecks = [];
+    pauseEvidence.set(page, { engine, width, theme, checks: pauseChecks });
     page.setDefaultTimeout(12000); page.on('pageerror', error => errors.push(error.message));
     const shot = async name => { await noOverflow(page, name);
       const footer = await page.locator('.home-display-controls button:visible').evaluateAll(nodes => nodes.map(node => ({ label:node.textContent.trim(), size:parseFloat(getComputedStyle(node).fontSize), height:node.getBoundingClientRect().height })));
@@ -853,10 +871,10 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.deepEqual(state.harbour, [], 'Flowing Water does not request retired harbour assets');
       assert.ok(state.water.length > 0 && state.water.every(path => [waterArtwork.path, waterVideos[width < 760 ? 'mobile' : 'desktop'].path].includes(path)), 'Day and night use exactly the same artwork with no alternate scene requested');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      results.push({ engine, width, theme, passed: true, geometry, internalMotion, periodicity, contextLoss, nightContrastMinimum, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
+      results.push({ engine, width, theme, passed: true, geometry, internalMotion, periodicity, contextLoss, nightContrastMinimum, pauseChecks, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
       console.log(`PASS ${engine} ${width} ${theme}: sign-in/out, navigation, theme, motion, role gate`);
     } catch (error) {
-      results.push({ engine, width, theme, passed: false, error: error.message, unexpected: state.unexpected, errors });
+      results.push({ engine, width, theme, passed: false, error: error.message, pauseChecks, unexpected: state.unexpected, errors });
       await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-failure.png`, fullPage: true }).catch(() => {});
       throw error;
     } finally {

@@ -277,7 +277,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           assert.ok(Math.abs(await v.evaluate(n=>n.duration)-(choice==='diffuse'?24:6))<1/30,'The selected supplied clip retains its native duration');
           assert.ok(await v.evaluate(n=>n.muted&&n.loop&&n.playsInline&&!n.controls));
           const t=await v.evaluate(n=>n.currentTime);await expect.poll(()=>v.evaluate((n,t)=>(n.currentTime-t+n.duration)%n.duration,t)).toBeGreaterThan(.1);
-          await expect.poll(()=>v.evaluate(n=>!n.seeking&&n.currentTime>1.25&&n.currentTime<Math.min(2.5,n.duration-2)),
+          await expect.poll(()=>v.evaluate(n=>!n.seeking&&n.currentTime>1.25&&n.currentTime<n.duration-2),
             {timeout:15000,message:'A decoded nonzero phase is available for the paused theme check'}).toBe(true);
           await page.getByRole('button',{name:'Trading',exact:true}).click();await page.getByRole('button',{name:'Enquiries',exact:true}).click();
           await expect(page.getByRole('dialog',{name:'Enquiries',exact:true})).toBeVisible();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(true);

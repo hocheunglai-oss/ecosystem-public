@@ -27,10 +27,9 @@
 .phone-requests--compact .phone-request dl { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .account-inline-panel .phone-requests {
   --ink: var(--ui-control-ink);
-  --muted: #bcd1dc;
+  --muted: var(--ui-muted);
   --line: var(--ui-control-border);
   --surface: var(--ui-control-surface);
-  --ui-danger: #ffb4c0;
 }
 @media (max-width: 760px) {
   .phone-request dl { grid-template-columns: minmax(0, 1fr); }

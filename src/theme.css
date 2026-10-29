@@ -44,58 +44,17 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --theme-canvas: var(--ui-canvas);
-  --theme-panel: var(--ui-surface);
-  --theme-raised: var(--ui-raised);
-  --theme-field: var(--ui-field);
-  --theme-ink: var(--ui-ink);
-  --theme-muted: var(--ui-muted);
-  --theme-faint: #aa9fae;
-  --theme-line: var(--ui-line);
-  --theme-cyan: var(--ui-accent);
+  background: var(--ui-canvas);
   --theme-lime: #c5f574;
   --theme-green: #b7e69c;
   --theme-amber: #f3d497;
   --theme-rose: #ffb4c8;
-  --ink: var(--theme-ink);
-  --muted: var(--theme-muted);
-  --line: var(--theme-line);
-  --surface: var(--theme-panel);
-  background: var(--ui-canvas);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) {
-  --ink: var(--theme-ink);
-  --muted: var(--theme-muted);
-  --line: var(--theme-line);
-  --surface: var(--theme-panel);
-  --ws-surface: var(--theme-panel);
-  --ws-field: var(--theme-field);
-  --ws-accent: var(--theme-lime);
-  --ws-cyan: var(--theme-cyan);
   color-scheme: dark;
-  color: var(--theme-ink);
-  border-color: var(--ui-boundary);
-  background: var(--theme-canvas);
-  box-shadow: 0 28px 100px #000a, inset 0 1px #c1ebed0b;
 }
-:root[data-theme="dark"] :is(.workspace-window, .modal)::backdrop {
-  background: #100c186b;
-}
-:root[data-theme="dark"] .workspace-window .window-toolbar {
-  color: var(--theme-ink);
-  background: var(--theme-panel);
-  border-color: var(--theme-line);
-  box-shadow: 0 2px 20px #0001;
-}
-:root[data-theme="dark"] .workspace-window :is(.window-toolbar span, .window-toolbar b, .window-tool, .window-foot) {
-  color: var(--theme-muted);
-}
-:root[data-theme="dark"] .workspace-window .window-foot { background: var(--ui-raised); }
 :root[data-theme="dark"] :is(.window-content, .table-wrap, .resource-history, .center-incoming-list) {
   scrollbar-color: var(--ui-boundary) var(--ui-field);
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(h1, h2, h3, h4) {
-  color: var(--theme-ink);
 }
 :root[data-theme="dark"] :is(.resource-wallet, .team-resources, .team-performance) {
   color: var(--theme-ink);
@@ -139,24 +98,9 @@
   border-color: var(--theme-line);
   box-shadow: inset 0 1px 2px #0002;
 }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .search-box input {
-  background: transparent;
-  box-shadow: none;
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(input, textarea)::placeholder {
-  color: var(--theme-faint);
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(input, textarea, select):disabled {
-  color: var(--theme-faint);
-  background: var(--ui-raised);
-}
 :root[data-theme="dark"] :is(.workspace-window, .modal, .entry-identity) select option {
   color: var(--theme-ink);
   background: var(--theme-field);
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(input, textarea, select):focus {
-  border-color: var(--theme-cyan);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-focus) 12%, transparent);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(button, summary, a):focus-visible {
   outline-color: var(--theme-cyan);
@@ -168,17 +112,8 @@
   background: var(--theme-field) !important;
   border-color: var(--theme-line) !important;
 }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .search-select-list {
-  background: var(--theme-panel);
-  border-color: var(--ui-boundary);
-  box-shadow: 0 15px 28px #0007;
-}
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.search-select-list > button, .search-select > svg, .search-box) {
   color: var(--theme-muted);
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.search-select-list > button:hover, .search-select-list > button.is-active) {
-  color: var(--theme-ink);
-  background: var(--ui-control-hover);
 }
 
 /* Ordinary actions and selection use neutral surfaces, separate from contributions. */
@@ -192,38 +127,12 @@
   box-shadow: none;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
-  .button.secondary:hover:not(:disabled), .parser-clear:hover:not(:disabled),
-  .center-lifecycle button:hover, .enquiry-terms button:hover:not(:disabled),
-  .modal-close:hover, .window-tool:hover, .icon-button:hover, .enquiry-icon:hover
-) { color: var(--theme-ink); background: var(--theme-raised); border-color: var(--ui-focus); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .button.primary {
-  color: var(--ui-control-ink);
-  background: var(--ui-control-surface);
-  border-color: var(--ui-control-border);
-  box-shadow: none;
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) .button.primary:hover:not(:disabled) {
-  color: var(--ui-control-ink);
-  background: var(--ui-control-hover);
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.modal-close, .enquiry-icon, .tabs button, .center-tabs button, .office-view-tabs [role="tab"]) {
-  color: var(--theme-muted);
-}
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(
   .center-tabs button[aria-selected="true"], .office-view-tabs [role="tab"][aria-selected="true"], .segmented button.active
 ) {
   color: var(--theme-ink);
   background: var(--ui-raised);
   border-color: var(--ui-focus);
   box-shadow: inset 0 -2px var(--ui-focus);
-}
-:root[data-theme="dark"] .workspace-window .center-tabs button:hover { color: var(--theme-ink); background: var(--theme-raised); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .tabs button.active { color: var(--theme-cyan); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .tabs button.active::after { background: var(--theme-cyan); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) .enquiry-terms button[aria-pressed="true"] {
-  color: var(--ui-control-ink);
-  background: var(--ui-control-hover);
-  border-color: var(--ui-focus);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .badge { color: var(--theme-muted); background: var(--ui-raised); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.badge.green, .notice.green) { color: var(--theme-green); background: #203d33; }
@@ -256,12 +165,6 @@
   background: var(--theme-panel);
   border-color: var(--theme-line);
 }
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item:hover, .port-card:hover, .center-incoming-open:hover, .center-history-compact summary:hover) { background: var(--theme-raised); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item.active, .port-card.active, .center-incoming-row.is-selected, .office-comparison-table tbody tr.is-selected) {
-  background: var(--theme-raised);
-  border-color: var(--ui-focus);
-  box-shadow: inset 3px 0 var(--ui-focus);
-}
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-avatar, .square-icon, .circle-icon, .step-number) { color: var(--theme-cyan); background: var(--ui-raised); }
 :root[data-theme="dark"] .workspace-window .center-credit-indicator {
   color: var(--theme-ink);
@@ -276,16 +179,13 @@
 :root[data-theme="dark"] :is(.workspace-window, .modal) .outcome-form .fixture-product h3 { color: var(--theme-cyan); }
 
 /* Tables and resource history share the same contrast as the enquiry editor. */
-:root[data-theme="dark"] :is(.workspace-window, .modal) table { color: var(--theme-ink); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) th {
   color: var(--theme-muted);
   background: var(--ui-raised);
   border-color: var(--theme-line);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) tbody th { color: var(--theme-ink); background: transparent; }
-:root[data-theme="dark"] :is(.workspace-window, .modal) td { border-color: var(--theme-line); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) td small { color: var(--theme-muted); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) tbody tr:hover { background: var(--ui-control-hover); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.office-comparison-table button) { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .text-button { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.positive, .text-green) { color: var(--theme-green) !important; }

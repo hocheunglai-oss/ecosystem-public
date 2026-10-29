@@ -1,0 +1,72 @@
+/* The reference's sun/moon pill is shared by home, sign-in and workspaces. */
+#root .theme-mode-toggle {
+  --mode-track: #f6f9fa;
+  --mode-thumb: #e2e9ec;
+  --mode-active: #182f36;
+  --mode-inactive: #74838b;
+  --mode-border: #d5e0e4;
+  --mode-shadow: inset 0 1px 0 #ffffff80;
+}
+#root .theme-mode-toggle[data-mode="dark"] {
+  --mode-track: #100e19;
+  --mode-thumb: #393449;
+  --mode-active: #faf5f2;
+  --mode-inactive: #a59fb2;
+  --mode-border: #655870;
+  --mode-shadow: inset 0 1px 0 #ffffff08;
+}
+#root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle,
+#root .workspace-window .window-foot button.theme-mode-toggle {
+  position: relative;
+  isolation: isolate;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  place-items: center;
+  gap: 0;
+  flex: 0 0 auto;
+  width: 96px;
+  min-width: 96px;
+  height: 44px;
+  min-height: 44px;
+  padding: 4px;
+  border: 1px solid var(--mode-border);
+  border-radius: 999px;
+  background: var(--mode-track);
+  color: var(--mode-inactive);
+  box-shadow: var(--mode-shadow);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#root .theme-mode-toggle .theme-mode-toggle__thumb {
+  position: absolute;
+  z-index: -1;
+  inset: 4px auto 4px 4px;
+  width: calc((100% - 8px) / 2);
+  border-radius: inherit;
+  background: var(--mode-thumb);
+  transform: translateX(0);
+  transition: transform 180ms ease, background-color 180ms ease;
+  pointer-events: none;
+}
+#root .theme-mode-toggle[data-mode="dark"] .theme-mode-toggle__thumb { transform: translateX(100%); }
+#root .theme-mode-toggle > svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.8;
+  color: var(--mode-inactive);
+  pointer-events: none;
+}
+#root .theme-mode-toggle[data-mode="light"] .theme-mode-toggle__sun,
+#root .theme-mode-toggle[data-mode="dark"] .theme-mode-toggle__moon { color: var(--mode-active); }
+#root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle:hover,
+#root .workspace-window .window-foot button.theme-mode-toggle:hover { background: var(--mode-track); border-color: var(--ui-focus); filter: none; }
+#root .theme-mode-toggle:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
+/* Preserve the established compact desktop workspace footer. Phone targets stay 44px. */
+@media (min-width: 761px) and (pointer: fine) {
+  #root .workspace-window .window-foot button.theme-mode-toggle { height: 36px; min-height: 36px; }
+  #root .workspace-window .theme-mode-toggle > svg { width: 22px; height: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #root .theme-mode-toggle .theme-mode-toggle__thumb { transition: none; }
+}

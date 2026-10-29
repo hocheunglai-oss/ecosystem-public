@@ -20,8 +20,6 @@ import {
   AlertCircle,
   Maximize2,
   Minimize2,
-  Sun,
-  Moon,
   MessageSquare,
 } from "lucide-react";
 import { DemoProvider, useDemo } from "./store";
@@ -60,6 +58,7 @@ import Modals from "./Modals";
 import type { ModalSpec, OpenModal } from "./types";
 import { trapDialogFocus } from "./dialogFocus";
 import { useTheme } from "./theme";
+import { ThemeToggle } from './ThemeToggle';
 import { workspaceGroups as groups, workspaceTitles, type OpenWorkspace, type WorkspaceNavigationContext } from "./workspaceNavigation";
 
 const roleLabel = (role: string) =>
@@ -262,7 +261,7 @@ function WorkspaceWindow({
   pendingAdminRequest,
   onAdminOperationPending,
 }: {
-  themeControl: { requested: string; pending: boolean; error: string; toggle: () => void };
+  themeControl: { requested: 'light' | 'dark'; pending: boolean; error: string; toggle: () => void };
   active: WorkspaceId | null;
   contexts: Partial<Record<WorkspaceId, WorkspaceNavigationContext | undefined>>;
   open: OpenModal;
@@ -377,10 +376,7 @@ function WorkspaceWindow({
         <KnowledgeUpdateButton className="window-theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => open({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={13} aria-hidden="true" /> Feedback for ecosystem
         </KnowledgeUpdateButton>
-        <button className="window-theme-toggle" onClick={themeControl.toggle} aria-busy={themeControl.pending} title={themeControl.error?.toUpperCase() || undefined}>
-          {themeControl.requested === 'light' ? <Moon size={13} aria-hidden="true" /> : <Sun size={13} aria-hidden="true" />}
-          {themeControl.requested === 'light' ? 'Dark mode' : 'Light mode'}
-        </button>
+        <ThemeToggle className="window-theme-toggle" theme={themeControl.requested} onToggle={themeControl.toggle} pending={themeControl.pending} error={themeControl.error} />
         <TestWorkspaceControl pending={Boolean(pendingAdminRequest)} /><RolePreview pending={Boolean(pendingAdminRequest)} />
         </div>
       </div>
@@ -559,15 +555,7 @@ function Workspace() {
         {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={15} aria-hidden="true" /> Feedback for ecosystem
         </KnowledgeUpdateButton>}
-        <button
-          className="theme-toggle"
-          onClick={toggleTheme}
-          aria-busy={themePending}
-          title={themeError?.toUpperCase() || undefined}
-        >
-          {requested === "light" ? <Moon size={15} aria-hidden="true" /> : <Sun size={15} aria-hidden="true" />}
-          {requested === "light" ? "Dark mode" : "Light mode"}
-        </button>
+        <ThemeToggle className="theme-toggle" theme={requested} onToggle={toggleTheme} pending={themePending} error={themeError} />
         {session && <><TestWorkspaceControl pending={Boolean(pendingAdminRequest)} /><RolePreview pending={Boolean(pendingAdminRequest)} /></>}
       </div>
       </footer>

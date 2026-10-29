@@ -2,8 +2,8 @@
   --buyer-line:var(--line,#d4e0e8);
   --buyer-surface:var(--ws-field,var(--surface,#fff));
   --buyer-accent:var(--ws-cyan,#249fad);
-  --buyer-heading:color-mix(in srgb,#1a9aaa 17%,var(--surface));
-  --buyer-section-heading:color-mix(in srgb,#1a9aaa 10%,var(--surface));
+  --buyer-heading:var(--ui-raised);
+  --buyer-section-heading:var(--ui-raised);
   color:var(--ink);min-width:0;font-size:12px;font-variant-numeric:tabular-nums;
 }
 .buyer-profile {container:buyer-profile / inline-size;}

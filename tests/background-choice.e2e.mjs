@@ -80,14 +80,33 @@ async function renderedPixels(page, accepts, message) {
 }
 async function shot(page,name){
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal overflow');
+  await expect(toggle(page)).toHaveAttribute('aria-checked',String(await page.locator('html').getAttribute('data-theme')==='dark'));
   const choice=page.getByLabel('Background',{exact:true});
   await expect(choice).toBeVisible();
   const box=await choice.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=await page.evaluate(()=>innerWidth)+1&&box.height>=44,'Readable selector fits phone');
   const theme=await page.locator('html').getAttribute('data-theme');
+  const filters=await page.locator('.flowing-water-background img,.flowing-water-background video,.flowing-water-background canvas').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).filter));
+  assert.ok(filters.length>=2&&filters.every(filter=>filter==='none'),'Artwork never depends on unsupported accelerated SVG fragment filters');
+  if(theme==='dark'){
+    const bg=page.locator('.flowing-water-background');
+    if(await bg.getAttribute('data-renderer')==='fallback') await expect(bg.locator('.flowing-water-night-still')).toHaveCSS('opacity','1');
+    else if(await bg.getAttribute('data-background')==='diffuse'){
+      await expect(bg).toHaveAttribute('data-night-ready','true');
+      await expect(bg.locator('.flowing-water-video-palette')).toHaveCSS('opacity','1');
+    }
+  }
   await renderedPixels(page,p=>p.count>100&&p.spread>30&&(theme==='light'?p.mean>80:p.mean<100),'Screenshot artwork reached the compositor');
   await page.screenshot({path:`${out}/${name}.png`,fullPage:true});
 }
-async function ready(page,choice){
+const graphicsCapabilities=new WeakMap();
+async function graphicsAvailable(page){
+  if(!graphicsCapabilities.has(page))graphicsCapabilities.set(page,await page.evaluate(()=>{
+    const canvas=document.createElement('canvas'),gl=canvas.getContext('webgl',{alpha:false,antialias:false,powerPreference:'low-power'});
+    const supported=Boolean(gl&&!gl.isContextLost());gl?.getExtension('WEBGL_lose_context')?.loseContext();return supported;
+  }));
+  return graphicsCapabilities.get(page);
+}
+async function ready(page,choice,forceFallback=false){
   const bg=page.locator('.flowing-water-background'); await expect(bg).toHaveAttribute('data-background',choice);
   await bg.locator('img').evaluate(image => new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Background image did not decode and paint within 15 seconds')), 15000);
@@ -95,8 +114,11 @@ async function ready(page,choice){
       clearTimeout(timeout); resolve();
     })), error => { clearTimeout(timeout); reject(error); });
   }));
-  if(choice==='diffuse') await expect(bg).toHaveAttribute('data-renderer','video',{timeout:30000});
-  else await expect.poll(()=>bg.getAttribute('data-renderer')).toMatch(/webgl|fallback/);
+  const reduced=await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const supported=await graphicsAvailable(page),night=await page.locator('html').getAttribute('data-theme')==='dark';
+  if(reduced||forceFallback||(!supported&&(choice==='watercolour'||night))) await expect(bg).toHaveAttribute('data-renderer','fallback',{timeout:15000});
+  else if(choice==='diffuse') await expect(bg).toHaveAttribute('data-renderer','video',{timeout:30000});
+  else await expect(bg).toHaveAttribute('data-renderer','webgl',{timeout:15000});
   return bg;
 }
 async function motionPreference(page, reducedMotion) {
@@ -124,7 +146,7 @@ async function motionDiagnostics(page) {
     })),
   })).catch(() => null);
 }
-const toggle=p=>p.locator('.home-display-controls').getByRole('button',{name:/^(Dark|Light) mode$/});
+const toggle=p=>p.locator('.home-display-controls').getByRole('switch',{name:'Dark mode',exact:true,includeHidden:true});
 async function tap(p,locator,width){if(width<760)await locator.tap();else await locator.click();}
 async function authenticationNavigation(page, path, action, signedIn = true) {
   // Authentication is asynchronous. Wait for its actual response before checking
@@ -160,8 +182,16 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       for(const choice of ['diffuse','watercolour']){
         await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
         await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+        await expect(toggle(page)).toHaveAttribute('aria-checked','false');
         const day=await renderedPixels(page,p=>p.count>100&&p.mean>80&&p.spread>30,'Day artwork reached the compositor');await shot(page,`${engine}-${width}-${choice}-signed-out-light`);
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+        await expect(toggle(page)).toHaveAttribute('aria-checked','true');await ready(page,choice);
+        if(choice==='diffuse'&&await graphicsAvailable(page)){
+          const palette=page.locator('.flowing-water-video-palette'),start=Number(await palette.getAttribute('data-source-time'));
+          assert.ok(Number.isFinite(start),'Night colour pass has drawn a real source frame');
+          const duration=await page.locator('video.flowing-water-video').evaluate(video=>video.duration);
+          await expect.poll(async()=>{const next=Number(await palette.getAttribute('data-source-time'));return (next-start+duration)%duration;},{timeout:15000}).toBeGreaterThan(.1);
+        }
         const night=await renderedPixels(page,p=>p.count>100&&p.mean<day.mean*.7&&p.spread>30,'Night artwork reached the compositor');
         assert.ok(day.count>100&&night.count>100&&night.mean<day.mean*.7&&night.spread>30,`Actual mobile compositor stays dark and retains detail: ${JSON.stringify({day,night})}`);
         await tap(page,page.getByLabel('Email',{exact:true}),width);await page.waitForTimeout(150);
@@ -178,6 +208,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         const retained=await mediaNode.elementHandle();
         const phase=await mediaNode.evaluate(n=>({time:n.currentTime??Number(n.dataset.flowTimeMs),duration:n.duration,at:performance.now()}));
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+        await expect(toggle(page)).toHaveAttribute('aria-checked','false');
         assert.ok(await retained.evaluate(n=>n.isConnected),'Theme preserves media element');
         if(Number.isFinite(phase.time)) {
           const next=await mediaNode.evaluate(n=>({time:n.currentTime??Number(n.dataset.flowTimeMs),at:performance.now()}));
@@ -208,17 +239,64 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}),false);await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
         results.push({engine,width,choice,passed:true,day,night,persistence:true});
       }
-      await page.getByLabel('Background',{exact:true}).selectOption('diffuse');await ready(page,'diffuse');
-      await motionPreference(page,'reduce');await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');await expect(page.locator('video.flowing-water-video')).toHaveCount(0);
-      await expect(page.locator('.flowing-water-image')).toBeVisible();await shot(page,`${engine}-${width}-reduced-motion`);
-      await motionPreference(page,'no-preference');await ready(page,'diffuse');
+      for(const choice of ['watercolour','diffuse']){
+        await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
+        await motionPreference(page,'reduce');await ready(page,choice);
+        await expect(page.locator('video.flowing-water-video')).toHaveCount(0);
+        const image=page.locator('.flowing-water-image'),source=await image.getAttribute('src');
+        await expect(image).toBeVisible();await expect(image).toHaveCSS('opacity','1');
+        const day=await renderedPixels(page,p=>p.count>100&&p.mean>80&&p.spread>30,'Reduced-motion day artwork is painted');
+        await shot(page,`${engine}-${width}-${choice}-reduced-motion-light`);
+        await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+        await expect(page.locator('.flowing-water-night-still')).toHaveAttribute('data-ready','true');
+        const night=await renderedPixels(page,p=>p.count>100&&p.mean<day.mean*.7&&p.spread>30,'Reduced-motion night artwork is painted');
+        await expect(image).toHaveAttribute('src',source);
+        await shot(page,`${engine}-${width}-${choice}-reduced-motion-dark`);
+        results.push({engine,width,choice,reducedMotion:true,passed:true,day,night,originalSourceRetained:true});
+        await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+        await motionPreference(page,'no-preference');await ready(page,choice);
+      }
       await page.locator('video.flowing-water-video').evaluate(v=>v.dispatchEvent(new Event('error')));
       await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');await expect(page.locator('.flowing-water-image')).toBeVisible();
+      await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+      await shot(page,`${engine}-${width}-video-error-dark`);
       assert.deepEqual([...new Set(media.filter(p=>p.endsWith('.mp4')))], [width<760?'/flowing-water-diffuse-mobile.mp4':'/flowing-water-diffuse.mp4'],'Only matching rendition; no night video');
       assert.deepEqual(errors,[]);assert.deepEqual(state.unexpected,[]);
       assert.deepEqual(state.writes,['/api/access/login','/api/access/logout','/api/access/login','/api/access/logout']);
       console.log(`PASS ${engine} ${width}: both backgrounds, actual night pixels, touch and saved preferences`);
     }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,pixelCapture,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
     finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await context.close();}
+    if(width<760){
+      const unsupported=await browser.newContext({viewport:{width,height:844},hasTouch:true,isMobile:true,colorScheme:'light',reducedMotion:'no-preference'});
+      await installStagingCookies(unsupported,base);const fixture=await mocks(unsupported);
+      await unsupported.addInitScript(()=>{
+        const original=HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext=function(type,...args){
+          if(['webgl','webgl2','experimental-webgl'].includes(type))return null;
+          return Reflect.apply(original,this,[type,...args]);
+        };
+      });
+      const fallbackPage=await unsupported.newPage();fallbackPage.setDefaultTimeout(15000);const fallbackErrors=[];
+      fallbackPage.on('pageerror',error=>fallbackErrors.push(error.message));
+      try{
+        await fallbackPage.goto(base,{waitUntil:'domcontentloaded'});await expect(fallbackPage.locator('.access-login')).toBeVisible();
+        for(const choice of ['diffuse','watercolour']){
+          await fallbackPage.getByLabel('Background',{exact:true}).selectOption(choice);await ready(fallbackPage,choice,choice==='watercolour');
+          const source=await fallbackPage.locator('.flowing-water-image').getAttribute('src');
+          const day=await renderedPixels(fallbackPage,p=>p.count>100&&p.mean>80&&p.spread>30,'Unsupported-WebGL day artwork is painted');
+          await shot(fallbackPage,`${engine}-${width}-${choice}-no-webgl-light`);
+          await tap(fallbackPage,toggle(fallbackPage),width);await expect(fallbackPage.locator('html')).toHaveAttribute('data-theme','dark');
+          await ready(fallbackPage,choice,true);
+          await expect(fallbackPage.locator('.flowing-water-night-still')).toHaveAttribute('data-ready','true');
+          const night=await renderedPixels(fallbackPage,p=>p.count>100&&p.mean<day.mean*.7&&p.spread>30,'Unsupported-WebGL night artwork is painted');
+          await expect(fallbackPage.locator('.flowing-water-image')).toHaveAttribute('src',source);
+          await shot(fallbackPage,`${engine}-${width}-${choice}-no-webgl-dark`);
+          results.push({engine,width,choice,unsupportedWebGL:true,passed:true,day,night,originalSourceRetained:true});
+          await tap(fallbackPage,toggle(fallbackPage),width);await expect(fallbackPage.locator('html')).toHaveAttribute('data-theme','light');
+        }
+        assert.deepEqual(fixture.writes,[]);assert.deepEqual(fixture.unexpected,[]);assert.deepEqual(fallbackErrors,[]);
+      }catch(error){results.push({engine,width,unsupportedWebGL:true,passed:false,error:error.message,errors:fallbackErrors,pixelCapture});await fallbackPage.screenshot({path:`${out}/${engine}-${width}-no-webgl-failure.png`,fullPage:true}).catch(()=>{});throw error;}
+      finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await unsupported.close();}
+    }
   }}finally{await browser.close();}
 }

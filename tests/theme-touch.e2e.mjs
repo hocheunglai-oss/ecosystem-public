@@ -47,9 +47,13 @@ async function mode(page, theme) {
   await expect(page.locator('html')).toHaveAttribute('data-theme-requested', theme);
   await expect(page.locator('html')).toHaveAttribute('data-theme-pending', 'false');
   assert.equal(await page.evaluate(() => localStorage.getItem('ecosystem.theme.v1')), theme);
-  await expect(page.locator('.home-display-controls .theme-toggle:not(.ecosystem-feedback)')).toHaveAttribute('aria-busy', 'false');
+  await expect(homeToggle(page)).toHaveAttribute('aria-busy', 'false');
+  await expect(homeToggle(page)).toHaveAttribute('aria-checked', String(theme === 'dark'));
+  for (const control of await page.locator('.window-foot').getByRole('switch', { name: 'Dark mode', exact: true, includeHidden: true }).all()) {
+    await expect(control).toHaveAttribute('aria-checked', String(theme === 'dark'));
+  }
 }
-const homeToggle = page => page.locator('.home-display-controls .theme-toggle:not(.ecosystem-feedback)');
+const homeToggle = page => page.locator('.home-display-controls').getByRole('switch', { name: 'Dark mode', exact: true, includeHidden: true });
 async function activate(locator, mobile) { if (mobile) await locator.tap(); else await locator.click(); }
 async function authenticationNavigation(page, path, action, signedIn = true) {
   // Authentication is asynchronous. Wait for its actual response before checking
@@ -215,7 +219,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await activate(page.getByRole('button', { name: 'Enquiries', exact: true }), mobile);
       const workspace = page.getByRole('dialog', { name: 'Enquiries', exact: true }); await expect(workspace).toBeVisible();
       await mode(page, 'dark');
-      const dialogToggle = workspace.locator('.window-theme-toggle:not(.ecosystem-feedback)');
+      const dialogToggle = workspace.locator('.window-foot').getByRole('switch', { name: 'Dark mode', exact: true });
       await activate(dialogToggle, mobile); await mode(page, 'light');
       await activate(dialogToggle, mobile); await mode(page, 'dark');
       await activate(page.getByRole('button', { name: 'Close workspace', exact: true }), mobile);

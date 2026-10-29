@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { RefObject } from 'react';
+import { drawWaterNightStill } from './waterNightPalette';
+import { createVideoNightPalette } from './flowingWaterVideoPalette';
 import { createFlowingWaterRenderer, FLOW_PERIOD_MS } from './flowingWaterRenderer';
 import type { FlowingWaterRenderer } from './flowingWaterRenderer';
 import type { WaterBackground } from './backgroundPreference';
@@ -9,6 +12,8 @@ export function FlowingWaterBackground({ paused = false, background }: { paused?
 }
 
 function PaintedWaterBackground({ paused }: { paused: boolean }) {
+  const night = useNightPalette();
+  const nightRef = useRef(night); nightRef.current = night;
   const [hidden, setHidden] = useState(() => document.hidden);
   const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [flowState, setFlowState] = useState<'running' | 'paused' | 'fallback'>('fallback');
@@ -37,7 +42,7 @@ function PaintedWaterBackground({ paused }: { paused: boolean }) {
     let cancelled = false;
     void image.decode().then(() => {
       if (cancelled) return;
-      rendererRef.current = createFlowingWaterRenderer(canvas, image, pausedRef.current, setFlowState);
+      rendererRef.current = createFlowingWaterRenderer(canvas, image, pausedRef.current, setFlowState, nightRef.current);
       if (!rendererRef.current) setFlowState('fallback');
     }).catch(() => { if (!cancelled) setFlowState('fallback'); });
     return () => {
@@ -50,34 +55,42 @@ function PaintedWaterBackground({ paused }: { paused: boolean }) {
     if (reduced) setFlowState('fallback');
     else rendererRef.current?.setPaused(paused || hidden);
   }, [paused, hidden, reduced]);
+  useLayoutEffect(() => { rendererRef.current?.setNight(night); }, [night]);
   return <div className="flowing-water-background" data-background="watercolour" aria-hidden="true" data-paused={paused || hidden || reduced}
     data-renderer={flowState === 'fallback' || reduced ? 'fallback' : 'webgl'} data-flow-state={reduced ? 'fallback' : flowState}>
-    <WaterNightPalette />
     <img ref={imageRef} className="flowing-water-image" src="/flowing-water-day.png" alt="" decoding="async" fetchPriority="high" />
+    <NightStill imageRef={imageRef} />
     <canvas key={String(reduced)} ref={canvasRef} className="flowing-water-canvas" data-flow-period-ms={FLOW_PERIOD_MS} />
     <div className="flowing-water-sheen" />
     <div className="flowing-water-shade" />
   </div>;
 }
 
-function WaterNightPalette() {
-  return <svg className="flowing-water-palette" width="0" height="0" focusable="false">
-      <defs>
-        <filter id="eco-watercolour-night" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-          {/* Retain source hue: teal becomes plum, mint copper, and blue stays dusky blue. */}
-          <feColorMatrix type="matrix" values="-0.315127 4.299968 -1.352730 0 -1.626157 0.626944 1.519584 0.002427 0 -0.794092 0.386135 -3.250374 1.438371 0 1.762207 0 0 0 1 0" />
-          <feComponentTransfer>
-            <feFuncR type="table" tableValues="0.035 0.540" />
-            <feFuncG type="table" tableValues="0.025 0.300" />
-            <feFuncB type="table" tableValues="0.065 0.440" />
-            <feFuncA type="identity" />
-          </feComponentTransfer>
-        </filter>
-      </defs>
-    </svg>;
+function subscribeNightPalette(notify: () => void) {
+  const observer = new MutationObserver(notify);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  return () => observer.disconnect();
+}
+const nightSnapshot = () => document.documentElement.dataset.theme === 'dark';
+function useNightPalette() { return useSyncExternalStore(subscribeNightPalette, nightSnapshot, () => false); }
+
+function NightStill({ imageRef }: { imageRef: RefObject<HTMLImageElement | null> }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const image = imageRef.current, canvas = canvasRef.current;
+    if (!image || !canvas) return;
+    let cancelled = false;
+    void image.decode().then(() => {
+      if (!cancelled) setReady(drawWaterNightStill(canvas, image));
+    }).catch(() => {});
+    return () => { cancelled = true; canvas.width = canvas.height = 0; };
+  }, [imageRef]);
+  return <canvas ref={canvasRef} className="flowing-water-night-still" data-ready={ready} />;
 }
 
 function DiffuseWaterBackground({ paused }: { paused: boolean }) {
+  const night = useNightPalette();
   const [hidden, setHidden] = useState(() => document.hidden);
   const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [ready, setReady] = useState(false);
@@ -87,9 +100,15 @@ function DiffuseWaterBackground({ paused }: { paused: boolean }) {
   const [source] = useState(() => matchMedia('(max-width: 760px)').matches
     ? '/flowing-water-diffuse-mobile.mp4' : '/flowing-water-diffuse.mp4');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const paletteCanvasRef = useRef<HTMLCanvasElement>(null);
+  const paletteRef = useRef<ReturnType<typeof createVideoNightPalette>>(null);
+  const [paletteReady, setPaletteReady] = useState(false);
   const stopped = paused || hidden || reduced;
   const stoppedRef = useRef(stopped);
   stoppedRef.current = stopped;
+  const paletteStateRef = useRef({ night, stopped });
+  paletteStateRef.current = { night, stopped };
   useEffect(() => {
     const visibility = () => setHidden(document.hidden);
     const preference = matchMedia('(prefers-reduced-motion: reduce)');
@@ -117,12 +136,30 @@ function DiffuseWaterBackground({ paused }: { paused: boolean }) {
     });
     return () => { cancelled = true; video.pause(); };
   }, [stopped, reduced, failed]);
-  const playing = ready && !failed && !reduced;
+  useLayoutEffect(() => {
+    const canvas = paletteCanvasRef.current, video = videoRef.current;
+    setPaletteReady(false);
+    if (!canvas || !video) return;
+    let cancelled = false;
+    // StrictMode can clean up a mount before its real setup. Defer allocation so
+    // that rehearsal never loses the WebGL context of the still-mounted canvas.
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      paletteRef.current = createVideoNightPalette(canvas, video, setPaletteReady);
+      const current = paletteStateRef.current;
+      paletteRef.current?.setActive(current.night && !current.stopped, current.night);
+    });
+    return () => { cancelled = true; paletteRef.current?.destroy(); paletteRef.current = null; };
+  }, [reduced, failed]);
+  useLayoutEffect(() => {
+    paletteRef.current?.setActive(night && !stopped, night);
+  }, [night, stopped, reduced, failed]);
+  const playing = ready && !failed && !reduced && (!night || paletteReady);
   return <div className="flowing-water-background" data-background="diffuse" aria-hidden="true"
-    data-paused={stopped} data-renderer={playing ? 'video' : 'fallback'}
+    data-paused={stopped} data-night-ready={paletteReady} data-renderer={playing ? 'video' : 'fallback'}
     data-flow-state={playing ? stopped ? 'paused' : 'running' : 'fallback'}>
-    <WaterNightPalette />
-    <img className="flowing-water-image" src="/flowing-water-diffuse-poster.jpg" alt="" decoding="async" fetchPriority="high" />
+    <img ref={imageRef} className="flowing-water-image" src="/flowing-water-diffuse-poster.jpg" alt="" decoding="async" fetchPriority="high" />
+    <NightStill imageRef={imageRef} />
     {!reduced && !failed && <video ref={videoRef} className="flowing-water-video" src={source}
       muted loop playsInline preload="auto" disablePictureInPicture tabIndex={-1} data-flow-period-ms="24000"
       onPlaying={event => {
@@ -132,5 +169,6 @@ function DiffuseWaterBackground({ paused }: { paused: boolean }) {
         else if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) setReady(true);
       }}
       onError={event => { if (event.currentTarget === videoRef.current) setFailed(true); }} />}
+    <canvas key={`${reduced}-${failed}`} ref={paletteCanvasRef} className="flowing-water-video-palette" />
   </div>;
 }

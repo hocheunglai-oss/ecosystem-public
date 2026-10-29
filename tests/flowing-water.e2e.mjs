@@ -321,55 +321,112 @@ async function verifyPeriodicFrames(page, background) {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.access-login')).toBeVisible();
   await readyRenderer(page);
-  // Observe the actual native player through two natural wraps. The detached
-  // sampling canvas reads current decoded source frames; it never changes the
-  // source, playback rate, currentTime or the displayed product canvas.
+  // Observe native playback without seeking or changing its source/rate. Read
+  // pixels only near the boundary; retain callback timing across the full loop.
   const video = background.locator('video.flowing-water-video');
-  const evidence = await video.evaluate(video => new Promise((resolve, reject) => {
+  const evidence = await video.evaluate(video => new Promise(resolve => {
     const canvas = document.createElement('canvas'); canvas.width = 96; canvas.height = 54;
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    const source = video.currentSrc, period = video.duration, steps = [], wraps = [];
-    let previous, request = 0, samples = 0, afterSecond = 0, done = false;
+    const source = video.currentSrc, period = video.duration, steps = [], wraps = [], gaps = [];
+    const started = performance.now(), frameSeconds = 1 / 30;
+    let previous, request = 0, samples = 0, done = false;
     const native = typeof video.requestVideoFrameCallback === 'function';
-    const stop = () => { done = true; clearTimeout(timer); if (native) video.cancelVideoFrameCallback(request); else cancelAnimationFrame(request); };
-    const timer = setTimeout(() => { stop(); reject(new Error(`Two natural video wraps were not observed: ${JSON.stringify({ samples, wraps, currentTime: video.currentTime, paused: video.paused, readyState: video.readyState })}`)); }, 24000);
-    const sample = (_now, metadata) => {
+    const classifyStep = step => {
+      const adjacent = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 1.5 + 1e-6
+        && step.wallSeconds > 0 && step.wallSeconds <= .15
+        && (!native || step.presentedFramesDelta === 1 && step.displaySeconds > 0 && step.displaySeconds <= .1);
+      if (adjacent) return 'adjacent';
+      // A missed callback is proven only when compositor frame counts explain
+      // the media advance and both display and wall clocks agree. A media jump
+      // with only one presented frame, or an unexplained stall, cannot pass.
+      const missed = native && step.presentedFramesDelta > 1
+        && Math.abs(step.delta - step.presentedFramesDelta * frameSeconds) <= frameSeconds + 1e-6
+        && step.displaySeconds > 0 && step.wallSeconds > 0
+        && Math.abs(step.displaySeconds - step.delta) <= .1
+        && Math.abs(step.wallSeconds - step.displaySeconds) <= .2;
+      return missed ? 'missed-callbacks' : 'unexplained-gap';
+    };
+    const seams = () => wraps.filter(wrap => wrap.stepIndex !== null).map(wrap => ({
+      seam: steps[wrap.stepIndex],
+      adjacent: steps.slice(Math.max(0, wrap.stepIndex - 3), wrap.stepIndex + 4)
+        .filter((step, offset) => Math.max(0, wrap.stepIndex - 3) + offset !== wrap.stepIndex && step.cycle === wrap.cycle),
+    })).filter(({ seam, adjacent }) => adjacent.length >= 3 && adjacent.filter(step => step.from < .3 && step.to < .3 && step !== seam).length >= 3);
+    const finish = error => {
+      if (done) return; done = true; clearTimeout(timer);
+      if (native) video.cancelVideoFrameCallback(request); else cancelAnimationFrame(request);
+      resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
+        observationMs: performance.now() - started, observationBudgetMs: 24000, maximumWraps: 4,
+        wraps, gaps, seams: seams(), ...(error ? { error } : {}),
+        final: { currentTime: video.currentTime, paused: video.paused, readyState: video.readyState, currentSrc: video.currentSrc },
+        maximumStep: steps.length ? Math.max(...steps.map(step => step.mean)) : 0,
+        meanStep: steps.length ? steps.reduce((sum, step) => sum + step.mean, 0) / steps.length : 0 });
+    };
+    const timer = setTimeout(() => finish('Two qualified natural boundaries were not observed within 24 seconds'), 24000);
+    const sample = (now, metadata) => {
       if (done) return;
-      const time = metadata?.mediaTime ?? video.currentTime;
-      if (video.currentSrc !== source || video.paused || video.playbackRate !== 1) { stop(); reject(new Error('Native loop changed source, paused or changed speed')); return; }
-      if (!previous || Math.abs(time - previous.time) > 1e-6) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-        if (previous) {
-          let total = 0;
-          for (let i = 0; i < pixels.length; i += 4) total += Math.abs(pixels[i] - previous.pixels[i]) + Math.abs(pixels[i + 1] - previous.pixels[i + 1]) + Math.abs(pixels[i + 2] - previous.pixels[i + 2]);
-          const delta = (time - previous.time + period) % period;
-          const mean = total / (canvas.width * canvas.height * 3);
-          const step = { from: previous.time, to: time, delta, mean, rate: mean / Math.max(delta, 1 / 30) };
-          steps.push(step);
-          if (time < previous.time - period / 2) wraps.push(steps.length - 1);
-          if (wraps.length >= 2) afterSecond++;
+      try {
+        if (video !== document.querySelector('video.flowing-water-video') || video.currentSrc !== source || video.paused || video.playbackRate !== 1) {
+          finish('Native loop changed media node/source, paused or changed speed'); return;
         }
-        previous = { time, pixels }; samples++;
-      }
-      if (wraps.length >= 2 && afterSecond >= 4) {
-        stop(); resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame', wraps,
-          seams: wraps.map(index => ({ seam: steps[index], adjacent: steps.slice(Math.max(0, index - 3), index + 4).filter((_item, offset) => Math.max(0, index - 3) + offset !== index) })),
-          maximumStep: Math.max(...steps.map(step => step.mean)), meanStep: steps.reduce((sum, step) => sum + step.mean, 0) / steps.length }); return;
-      }
-      request = native ? video.requestVideoFrameCallback(sample) : requestAnimationFrame(sample);
+        const current = { time: metadata?.mediaTime ?? video.currentTime, now,
+          presentedFrames: metadata?.presentedFrames, expectedDisplayTime: metadata?.expectedDisplayTime,
+          presentationTime: metadata?.presentationTime, nativeTime: video.currentTime };
+        if (!previous || Math.abs(current.time - previous.time) > 1e-6) {
+          const crossing = previous && current.time < previous.time - period / 2;
+          let timing, status;
+          if (previous) {
+            timing = { from: previous.time, to: current.time, delta: (current.time - previous.time + period) % period,
+              wallSeconds: (now - previous.now) / 1000,
+              displaySeconds: native ? (current.expectedDisplayTime - previous.expectedDisplayTime) / 1000 : null,
+              presentedFramesDelta: native ? current.presentedFrames - previous.presentedFrames : null };
+            status = classifyStep(timing);
+            if (status !== 'adjacent') gaps.push({ ...timing, status,
+              before: { ...previous, pixels: undefined }, after: { ...current }, crossing: Boolean(crossing) });
+          }
+          // Never compare a newly sampled boundary frame with stale pixels from
+          // another part of the loop. Missing observations remain unavailable.
+          const inWindow = current.time > period - .3 || current.time < .3;
+          if (inWindow) {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            current.pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+          }
+          let stepIndex = null;
+          if (previous?.pixels && current.pixels && status === 'adjacent') {
+            let total = 0;
+            for (let i = 0; i < current.pixels.length; i += 4) total += Math.abs(current.pixels[i] - previous.pixels[i]) + Math.abs(current.pixels[i + 1] - previous.pixels[i + 1]) + Math.abs(current.pixels[i + 2] - previous.pixels[i + 2]);
+            const mean = total / (canvas.width * canvas.height * 3);
+            stepIndex = steps.length;
+            steps.push({ ...timing, mean, rate: mean / Math.max(timing.delta, frameSeconds), cycle: crossing ? wraps.length : Math.max(0, wraps.length - (current.time < .3 ? 1 : 0)) });
+          }
+          if (crossing) wraps.push({ cycle: wraps.length, ...timing, stepIndex,
+            status: stepIndex === null ? status === 'missed-callbacks' ? status : 'boundary-pixels-unavailable' : 'sampled' });
+          previous = current; samples++;
+          // Off-boundary timing gaps are recorded, not a new global cadence SLA.
+          // An unobserved boundary itself cannot be excused without proof.
+          if (crossing && status === 'unexplained-gap') { finish('Boundary gap lacks consistent compositor frame and clock evidence'); return; }
+        }
+        if (seams().length >= 2) { finish(); return; }
+        if (wraps.length >= 4 && current.time >= .3) { finish('Four natural wraps did not provide two qualified boundary observations'); return; }
+        request = native ? video.requestVideoFrameCallback(sample) : requestAnimationFrame(sample);
+      } catch (error) { finish(error.message); }
     };
     request = native ? video.requestVideoFrameCallback(sample) : requestAnimationFrame(sample);
   }));
+  const { engine, width, theme } = pauseEvidence.get(page);
+  const report = `loop-${engine}-${width}-${theme}.json`;
+  pauseEvidence.get(page).loopDiagnostics = { report, ...evidence };
+  // Persist native timing and all observed/missed wraps before any assertion.
+  await writeFile(`${reports}/${report}`, JSON.stringify({ engine, width, theme, ...evidence }, null, 2));
+  assert.equal(evidence.error, undefined, `Native loop observation failed: ${evidence.error}; see ${report}`);
   assert.ok(Math.abs(evidence.period - 6) < 1 / 30, 'The exact supplied video retains its six-second loop');
-  assert.ok(evidence.samples > 100 && evidence.wraps.length >= 2, 'Native decoding presented moving frames through two real wraps');
+  assert.ok(evidence.samples > 100 && evidence.wraps.length >= 2 && evidence.seams.length >= 2, 'Native decoding presented moving frames through two qualified real wraps');
   assert.ok(evidence.maximumStep > .15 && evidence.meanStep > .01, 'Loop evidence cannot pass on a frozen or blank video');
   for (const { seam, adjacent } of evidence.seams) {
     assert.ok(seam.from > evidence.period - .3 && seam.to < .3, `The player crosses the actual encoded boundary: ${JSON.stringify(seam)}`);
     assert.ok(adjacent.length >= 3, 'Loop comparison includes independently decoded neighbouring frames');
     assert.ok(seam.rate <= Math.max(...adjacent.map(step => step.rate)) * 3 + 4, `The decoded boundary has no anomalous jump relative to neighbouring motion: ${JSON.stringify({ seam, adjacent })}`);
   }
-  return { verified: true, ...evidence, provenance: 'Unmodified native playback, sampled decoded source pixels at natural wraps; separate real-compositor motion and pause checks remain in this suite.' };
+  return { verified: true, report, ...evidence, provenance: 'Unmodified native playback, adjacent decoded source pixels at two natural wraps; positively identified missed callbacks are recorded, never treated as measured seams. Separate real-compositor motion and pause checks remain in this suite.' };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial night fallback verified' };
@@ -874,7 +931,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       results.push({ engine, width, theme, passed: true, geometry, internalMotion, periodicity, contextLoss, nightContrastMinimum, pauseChecks, artwork: waterArtwork, hiddenPause: true, signedOut: true, signedIn: true, nonAdminGate: true });
       console.log(`PASS ${engine} ${width} ${theme}: sign-in/out, navigation, theme, motion, role gate`);
     } catch (error) {
-      results.push({ engine, width, theme, passed: false, error: error.message, pauseChecks, unexpected: state.unexpected, errors });
+      results.push({ engine, width, theme, passed: false, error: error.message, pauseChecks, loopDiagnostics: pauseEvidence.get(page).loopDiagnostics, unexpected: state.unexpected, errors });
       await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-failure.png`, fullPage: true }).catch(() => {});
       throw error;
     } finally {

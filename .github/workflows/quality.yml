@@ -149,6 +149,7 @@ jobs:
               output/theme-touch-ui
               output/theme-toggle-ui
               output/background-choice-ui
+              output/native-video-diagnostic
           - group: suppliers
             label: Suppliers
             scripts: |
@@ -247,6 +248,18 @@ jobs:
           printf '%s\n' 'Acquire::Retries "2";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/80eco-ci-downloads
       - run: timeout --signal=TERM --kill-after=30s 8m pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm build
+      - name: Observe native video formats and routing (diagnostic only)
+        if: matrix.group == 'administration'
+        timeout-minutes: 4
+        continue-on-error: true
+        env:
+          ECO_DIAGNOSTIC_ENGINE: webkit
+          ECO_DIAGNOSTIC_OUTPUT: output/native-video-diagnostic
+        run: |
+          timeout --signal=TERM --kill-after=10s 230s bash -c '
+            node tests/native-video-diagnostic.mjs
+            WEBKIT_GST_USE_PLAYBIN3=1 ECO_DIAGNOSTIC_CASES=desktop-http-unrouted ECO_DIAGNOSTIC_OUTPUT=output/native-video-diagnostic/playbin3 node tests/native-video-diagnostic.mjs
+          '
       - name: Verify themes, phone widths, access states and freshness
         env:
           ECO_BROWSER_SCRIPTS: ${{ matrix.scripts }}

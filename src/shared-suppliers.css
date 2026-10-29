@@ -31,7 +31,7 @@
 .shared-supplier-message{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:5px;margin:0 0 10px;background:var(--surface);overflow-wrap:anywhere;flex-shrink:0}
 .shared-supplier-message[role=alert]{border-color:color-mix(in srgb,var(--line) 35%,#bc645d)}
 .shared-supplier-review{display:block;color:var(--muted);font-size:var(--ui-text-meta);font-weight:600;margin-top:4px}
-.shared-supplier-profile-heading{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:14px;background:color-mix(in srgb,var(--surface) 85%,#20a9b7);border:1px solid var(--line);border-radius:5px;flex-shrink:0}
+.shared-supplier-profile-heading{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:14px;background:color-mix(in srgb,var(--surface) 85%,var(--ui-accent));border:1px solid var(--line);border-radius:5px;flex-shrink:0}
 .shared-supplier-profile-heading>div:first-child{min-width:0}.shared-supplier-profile-heading h2{overflow-wrap:anywhere;margin:0 0 5px}
 .shared-supplier-profile-heading span{font-size:var(--ui-text-meta);color:var(--muted)}
 .shared-supplier-heading-actions{flex-shrink:0}
@@ -39,7 +39,7 @@
 .shared-supplier-profile-form{display:flex;flex-direction:column;min-height:0;flex:1}
 .shared-supplier-profile-content{overflow-y:auto;min-height:0;flex:1;padding-top:12px}
 .shared-supplier-section{margin-bottom:12px;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:var(--surface)}
-.shared-supplier-section>header{padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 91%,#20a9b7)}
+.shared-supplier-section>header{padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 91%,var(--ui-accent))}
 .shared-supplier-section h3{margin:0}
 
 .shared-supplier-profile dt{font-size:var(--ui-text-label);color:var(--muted);font-weight:600;margin-bottom:5px}

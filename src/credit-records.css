@@ -7,7 +7,7 @@
 .credit-compose-row select { width:min(460px,100%); height:32px; padding:4px 8px; font-size:11px; }
 .credit-compose-row span { margin-left:auto; display:flex; gap:8px; }
 .credit-record-panel { container-type:inline-size; min-width:0; border:1px solid var(--line, #d6e2ed); border-radius:5px; overflow:hidden; }
-.credit-record-heading { min-height:28px; padding:3px 10px; display:flex; align-items:center; gap:12px; justify-content:space-between; background:#deeff4; border-bottom:1px solid var(--line, #d6e2ed); }
+.credit-record-heading { min-height:28px; padding:3px 10px; display:flex; align-items:center; gap:12px; justify-content:space-between; background:var(--ui-raised); border-bottom:1px solid var(--line, #d6e2ed); }
 .credit-record-heading h3 { margin:0; font-size:12px; font-weight:700; }
 .credit-record-pager { display:flex; align-items:center; gap:6px; font-size:10px; white-space:nowrap; }
 .credit-record-pager button { display:grid; place-items:center; width:22px; height:22px; padding:0; background:transparent; color:inherit; border:1px solid var(--line, #d6e2ed); border-radius:3px; }
@@ -17,7 +17,7 @@
 .credit-record-toolbar select { width:150px; }
 .credit-record-scroll { width:100%; overflow:auto; max-height:520px; overscroll-behavior:contain; }
 .credit-record-table { width:100%; border-collapse:collapse; font-size:11px; line-height:1.35; }
-.credit-record-table th { position:sticky; top:0; z-index:1; padding:7px 8px; font-size:10px; font-weight:600; text-align:left; white-space:nowrap; background:#e8f0f7; }
+.credit-record-table th { position:sticky; top:0; z-index:1; padding:7px 8px; font-size:10px; font-weight:600; text-align:left; white-space:nowrap; background:var(--ui-raised); }
 .credit-record-table td { padding:7px 8px; border-bottom:1px solid var(--line, #d6e2ed); vertical-align:top; white-space:nowrap; }
 .credit-record-table th:not(:last-child), .credit-record-table td:not(:last-child) { border-right:1px solid color-mix(in srgb, var(--line, #d6e2ed) 60%, transparent); }
 .credit-record-table tbody tr:nth-child(even) { background:rgba(148,180,204,.035); }
@@ -38,8 +38,8 @@
 .credit-detail-grid span { color:var(--muted, #506984); font-size:10px; }
 .credit-detail-grid p { margin:4px 0 0; line-height:1.5; }
 .credit-record-table .credit-record-empty { padding:20px 10px; color:var(--muted, #506984); text-align:center; }
-[data-theme="dark"] .credit-record-heading { background:#1d3946; }
-[data-theme="dark"] .credit-record-table th { background:#1e3444; }
+[data-theme="dark"] .credit-record-heading { background:var(--ui-raised); }
+[data-theme="dark"] .credit-record-table th { background:var(--ui-raised); }
 [data-theme="dark"] .credit-action, [data-theme="dark"] .credit-record-actions button { color:#80dbc1; }
 [data-theme="dark"] .credit-stage.approved { color:#94dba6; }
 [data-theme="dark"] .credit-stage.pending { color:#e7c276; }
@@ -69,8 +69,8 @@
 .credit-record-table small.credit-priority { font-weight:700; color:#a5681d; }
 .credit-record-toolbar { flex-wrap:wrap; }
 .credit-attention-filter { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; min-height:28px; padding:4px 7px; border:1px solid var(--line); border-radius:3px; color:inherit; background:transparent; font-size:10px; }
-.credit-attention-filter[aria-pressed="true"] { border-color:#249fad; background:rgba(36,159,173,.1); }
-.credit-attention-filter b { padding:1px 4px; border-radius:3px; background:rgba(36,159,173,.14); font-weight:600; }
+.credit-attention-filter[aria-pressed="true"] { border-color:var(--ui-focus); background:var(--ui-selection); }
+.credit-attention-filter b { padding:1px 4px; border-radius:3px; background:var(--ui-selection); font-weight:600; }
 .credit-workflow-label { display:block; margin-bottom:3px; color:var(--ink); font-size:10px; }
 .credit-record-table .credit-active-remark { display:block; width:fit-content; margin-top:4px; padding:2px 5px; background:rgba(54,152,86,.12); color:#287148; font-size:9px; font-weight:600; border-radius:3px; }
 .credit-record-table .credit-set-active { display:block; padding:5px 0 0; text-align:left; }
@@ -88,3 +88,4 @@
   .credit-record-toolbar select { flex:1; min-width:120px; }
   .credit-attention-filter { min-height:34px; }
 }
+.credit-record-search input { border-style: solid; }

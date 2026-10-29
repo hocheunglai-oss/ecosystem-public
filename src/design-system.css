@@ -9,6 +9,12 @@
   --ui-line: #b3c5bd;
   --ui-boundary: #91aba1;
   --ui-accent: #267064;
+  --ui-selection: #dfece3;
+  --ui-radius-panel: 12px;
+  --ui-radius-window: 20px;
+  --ui-window-shadow: 0 24px 72px #173f382b;
+  --ui-menu-shadow: 0 12px 32px #173f3826;
+  --ui-backdrop: #173f3852;
   --ui-font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ui-font-heading: "Manrope", "DM Sans", sans-serif;
   --ui-text-meta: 11px;
@@ -57,6 +63,15 @@
   --line: var(--ui-line);
   --surface: var(--ui-surface);
   --panel-boundary: var(--ui-boundary);
+  --theme-canvas: var(--ui-canvas);
+  --theme-panel: var(--ui-surface);
+  --theme-raised: var(--ui-raised);
+  --theme-field: var(--ui-field);
+  --theme-ink: var(--ui-ink);
+  --theme-muted: var(--ui-muted);
+  --theme-faint: var(--ui-muted);
+  --theme-line: var(--ui-line);
+  --theme-cyan: var(--ui-accent);
 }
 :root[data-theme="dark"] {
   --ui-canvas: #171620;
@@ -68,6 +83,10 @@
   --ui-line: #554958;
   --ui-boundary: #7a667c;
   --ui-accent: #e3bca8;
+  --ui-selection: #3a303e;
+  --ui-window-shadow: 0 24px 72px #0b0818a6;
+  --ui-menu-shadow: 0 12px 32px #0b081880;
+  --ui-backdrop: #100c187a;
   --ui-control-hover: #352d3d;
   --ui-focus: #e3bca8;
   --ui-link: #91c3ff;
@@ -100,6 +119,8 @@
   --ws-surface: var(--ui-raised);
   --ws-field: var(--ui-field);
   --ws-cyan: var(--ui-accent);
+  --ws-accent: var(--ui-primary);
+  --teal: var(--ui-accent);
   color: var(--ui-ink);
 }
 #root :is(.workspace-window, .modal),
@@ -365,6 +386,194 @@
 #root .profile-dropdown .profile-save.ui-button { width: auto; justify-self: start; }
 /* Readable fact labels may exceed legacy fixed tracks; keep both columns bounded. */
 #root .admin-facts :is(dt, dd) { min-width: 0; overflow-wrap: anywhere; }
+
+/* 29 October: carry Flowing Water through existing work surfaces without changing
+   their layout. These semantic groups deliberately exclude grades, business status,
+   private records, document pixels and contribution actions. */
+#root :is(.workspace-window, .modal) {
+  border-radius: var(--ui-radius-window);
+  box-shadow: var(--ui-window-shadow);
+}
+#root :is(.workspace-window, .modal)::backdrop { background: var(--ui-backdrop); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .window-content, .table-wrap, .resource-history, .center-incoming-list
+) { scrollbar-color: var(--ui-boundary) var(--ui-canvas); }
+#root :is(.workspace-window, .modal, .workspace-module) ::selection {
+  color: var(--ui-ink); background: var(--ui-selection);
+}
+
+/* Nested reading panels have opaque calm surfaces, not legacy blue glass. */
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .knowledge, .profile-tab-content, .shared-supplier-section, .supplier-information,
+  .buyer-profile__section, .buyer-credit-metric, .buyer-profile__metrics > div,
+  .users-access-editor, .users-access-message, .admin-detail, .admin-panel,
+  .admin-empty, .admin-feedback-form, .admin-record, .parser-ai-review,
+  .extract-proposal, .credit-record-panel, .credit-form-section,
+  .center-credit-indicator, .office-selected-summary, .resource-balance,
+  .calculated-field, .confirm-box, .customer-credit-strip, .knowledge-banner,
+  .review-item, .summary-strip, .request-summary, .original-message pre,
+  .reward-grid > div, .knowledge-strip, .stat-card,
+  .directory-item, .port-card, .center-incoming-row
+) {
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+  box-shadow: none;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .knowledge, .profile-tab-content, .shared-supplier-section, .supplier-information,
+  .buyer-profile__section, .buyer-credit-metric, .buyer-profile__metrics > div,
+  .users-access-editor, .admin-detail, .admin-panel, .admin-empty,
+  .admin-feedback-form, .parser-ai-review, .credit-record-panel, .credit-form-section
+) { border-radius: var(--ui-radius-panel); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .card, .directory-list, .detail-list > div, .detail-footer, .module-metrics,
+  .module-settings-toolbar, .modal-actions, .modal-head, .form-bottom,
+  .port-card-bottom, .center-credit-records article, .center-context-panel dl > div,
+  .outcome-checks, .center-details-column, .center-tabs, .center-history-compact details,
+  .office-view-tabs, .office-comparison-scroll, .resource-history li, .economy-team-table-scroll
+) { border-color: var(--ui-line); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .knowledge-header, .knowledge-facts, .profile-tab-content > header,
+  .shared-supplier-profile-heading, .shared-supplier-section > header,
+  .credit-record-heading, .credit-form-section > h3, .credit-form-metrics,
+  .extract-proposal-head, .admin-code
+) { background: var(--ui-raised); border-color: var(--ui-line); }
+#root :is(.buyer-profile, .buyer-profile-directory) {
+  --buyer-heading: var(--ui-raised);
+  --buyer-section-heading: var(--ui-raised);
+  --buyer-surface: var(--ui-surface);
+  --buyer-accent: var(--ui-accent);
+}
+
+/* All ordinary controls share paint, while every component keeps its dimensions. */
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea, select, .search-box, .buyer-search, .supplier-search, .enquiry-preview
+) { background: var(--ui-field); color: var(--ui-ink); border-color: var(--ui-line); box-shadow: none; }
+#root :is(.workspace-window, .modal, .workspace-module) :is(.search-box, .buyer-search, .supplier-search) input {
+  background: transparent;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea, select):disabled {
+  background: var(--ui-raised); color: var(--ui-muted);
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .search-select-list, .knowledge-sheet-menu, .knowledge-entry-update[popover]
+) { background: var(--ui-surface); color: var(--ui-ink); border-color: var(--ui-boundary); box-shadow: var(--ui-menu-shadow); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .search-select-list > button, .lost-reason-row > button, .buyer-small-action,
+  .credit-record-expand, .attachment-view > button, .users-access-editor-title > button,
+  .knowledge-facts header button, .knowledge-block-head button
+):not(.ui-button--contribution):not(.knowledge-update-button) { color: var(--ui-ink); background: var(--ui-control-surface); border-color: var(--ui-line); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .lost-reason-row > button, .attachment-view > button, .users-access-editor-title > button,
+  .knowledge-facts header button, .knowledge-block-head button
+) { border-radius: var(--ui-radius-action); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .button.primary, .ui-button--primary, .lime-control
+):not(.ui-button--contribution):not(.knowledge-update-button) {
+  color: var(--ui-primary-ink); background: var(--ui-primary); border-color: var(--ui-primary-border); box-shadow: none;
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .button.primary, .ui-button--primary, .lime-control
+):not(.ui-button--contribution):not(.knowledge-update-button):hover:not(:disabled) {
+  background: var(--ui-primary-hover); border-color: var(--ui-focus);
+}
+
+/* Selection is teal/mist by day and warm-neutral/plum by night. Row geometry stays. */
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .tabs > button, .center-tabs > button, .office-view-tabs [role="tab"],
+  .profile-tabs-list > button:not([data-visibility="private"]), .buyer-profile__tabs > button,
+  .credit-workflow-tabs > button, .users-access-offices > button, .users-access-list > button
+) { color: var(--ui-muted); background: var(--ui-surface); border-color: var(--ui-line); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .center-tabs > button[aria-selected="true"], .office-view-tabs [aria-selected="true"],
+  .profile-tabs-list > button:not([data-visibility="private"])[aria-selected="true"],
+  .buyer-profile__tabs > button[aria-selected="true"], .credit-workflow-tabs > button[aria-pressed="true"],
+  .enquiry-terms > button[aria-pressed="true"], .attachment-view > button[aria-pressed="true"],
+  .credit-attention-filter[aria-pressed="true"]
+) { background: var(--ui-selection); color: var(--ui-ink); border-color: var(--ui-focus); box-shadow: inset 0 -2px var(--ui-focus); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .directory-item.active, .port-card.active, .center-incoming-row.is-selected,
+  .office-comparison-table tbody tr.is-selected, .users-access-offices > button.active,
+  .users-access-list > button.active, .admin-record[aria-pressed="true"]
+) { background: var(--ui-selection); color: var(--ui-ink); border-color: var(--ui-focus); box-shadow: inset 3px 0 var(--ui-focus); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .search-select-list > button:hover, .search-select-list > button.is-active,
+  .directory-item:hover, .port-card:hover, .center-incoming-open:hover,
+  .center-history-compact summary:hover, .center-tabs > button:hover,
+  .users-access-offices > button:hover, .users-access-list > button:hover
+) { background: var(--ui-control-hover); color: var(--ui-ink); }
+#root :is(.workspace-window, .modal, .workspace-module) .tabs > button.active { color: var(--ui-accent); }
+#root :is(.workspace-window, .modal, .workspace-module) .tabs > button.active::after { background: var(--ui-accent); }
+
+/* Data surfaces are opaque and neutral; semantic cells and chart series are untouched. */
+#root :is(.workspace-window, .modal, .workspace-module) table { color: var(--ui-ink); }
+#root :is(.workspace-window, .modal, .workspace-module) thead th:not(.selected-column):not(.selected-row-number):not(.selected-table-column) {
+  background: var(--ui-raised); color: var(--ui-muted); border-color: var(--ui-line);
+}
+#root :is(.workspace-window, .modal, .workspace-module) td { border-color: var(--ui-line); }
+#root :is(.workspace-window, .modal, .workspace-module) tbody tr:hover { background: var(--ui-control-hover); }
+#root .record-sheet { --record-cell: var(--ui-field); }
+#root .knowledge-spreadsheet .knowledge-table-wrap :is(input, textarea.sheet-cell) { background: transparent; }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .directory-item-copy strong,
+  .port-card-name, .knowledge-banner strong, .calculated-field strong, .center-context-panel dd,
+  .center-history-compact summary strong, .center-incoming-open, .detail-list dd,
+  .summary-strip strong, .request-summary > strong, .resource-wallet, .team-resources
+) { color: var(--ui-ink); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .directory-item-copy > span, .directory-item-copy small, .detail-hero p,
+  .customer-credit-strip span, .port-card-country, .port-card-summary, .port-card-bottom,
+  .port-description, .port-notes, .port-context p, .knowledge-banner p, .review-item > p,
+  .center-context-panel p, .center-context-panel li, .center-context-panel dt,
+  .directory-list-heading, .quantity-field > span, .center-history-compact,
+  .center-history-compact > header > span, .center-history-compact details > div,
+  .center-incoming-open > span:not(.new-enquiry-label), .center-incoming-open > small, .search-select-empty,
+  .calculated-field span, .calculated-field small, .resource-empty, .resource-history time,
+  .office-selected-summary > div > span, .economy-team-table tbody th span, td small:not([class])
+) { color: var(--ui-muted); }
+
+/* Expanded account tools are still work surfaces, including notifications and profiles. */
+#root .trader-hud :is(.account-inline-slot, .account-inline-panel, .hud-inline-section) {
+  --ink: var(--ui-ink); --muted: var(--ui-muted); --surface: var(--ui-surface); --line: var(--ui-line);
+  --hud-expanded-surface: var(--ui-surface);
+  --ui-control-surface: var(--ui-field); --ui-control-ink: var(--ui-ink);
+  --ui-control-border: var(--ui-line); --ui-control-hover: var(--ui-selection); --ui-focus: var(--ui-accent);
+  color: var(--ui-ink);
+}
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) { background: var(--ui-surface); border-color: var(--ui-line); }
+#root :is(.workspace-window, .modal, .trader-hud) :is(.contribution-activity, .office-performance) {
+  --activity-accent: var(--ui-accent); --activity-soft: var(--ui-raised); --activity-panel: var(--ui-surface);
+}
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(
+  input, select, textarea, .hud-inline-close, .inbox-inline-close
+) { background: var(--ui-field); color: var(--ui-ink); border-color: var(--ui-line); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(.hud-inline-heading, .hud-inline-heading > strong, .profile-dropdown > header h2) { color: var(--ui-ink); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(.hud-inline-heading > span, .profile-dropdown label > span) { color: var(--ui-muted); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(
+  .inbox-item, .inbox-item-clear, .inbox-clear-all, .inbox-arrivals button,
+  .inbox-scenarios, .inbox-notification-row, .inbox-scenarios > button,
+  .office-comparison-list > button, .office-view-tabs [role="tab"]
+) { color: var(--ui-ink); border-color: var(--ui-line); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(
+  .inbox-arrivals button, .office-view-tabs [role="tab"], .search-box
+) { background: var(--ui-field); border-radius: var(--ui-radius-action); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(
+  .inbox-item:hover, .inbox-item.is-unread, .inbox-item-clear:hover,
+  .inbox-scenarios > button:hover, .inbox-scenarios > button:focus-visible,
+  .office-view-tabs [aria-selected="true"], .office-comparison-list > button[aria-pressed="true"]
+) { background: var(--ui-selection); color: var(--ui-ink); }
+#root .trader-hud .account-inline-panel .inbox-item.is-unread { border-left-color: var(--ui-focus); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(.inbox-source, .inbox-sender, .hud-activity-period) { color: var(--ui-muted); }
+#root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(.office-selected-summary, .economy-team-table thead th) { background: var(--ui-raised); }
+#root .trader-hud .account-inline-panel .profile-error { color: var(--ui-danger); }
+#root .trader-hud .account-inline-panel > header { border-color: var(--ui-line); }
+:root:not([data-theme="dark"]) #root .trader-hud .hud-inline-scroll .resource-history li > b { color: #426c2d; }
+#root .hats-off-panel { --hats-teal: var(--ui-accent); }
+:root:not([data-theme="dark"]) #root .hats-off-panel {
+  --hats-lime: #426c2d; --hats-gold: #806018; --hats-silver: #526b76; --hats-bronze: #8a5034;
+}
+
 @media (max-width: 760px), (pointer: coarse) {
   :root { --ui-control-height: 44px; --ui-field-height: 44px; --ui-control-padding: 10px 12px; }
   #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]) { font-size: 16px; }

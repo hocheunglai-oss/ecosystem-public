@@ -86,8 +86,18 @@ async function neutral(action) {
   assert.equal(await action.getAttribute('aria-description'),null);
   await expect(action).not.toHaveClass(/knowledge-update-button|ui-button--contribution/);
   await expect(action.locator('.contribution-action-hint')).toHaveCount(0);
-  const style=await action.evaluate(node=>{const probe=document.createElement('i');node.append(probe);const values=['--ui-control-surface','--ui-control-hover'].map(token=>{probe.style.background=`var(${token})`;return getComputedStyle(probe).backgroundColor;});probe.remove();return {actual:getComputedStyle(node).backgroundColor,values};});
-  assert.ok(style.values.includes(style.actual),`Ordinary action stays neutral: ${await action.textContent()} ${style.actual}`);
+  const style=await action.evaluate(node=>{
+    const scope='#root :is(.workspace-window, .modal, .workspace-module)';
+    const primary=node.matches(`${scope} :is(.button.primary, .ui-button--primary, .lime-control):not(.ui-button--contribution):not(.knowledge-update-button)`);
+    const selected=node.matches(`${scope} .enquiry-terms > button[aria-pressed="true"]`);
+    // Ordinary primary actions and selected enquiry lists have their own neutral
+    // tokens; do not broaden every action to accept every neutral surface.
+    const tokens=primary?['--ui-primary','--ui-primary-hover']:selected?['--ui-selection']:['--ui-control-surface','--ui-control-hover'];
+    const probe=document.createElement('i');node.append(probe);
+    const values=tokens.map(token=>{probe.style.background=`var(${token})`;return getComputedStyle(probe).backgroundColor;});
+    probe.remove();return {actual:getComputedStyle(node).backgroundColor,tokens,values};
+  });
+  assert.ok(style.values.includes(style.actual),`Ordinary action uses its shared neutral state: ${await action.textContent()} ${JSON.stringify(style)}`);
   const fill=style.actual.match(/[\d.]+/g).slice(0,3).map(Number);
   assert.ok(!(fill[2]>fill[0]+50&&fill[2]>fill[1]+45),'Ordinary/private actions do not use the reserved contribution blue');
 }

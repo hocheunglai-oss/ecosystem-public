@@ -1,31 +1,15 @@
 /* Flat working surfaces; the harbour and home HUD keep their identity. */
 :is(.workspace-window, .modal) {
-  --ink: #1a3048;
-  --muted: #5c6e83;
-  --line: #b8c8d866;
-  --surface: #f5f8fc;
-  --ws-surface: #eef3f9;
-  --ws-field: #ffffffeb;
-  --ws-accent: #c5f574;
-  --ws-cyan: #2b9fba;
   color-scheme: light;
-  color: var(--ink);
   border: 1px solid #ffffffcc;
   border-radius: 16px;
-  background: var(--surface);
-  box-shadow:
-    0 28px 100px #102c4a47,
-    inset 0 1px #ffffffd9;
 }
 .workspace-window::backdrop {
   background: #263e5e3d;
   backdrop-filter: blur(8px);
 }
 .workspace-window .window-toolbar {
-  color: #1e3a54;
-  background: var(--ws-surface);
   border-bottom: 1px solid #9dbacd66;
-  box-shadow: 0 2px 20px #2544650b;
   padding-block: 12px;
 }
 .workspace-window .window-toolbar strong {
@@ -36,54 +20,11 @@
   background: var(--ws-cyan);
   box-shadow: 0 0 12px #2da8b833;
 }
-.workspace-window .window-toolbar span {
-  color: #536b82;
-}
 .workspace-window .window-tool {
-  color: #496b83;
   border-radius: 8px;
-}
-.workspace-window .window-tool:hover {
-  background: #dbe8f2;
-  color: #20465f;
 }
 .workspace-window .window-close {
   border-left: 0;
-}
-.workspace-window .window-content {
-  scrollbar-color: #a8b9cb #eaf0f6;
-}
-.workspace-window .window-foot {
-  background: #e8eff7;
-  color: #597087;
-  border-color: var(--line);
-}
-:is(.workspace-window, .modal) :is(h1, h2, h3, h4) {
-  color: #152c46;
-}
-:is(.workspace-window, .modal) :is(.field, .check-label) {
-  color: #3c536c;
-}
-:is(.workspace-window, .modal)
-  :is(
-    .field small,
-    .modal-intro,
-    .eyebrow,
-    .section-label,
-    .source-note,
-    .review-meta,
-    .results-count,
-    .muted,
-    .detail-list dt,
-    .stat-card > span,
-    .stat-card > small,
-    .module-metrics,
-    .credit-request-amount span,
-    .empty p,
-    .card-heading p,
-    .page-heading p
-  ) {
-  color: #5c6e83;
 }
 :is(.workspace-window, .modal)
   :is(
@@ -97,29 +38,14 @@
     .center-parser,
     .center-standard
   ) {
-  background: var(--ws-field);
-  color: #1a3048;
   border: 1px solid #bbcbded9;
   border-radius: 8px;
-  box-shadow: inset 0 1px 3px #193b6210;
 }
 :is(.workspace-window, .modal) :is(input, textarea)::placeholder {
-  color: #73869a;
   opacity: 1;
 }
 :is(.workspace-window, .modal)
-  :is(.field input:disabled, .field select:disabled, .field textarea:disabled) {
-  color: #607185;
-  background: #e9eff6;
-}
-:is(.workspace-window, .modal) :is(select, select option) {
-  color: #18324c;
-  background-color: #ffffff;
-}
-:is(.workspace-window, .modal)
   :is(input:not([type="checkbox"]), textarea, select):focus {
-  border-color: #249bb2;
-  box-shadow: 0 0 0 3px #249bb21c;
   outline: none;
 }
 :is(.workspace-window, .modal) :is(button, summary, a):focus-visible {
@@ -129,10 +55,6 @@
 :is(.workspace-window, .modal) input[type="checkbox"] {
   accent-color: #38745b;
 }
-:is(.workspace-window, .modal) ::selection {
-  color: #122c3f;
-  background: #bcf2e4;
-}
 :is(.workspace-window, .modal) .button {
   border-radius: 8px;
   transition:
@@ -141,25 +63,7 @@
     box-shadow 0.16s;
 }
 :is(.workspace-window, .modal) .button.primary {
-  background: var(--ws-accent);
-  color: #173221;
   border: 1px solid #b6dc62;
-  box-shadow:
-    0 3px 14px #7a9f3830,
-    inset 0 1px #ffffffe0;
-}
-:is(.workspace-window, .modal) .button.primary:hover:not(:disabled) {
-  background: #d1f890;
-  box-shadow: 0 4px 20px #8aac5140;
-}
-:is(.workspace-window, .modal) .button.secondary {
-  color: #294863;
-  border-color: #b4c7d9;
-  background: #ffffffb8;
-}
-:is(.workspace-window, .modal) .button.secondary:hover:not(:disabled) {
-  border-color: #5dafbd;
-  background: #dff3f2;
 }
 :is(.workspace-window, .modal) .badge {
   border-radius: 5px;
@@ -234,57 +138,16 @@
   color: #285b7c;
 }
 :is(.workspace-window, .modal) .modal-close {
-  color: #44617b;
   border-radius: 8px;
-}
-:is(.workspace-window, .modal) .modal-close:hover {
-  background: #dde7f2;
-}
-:is(.workspace-window, .modal) .calculated-field :is(span, small) {
-  color: #61768b;
-}
-:is(.workspace-window, .modal) .calculated-field strong {
-  color: #23445f;
-}
-:is(.workspace-window, .modal) .search-box {
-  color: #5e778e;
-}
-:is(.workspace-window, .modal) .search-box input {
-  color: #203e58;
-  background: transparent;
 }
 :is(.workspace-window, .modal) .search-select > svg {
   color: #56788c;
 }
 :is(.workspace-window, .modal) .search-select-list {
-  background: #ffffff;
-  border-color: #8cbece;
   border-radius: 8px;
-  box-shadow: 0 15px 28px #1b3f612e;
 }
 :is(.workspace-window, .modal) .search-select-list > button {
-  color: #24435c;
   border-radius: 5px;
-}
-:is(.workspace-window, .modal) .search-select-list > button:hover,
-:is(.workspace-window, .modal) .search-select-list > button.is-active {
-  background: #e2f2f2;
-  color: #174c4f;
-}
-:is(.workspace-window, .modal) .search-select-empty {
-  color: #687c8d;
-}
-:is(.workspace-window, .modal) .tabs button {
-  color: #62758c;
-}
-:is(.workspace-window, .modal) .tabs button.active {
-  color: #25594c;
-}
-:is(.workspace-window, .modal) .tabs button.active::after {
-  background: #46927b;
-}
-:is(.workspace-window, .modal) .stat-card {
-  border-color: #66b8b0;
 }
 :is(.workspace-window, .modal)
   :is(
@@ -322,38 +185,19 @@
   color: #546d82;
 }
 :is(.workspace-window, .modal) :is(.directory-item, .port-card) {
-  border-color: #c3d2e4;
-  background: #ffffff75;
   border-radius: 9px;
-}
-:is(.workspace-window, .modal) :is(.directory-item:hover, .port-card:hover) {
-  background: #f4fafc;
-}
-:is(.workspace-window, .modal) :is(.directory-item.active, .port-card.active) {
-  background: var(--ws-surface);
-  border-color: #85bcbb;
-  box-shadow: inset 3px 0 #57aaa5;
 }
 :is(.workspace-window, .modal) :is(.directory-avatar, .square-icon) {
   color: #287868;
   background: #d9efea;
-}
-:is(.workspace-window, .modal) table {
-  color: #274359;
 }
 :is(.workspace-window, .modal) th {
   color: #405a73;
   background: #e4ecf5;
   border-color: #bdcedf;
 }
-:is(.workspace-window, .modal) td {
-  border-color: #cdd9e5;
-}
 :is(.workspace-window, .modal) td small {
   color: #667d91;
-}
-:is(.workspace-window, .modal) tbody tr:hover {
-  background: #e6f0f7;
 }
 :is(.workspace-window, .modal) .table-wrap {
   scrollbar-color: #abbdd0 #e6edf5;
@@ -361,73 +205,26 @@
 /* Solid controls and panels retain their mint and cyan state accents. */
 .workspace-window .center-tabs {
   gap: 5px;
-  border-color: #b8c8d866;
   margin-bottom: 19px;
   padding-bottom: 9px;
 }
 .workspace-window .center-tabs button {
-  color: #516c83;
   border-radius: 7px;
   border-bottom: 0;
   padding: 10px 19px;
-}
-.workspace-window .center-tabs button[aria-selected="true"] {
-  color: #20465a;
-  background: #fffffff0;
-  box-shadow:
-    inset 0 -2px #4dadb7,
-    inset 0 1px #ffffff;
-}
-.workspace-window .center-tabs button:hover {
-  color: #254b61;
-  background: #ffffff80;
 }
 .workspace-window :is(.center-field-heading, .center-format-heading > label) {
   color: #415e76;
   letter-spacing: 0.015em;
 }
-.workspace-window .center-parser {
-  border-color: #b8cede;
-  background: var(--ws-field);
-}
-.workspace-window .center-standard {
-  background: #f5fafd;
-  border-color: #b2cbd9;
-}
 .workspace-window .parser-clear {
-  background: #edf3f9;
-  color: #49647a;
-  border-color: #c4d4e3;
   border-radius: 5px;
 }
-.workspace-window .parser-clear:hover:not(:disabled) {
-  background: #e3f3f3;
-  border-color: #7bb7c0;
-}
-.workspace-window :is(.quantity-field > span, .enquiry-icon) {
-  color: #597587;
-}
-.workspace-window .enquiry-icon:hover {
-  background: #e1edf7;
-  color: #2a706b;
-}
 .workspace-window .enquiry-buyer-field > .enquiry-icon {
-  border-color: #c0d0df;
   border-radius: 7px;
 }
 .workspace-window .enquiry-terms button {
-  color: #3d5b70;
-  background: #ffffffae;
-  border-color: #bfcede;
   border-radius: 5px;
-}
-.workspace-window .enquiry-terms button[aria-pressed="true"] {
-  color: #365420;
-  background: #e4f4bf;
-  border-color: #9fbe68;
-}
-.workspace-window .enquiry-terms button:hover:not(:disabled) {
-  background: #ecf7ee;
 }
 .workspace-window .enquiry-format-error {
   color: #95601a;
@@ -463,55 +260,23 @@
   background: linear-gradient(90deg, #36a9b6, #aad855);
   box-shadow: 0 0 8px #62bfa12b;
 }
-.workspace-window .center-incoming h3 {
-  color: #36536c;
-}
-.workspace-window .center-incoming-list {
-  scrollbar-color: #a6bfd0 transparent;
-}
 .workspace-window .center-incoming-row {
   border: 1px solid #b8ccdf;
   border-radius: 8px;
-  background: #f8fbffb8;
   margin-bottom: 8px;
   padding-bottom: 6px;
   overflow: hidden;
 }
-.workspace-window .center-incoming-row.is-selected {
-  background: var(--ws-surface);
-  border-color: #8bbab2;
-  box-shadow: inset 3px 0 #77b689;
-}
-.workspace-window .center-incoming-open {
-  color: #294660;
-}
-.workspace-window .center-incoming-open > span {
-  color: #506e81;
-}
-.workspace-window .center-incoming-open > small {
-  color: #627e91;
-}
 .workspace-window .center-incoming-open .new-enquiry-label {
   color: #3e692c;
-}
-.workspace-window .center-incoming-open:hover {
-  background: #ddecf540;
 }
 .workspace-window .center-lifecycle {
   padding: 5px 8px 1px;
   gap: 5px;
 }
 .workspace-window .center-lifecycle button {
-  color: #395a6e;
-  border-color: #b5cadb;
-  background: #ffffffcc;
   border-radius: 5px;
   padding: 4px 6px;
-}
-.workspace-window .center-lifecycle button:hover {
-  color: #24554e;
-  border-color: #7eafa7;
-  background: #e1f2ed;
 }
 .workspace-window .center-queue-divider {
   height: 1px;
@@ -531,26 +296,8 @@
 .workspace-window .center-account-notice span {
   color: #7e6c4f;
 }
-.workspace-window .center-history-compact {
-  color: #36546c;
-}
-.workspace-window .center-history-compact > header > span {
-  color: #5c788b;
-}
 .workspace-window .center-history-compact details {
   border-color: #c5d6e2;
-}
-.workspace-window .center-history-compact details > div {
-  color: #55768c;
-}
-.workspace-window .center-history-compact summary:hover {
-  background: #e0edf64d;
-}
-.workspace-window .center-history-compact summary strong {
-  color: #204660;
-}
-.workspace-window .center-context-panel dd {
-  color: #24465f;
 }
 /* Compact functional sheets retain the same contrast when stacked over a workspace. */
 .modal {
@@ -559,9 +306,6 @@
 .modal::backdrop {
   background: #18364f66;
   backdrop-filter: blur(5px);
-}
-.modal .modal-head {
-  border-color: #ccd9e8;
 }
 .modal .modal-actions {
   padding-top: 18px;

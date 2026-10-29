@@ -1,8 +1,10 @@
+import { WATER_NIGHT_GLSL } from './waterNightPalette';
+
 /** Decorative only: one fixed picture, with a bounded periodic displacement inside it. */
 export const FLOW_PERIOD_MS = 48_000;
 
 type FlowState = 'running' | 'paused' | 'fallback';
-export type FlowingWaterRenderer = { setPaused: (paused: boolean) => void; destroy: () => void };
+export type FlowingWaterRenderer = { setPaused: (paused: boolean) => void; setNight: (night: boolean) => void; destroy: () => void };
 
 const VERTEX_SHADER = `
 attribute vec2 a_position;
@@ -21,7 +23,9 @@ precision mediump float;
 uniform sampler2D u_image;
 uniform vec2 u_cover;
 uniform float u_phase;
+uniform float u_night;
 varying vec2 v_uv;
+${WATER_NIGHT_GLSL}
 void main() {
   vec2 p = v_uv;
   float s = sin(u_phase);
@@ -38,7 +42,8 @@ void main() {
   vec2 warped = p + edge.x * edge.y * vec2(0.018, 0.014) * flow;
   // Match the still image's centered cover crop without adding a zoom or inset.
   vec2 uv = 0.5 + (warped - 0.5) * u_cover;
-  gl_FragColor = texture2D(u_image, uv);
+  vec4 source = texture2D(u_image, uv);
+  gl_FragColor = u_night > 0.5 ? waterNight(source) : source;
 }`;
 
 /** Returns null on unsupported graphics; the caller's original image stays visible. */
@@ -47,6 +52,7 @@ export function createFlowingWaterRenderer(
   image: HTMLImageElement,
   initiallyPaused: boolean,
   onState: (state: FlowState) => void,
+  initiallyNight = false,
 ): FlowingWaterRenderer | null {
   const gl = canvas.getContext('webgl', {
     alpha: false, antialias: false, depth: false, stencil: false,
@@ -88,6 +94,7 @@ export function createFlowingWaterRenderer(
 
   let phaseLocation: WebGLUniformLocation | null;
   let coverLocation: WebGLUniformLocation | null;
+  let nightLocation: WebGLUniformLocation | null;
   const draw = () => {
     if (disposed) return;
     gl.uniform1f(phaseLocation, (elapsed % FLOW_PERIOD_MS) / FLOW_PERIOD_MS * Math.PI * 2);
@@ -163,6 +170,8 @@ export function createFlowingWaterRenderer(
     gl.uniform1i(gl.getUniformLocation(program, 'u_image'), 0);
     phaseLocation = gl.getUniformLocation(program, 'u_phase');
     coverLocation = gl.getUniformLocation(program, 'u_cover');
+    nightLocation = gl.getUniformLocation(program, 'u_night');
+    gl.uniform1f(nightLocation, initiallyNight ? 1 : 0);
     canvas.dataset.flowPeriodMs = String(FLOW_PERIOD_MS);
     canvas.addEventListener('webglcontextlost', lost);
     observer = new ResizeObserver(resize);
@@ -170,7 +179,12 @@ export function createFlowingWaterRenderer(
     window.addEventListener('resize', resize);
     resize();
     setPaused(initiallyPaused);
-    return { setPaused, destroy };
+    const setNight = (night: boolean) => {
+      if (disposed) return;
+      gl.uniform1f(nightLocation, night ? 1 : 0);
+      draw(); // Recolour this exact frame without resetting elapsed animation time.
+    };
+    return { setPaused, setNight, destroy };
   } catch {
     destroy();
     return null;

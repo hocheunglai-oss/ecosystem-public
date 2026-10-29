@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 import { installSharedLocations } from './fixtures/shared-locations.mjs';
+import { WATER_NIGHT_MATRIX, WATER_NIGHT_CHANNELS } from '../src/waterNightPalette.ts';
 
 // Disposable browsers and synthetic authenticated API responses only. All API
 // requests are intercepted, including login/logout; no production identity or
@@ -150,30 +151,35 @@ async function readyRenderer(page) {
   }
   const supported = rendererCapabilities.get(page), reduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   await expect(background).toHaveAttribute('data-renderer', supported && !reduced ? 'webgl' : 'fallback');
-  const image = background.locator('img'), canvas = background.locator('canvas');
+  const image = background.locator('img'), canvas = background.locator('.flowing-water-canvas');
   await expect(canvas).toHaveCount(1);
   if (supported && !reduced) {
     await expect(image).toBeHidden(); await expect(canvas).toBeVisible();
     assert.equal(await canvas.evaluate(node => getComputedStyle(node).opacity), '1');
   } else {
     await expect(image).toBeVisible();
+    if (await page.locator('html').getAttribute('data-theme') === 'dark') {
+      const still = background.locator('.flowing-water-night-still');
+      await expect(still).toHaveAttribute('data-ready', 'true', { timeout: 15000 });
+      await expect(still).toHaveCSS('opacity', '1');
+    } else await expect(image).toHaveCSS('opacity', '1');
     assert.equal(await canvas.evaluate(node => getComputedStyle(node).opacity), '0');
   }
   return { supported, reduced, mode: supported && !reduced ? 'webgl' : 'fallback' };
 }
 const flowState = background => background.evaluate(node => {
-  const canvas = node.querySelector('canvas');
+  const canvas = node.querySelector('.flowing-water-canvas');
   return { renderer: node.dataset.renderer, state: node.dataset.flowState, frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0), period: Number(canvas.dataset.flowPeriodMs) };
 });
 async function verifyStillWater(page, background, label, inspectPixels = true) {
   await expect.poll(async () => (await flowState(background)).state !== 'running').toBe(true);
   assert.ok((await animationState(background)).every(animation => animation.state !== 'running'), `${label}: no CSS water motion continues`);
-  const before = await flowState(background), bounds = await background.locator('canvas').boundingBox();
+  const before = await flowState(background), bounds = await background.locator('.flowing-water-canvas').boundingBox();
   const plan = inspectPixels ? await waterPixelPlan(page) : null;
   const pixels = plan ? await waterPixels(page, plan) : null;
   await page.waitForTimeout(250);
   assert.deepEqual(await flowState(background), before, `${label}: the actual render frame and active time stay frozen`);
-  assert.ok(boxDifference(await background.locator('canvas').boundingBox(), bounds) < .1, `${label}: framing stays fixed`);
+  assert.ok(boxDifference(await background.locator('.flowing-water-canvas').boundingBox(), bounds) < .1, `${label}: framing stays fixed`);
   if (plan) {
     verifyVisibleWaterPixels(pixels, label);
     const difference = pixelDifference(pixels, await waterPixels(page, plan));
@@ -181,7 +187,7 @@ async function verifyStillWater(page, background, label, inspectPixels = true) {
   }
 }
 async function verifyInternalMotion(page, background) {
-  const capability = await readyRenderer(page), canvas = background.locator('canvas');
+  const capability = await readyRenderer(page), canvas = background.locator('.flowing-water-canvas');
   const imageBox = () => background.locator('img').evaluate(node => { const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height }; });
   const stationary = await contentPositions(page), bounds = await canvas.boundingBox(), imageBounds = await imageBox();
   assert.equal((await animationState(background)).length, 0, 'No panning image, moving sheen or other CSS motion can masquerade as internal flow');
@@ -210,7 +216,7 @@ async function verifyInternalMotion(page, background) {
   return { capability, difference: strongest, elapsed: after.time - before.time, frames: after.frame - before.frame, fixedBounds: true, actualMovementVerified: capability.mode === 'webgl' };
 }
 async function installControlledPhaseReadback(background, plan) {
-  return background.locator('canvas').evaluateHandle((canvas, plan) => {
+  return background.locator('.flowing-water-canvas').evaluateHandle((canvas, plan) => {
     const gl = canvas.getContext('webgl');
     if (!gl || gl.isContextLost()) throw new Error('Controlled readback requires the existing working WebGL context');
     const original = gl.drawArrays, descriptor = Object.getOwnPropertyDescriptor(gl, 'drawArrays');
@@ -337,7 +343,7 @@ async function verifyPeriodicFrames(page, background) {
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial fallback verified' };
-  const available = await background.locator('canvas').evaluate(node => {
+  const available = await background.locator('.flowing-water-canvas').evaluate(node => {
     const gl = node.getContext('webgl'), extension = gl?.getExtension('WEBGL_lose_context');
     if (!extension) return false;
     extension.loseContext(); return true;
@@ -346,7 +352,7 @@ async function verifyContextLossFallback(page, background) {
   await expect(background).toHaveAttribute('data-renderer', 'fallback');
   await expect(background).toHaveAttribute('data-flow-state', 'fallback');
   await expect(background.locator('img')).toBeVisible();
-  assert.equal(await background.locator('canvas').evaluate(node => getComputedStyle(node).opacity), '0');
+  assert.equal(await background.locator('.flowing-water-canvas').evaluate(node => getComputedStyle(node).opacity), '0');
   await verifyStillWater(page, background, 'Lost graphics context');
   return { verified: true, originalStillImageVisible: true };
 }
@@ -364,24 +370,48 @@ async function verifyArtwork(page, context, theme, verifyBytes = false) {
     assert.ok(Math.abs(frame.x) < .1 && Math.abs(frame.y) < .1 && Math.abs(frame.width - frame.viewportWidth) < .1 && Math.abs(frame.height - frame.viewportHeight) < .1, 'The full-bleed PNG and animated canvas share fixed viewport bounds without a screenshot-border inset');
     if (frame.tag === 'IMG') assert.equal(frame.fit, 'cover');
   }
-  const filter = await image.evaluate(node => getComputedStyle(node).filter);
-  assert.equal(await page.locator('.flowing-water-canvas').evaluate(node => getComputedStyle(node).filter), filter, 'The canvas and still reference share exactly the same colour-only theme treatment');
-  if (theme === 'light') assert.equal(filter, 'none', 'Day mode displays the original approved artwork colours');
-  else {
-    assert.ok(filter.includes('#eco-watercolour-night'), 'Night applies its colour filter to the same visible image');
-    const palette = await page.locator('#eco-watercolour-night').evaluate(node => ({
-      primitives: [...node.children].map(child => child.localName),
-      matrix: node.querySelector('feColorMatrix').getAttribute('values').trim().split(/\s+/).map(Number),
-      channels: ['feFuncR', 'feFuncG', 'feFuncB'].map(name => node.querySelector(name).getAttribute('tableValues').trim().split(/\s+/).map(Number)),
-      alpha: node.querySelector('feFuncA')?.getAttribute('type'),
-    }));
-    assert.deepEqual(palette.primitives, ['feColorMatrix', 'feComponentTransfer'], 'Night changes only colour: no replacement scene, blur or displacement');
+  const filters = await page.locator('.flowing-water-image,.flowing-water-canvas,.flowing-water-night-still').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).filter));
+  assert.ok(filters.length === 3 && filters.every(filter => filter === 'none'), 'No media layer relies on SVG fragment filters that mobile WebKit drops');
+  if (theme === 'dark') {
+    const palette = { matrix: [...WATER_NIGHT_MATRIX], channels: WATER_NIGHT_CHANNELS.map(channel => [...channel]) };
+    assert.deepEqual(palette.matrix, [-0.315127,4.299968,-1.352730,0,-1.626157,0.626944,1.519584,0.002427,0,-0.794092,0.386135,-3.250374,1.438371,0,1.762207,0,0,0,1,0], 'The approved night colour mapping is retained exactly');
+    assert.deepEqual(palette.channels, [[.035,.540],[.025,.300],[.065,.440]], 'The approved three-tone channel ranges are retained exactly');
     assert.equal(palette.matrix.length, 20);
     assert.ok(palette.matrix.every(Number.isFinite));
     assert.deepEqual(palette.matrix.slice(15), [0, 0, 0, 1, 0], 'The night matrix preserves the source alpha');
     assert.deepEqual([palette.matrix[3], palette.matrix[8], palette.matrix[13]], [0, 0, 0], 'Source opacity does not change the night colours');
-    assert.equal(palette.alpha, 'identity', 'The final transfer also preserves source alpha');
     assert.ok(palette.channels.every(channel => channel.length === palette.channels[0].length && channel.every(value => Number.isFinite(value) && value >= 0 && value <= 1)));
+    const still = page.locator('.flowing-water-night-still');
+    await expect(still).toHaveAttribute('data-ready', 'true', { timeout: 15000 });
+    const exactStill = await image.evaluate((image, palette) => {
+      const source = document.createElement('canvas'); source.width = image.naturalWidth; source.height = image.naturalHeight;
+      const context = source.getContext('2d'); context.drawImage(image, 0, 0);
+      const before = context.getImageData(0, 0, source.width, source.height).data;
+      const still = document.querySelector('.flowing-water-night-still');
+      const after = still.getContext('2d').getImageData(0, 0, still.width, still.height).data;
+      let maximum = 0, alphaMismatch = 0, samples = 0;
+      for (let y = 0; y < source.height; y += 13) for (let x = 0; x < source.width; x += 13) {
+        const offset = (y * source.width + x) * 4, rgb = [0, 1, 2].map(channel => before[offset + channel] / 255);
+        for (let channel = 0; channel < 3; channel++) {
+          const row = palette.matrix.slice(channel * 5, channel * 5 + 5), [low, high] = palette.channels[channel];
+          const mapped = Math.max(0, Math.min(1, row[4] + rgb.reduce((sum, value, index) => sum + value * row[index], 0)));
+          maximum = Math.max(maximum, Math.abs(after[offset + channel] - Math.round((low + (high - low) * mapped) * 255)));
+        }
+        if (after[offset + 3] !== before[offset + 3]) alphaMismatch++;
+        samples++;
+      }
+      return { width: still.width, height: still.height, maximum, alphaMismatch, samples };
+    }, palette);
+    assert.equal(exactStill.width, expected.width); assert.equal(exactStill.height, expected.height);
+    assert.ok(exactStill.samples > 1000 && exactStill.maximum <= 1, `The actual fallback canvas applies only the exact approved palette (${JSON.stringify(exactStill)})`);
+    assert.equal(exactStill.alphaMismatch, 0, 'The actual still transfer preserves source alpha');
+    const plan = await waterPixelPlan(page);
+    let actual;
+    await expect.poll(async () => {
+      actual = await waterPixels(page, plan);
+      return actual.reduce((sum, value) => sum + value, 0) / actual.length;
+    }, { timeout: 15000, message: 'Actual night artwork reached the compositor' }).toBeLessThan(100);
+    verifyVisibleWaterPixels(actual, 'Actual night artwork');
     const regions = await image.evaluate((image, palette) => {
       const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
       const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
@@ -469,11 +499,10 @@ async function verifyNightContrast(page) {
   // Bound the brightest possible backdrop from the colour-map channel maxima,
   // then conservatively composite a white sheen at its maximum opacity. The
   // darker shade overlay is ignored, so this remains a safe contrast floor.
-  const backdrop = await page.locator('#eco-watercolour-night').evaluate(node => {
-    const channels = ['feFuncR', 'feFuncG', 'feFuncB'].map(name => Math.max(...node.querySelector(name).getAttribute('tableValues').trim().split(/\s+/).map(Number)));
+  const backdrop = await page.evaluate(channels => {
     const sheen = Number(getComputedStyle(document.querySelector('.flowing-water-sheen')).opacity);
-    return channels.map(channel => channel * (1 - sheen) + sheen);
-  });
+    return channels.map(channel => Math.max(...channel) * (1 - sheen) + sheen);
+  }, WATER_NIGHT_CHANNELS);
   const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
   const contrasts = [];
   const textTokens = await page.locator('.immersive-app').evaluate(node => {
@@ -517,12 +546,12 @@ async function verifyNightContrast(page) {
 async function verifyHiddenPause(page, background, waterImage) {
   // Isolated visibility fixture: exercise the same event used for a background
   // tab without relying on the host window focus or disturbing another browser.
-  const canvas = await background.locator('canvas').elementHandle();
+  const canvas = await background.locator('.flowing-water-canvas').elementHandle();
   assert.ok(canvas, 'The current decorative canvas exists before pausing');
   const supported = rendererCapabilities.get(page);
   await expect(background).toHaveAttribute('data-flow-state', supported ? 'running' : 'fallback');
   const beforePause = await background.evaluate(node => {
-    const canvas = node.querySelector('canvas');
+    const canvas = node.querySelector('.flowing-water-canvas');
     const state = { renderer: node.dataset.renderer, frame: Number(canvas.dataset.flowFrame || 0), time: Number(canvas.dataset.flowTimeMs || 0) };
     for (const key of ['hidden', 'visibilityState']) {
       if (Object.hasOwn(document, key)) throw new Error(`Unexpected own visibility property: ${key}`);
@@ -622,7 +651,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.ok(textInk.every(label => theme === 'light' ? label.luminance < .04 : label.luminance > .5), `Sign-in labels and release remarks use dark ink on the bright day image and light ink at night: ${JSON.stringify(textInk)}`);
       await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); };
     const background = page.locator('.flowing-water-background');
-    const toggle = () => page.locator('.home-display-controls').getByRole('button', { name: /^(Dark|Light) mode$/ });
+    const toggle = () => page.locator('.home-display-controls').getByRole('switch', { name: 'Dark mode', exact: true, includeHidden: true });
     try {
       await page.goto(base);
       await expect(page.locator('.immersive-app')).toHaveAttribute('data-design', 'flowing-water', { timeout: 20000 });
@@ -634,6 +663,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await verifyArtwork(page, context, theme, true);
       await expect(page.locator('.world-launcher')).toHaveCount(0);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expect(toggle()).toHaveAttribute('aria-checked', String(theme === 'dark'));
       const logo = page.locator('.ecosystem-logo svg image');
       await expect(logo).toHaveAttribute('href', '/logo-transparent.png');
       const logoSize = await logo.evaluate(async node => {
@@ -649,18 +679,20 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.ok((await page.locator('.access-login input').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).textTransform))).every(value => value === 'none'), 'Email and password case must remain exact');
       await shot('signed-out');
       // Broken/absent old harbour artwork must never block theme switching.
-      const retainedCanvas = await background.locator('canvas').elementHandle();
-      const themeFlow = await flowState(background), themeBounds = await background.locator('canvas').boundingBox();
+      const retainedCanvas = await background.locator('.flowing-water-canvas').elementHandle();
+      const themeFlow = await flowState(background), themeBounds = await background.locator('.flowing-water-canvas').boundingBox();
       const verifyThemeContinuity = async () => {
         assert.ok(await retainedCanvas.evaluate(node => node === document.querySelector('.flowing-water-canvas')), 'Theme changes retain the same animation canvas');
-        assert.ok(boxDifference(await background.locator('canvas').boundingBox(), themeBounds) < .1, 'Theme changes preserve the exact animated frame bounds');
+        assert.ok(boxDifference(await background.locator('.flowing-water-canvas').boundingBox(), themeBounds) < .1, 'Theme changes preserve the exact animated frame bounds');
         assert.ok((await flowState(background)).time >= themeFlow.time, 'Theme changes never reset the shared animation phase');
       };
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
+      await expect(toggle()).toHaveAttribute('aria-checked', String(theme === 'light'));
       await expect(toggle()).toHaveAttribute('aria-busy', 'false');
       await verifyArtwork(page, context, theme === 'light' ? 'dark' : 'light', true);
       await verifyThemeContinuity();
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expect(toggle()).toHaveAttribute('aria-checked', String(theme === 'dark'));
       await verifyArtwork(page, context, theme);
       await verifyThemeContinuity();
       await retainedCanvas.dispose();
@@ -722,6 +754,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(background).toHaveAttribute('data-flow-state', 'fallback');
       await verifyStillWater(page, background, 'Reduced motion');
       const reducedImage = await waterImage.boundingBox();
+      const reducedPlan = await waterPixelPlan(page), reducedPixels = await waterPixels(page, reducedPlan);
       const reducedArtworkStyle = await waterImage.evaluate(node => { const style = getComputedStyle(node); return { fit: style.objectFit, position: style.objectPosition, filter: style.filter }; });
       await toggle().focus(); await toggle().press('Enter');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');
@@ -730,7 +763,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.ok(boxDifference(await waterImage.boundingBox(), reducedImage) < 0.1, 'Theme changes preserve the exact still-image position and size');
       assert.equal(oppositeArtworkStyle.fit, reducedArtworkStyle.fit);
       assert.equal(oppositeArtworkStyle.position, reducedArtworkStyle.position);
-      assert.notEqual(oppositeArtworkStyle.filter, reducedArtworkStyle.filter, 'Night changes the colouring of the same image');
+      assert.equal(oppositeArtworkStyle.filter, 'none'); assert.equal(reducedArtworkStyle.filter, 'none');
+      await expect.poll(async () => pixelDifference(reducedPixels, await waterPixels(page, reducedPlan)).mean, { timeout: 15000 }).toBeGreaterThan(20); // Real colour change, same original source and frame.
       await expect(toggle()).toBeFocused(); await toggle().press('Enter');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await verifyArtwork(page, context, theme);

@@ -127,6 +127,7 @@ jobs:
           - group: administration
             label: Administration
             scripts: |
+              tests/theme-toggle.e2e.mjs
               tests/theme-touch.e2e.mjs
               tests/background-choice.e2e.mjs
               tests/administration.e2e.mjs
@@ -146,6 +147,7 @@ jobs:
               output/eco-release-gates-ui
               output/flowing-water-ui
               output/theme-touch-ui
+              output/theme-toggle-ui
               output/background-choice-ui
           - group: suppliers
             label: Suppliers
@@ -269,6 +271,9 @@ jobs:
           ECO_THEME_UI_ORIGIN: http://127.0.0.1:4286
           ECO_THEME_UI_OUTPUT: ${{ runner.temp }}/eco-theme-touch-ui
           ECO_THEME_REPORT_OUTPUT: output/theme-touch-ui
+          ECO_TOGGLE_UI_ORIGIN: http://127.0.0.1:4286
+          ECO_TOGGLE_UI_OUTPUT: ${{ runner.temp }}/eco-theme-toggle-ui
+          ECO_TOGGLE_REPORT_OUTPUT: output/theme-toggle-ui
           ECO_BACKGROUND_UI_ORIGIN: http://127.0.0.1:4286
           ECO_BACKGROUND_UI_OUTPUT: ${{ runner.temp }}/eco-background-choice-ui
           ECO_BACKGROUND_REPORT_OUTPUT: output/background-choice-ui

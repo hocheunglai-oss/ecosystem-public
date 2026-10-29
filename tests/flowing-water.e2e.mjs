@@ -328,14 +328,16 @@ async function verifyPeriodicFrames(page, background) {
     const canvas = document.createElement('canvas'); canvas.width = 96; canvas.height = 54;
     const context = canvas.getContext('2d', { willReadFrequently: true });
     const source = video.currentSrc, period = video.duration, steps = [], wraps = [], gaps = [];
-    const started = performance.now(), frameSeconds = 1 / 30;
+    const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = 24500;
     let previous, request = 0, samples = 0, done = false;
     const native = typeof video.requestVideoFrameCallback === 'function';
     const classifyStep = step => {
-      const adjacent = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 1.5 + 1e-6
+      const closelySampled = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 3 + 1e-6
         && step.wallSeconds > 0 && step.wallSeconds <= .15
-        && (!native || step.presentedFramesDelta === 1 && step.displaySeconds > 0 && step.displaySeconds <= .1);
-      if (adjacent) return 'adjacent';
+        && (!native || Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta >= 1 && step.presentedFramesDelta <= 3
+          && Math.abs(step.delta - step.presentedFramesDelta * frameSeconds) <= 1e-6
+          && step.displaySeconds > 0 && step.displaySeconds <= .1 + 1e-6);
+      if (closelySampled) return 'closely-sampled';
       // A missed callback is proven only when compositor frame counts explain
       // the media advance and both display and wall clocks agree. A media jump
       // with only one presented frame, or an unexplained stall, cannot pass.
@@ -355,13 +357,14 @@ async function verifyPeriodicFrames(page, background) {
       if (done) return; done = true; clearTimeout(timer);
       if (native) video.cancelVideoFrameCallback(request); else cancelAnimationFrame(request);
       resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
-        observationMs: performance.now() - started, observationBudgetMs: 24000, maximumWraps: 4,
+        observationMs: performance.now() - started, observationBudgetMs, maximumWraps: 4,
         wraps, gaps, seams: seams(), ...(error ? { error } : {}),
         final: { currentTime: video.currentTime, paused: video.paused, readyState: video.readyState, currentSrc: video.currentSrc },
         maximumStep: steps.length ? Math.max(...steps.map(step => step.mean)) : 0,
         meanStep: steps.length ? steps.reduce((sum, step) => sum + step.mean, 0) / steps.length : 0 });
     };
-    const timer = setTimeout(() => finish('Two qualified natural boundaries were not observed within 24 seconds'), 24000);
+    // Four six-second cycles plus a bounded tail for the final neighbours.
+    const timer = setTimeout(() => finish('Two qualified natural boundaries were not observed within 24.5 seconds'), observationBudgetMs);
     const sample = (now, metadata) => {
       if (done) return;
       try {
@@ -380,7 +383,7 @@ async function verifyPeriodicFrames(page, background) {
               displaySeconds: native ? (current.expectedDisplayTime - previous.expectedDisplayTime) / 1000 : null,
               presentedFramesDelta: native ? current.presentedFrames - previous.presentedFrames : null };
             status = classifyStep(timing);
-            if (status !== 'adjacent') gaps.push({ ...timing, status,
+            if (status !== 'closely-sampled') gaps.push({ ...timing, status,
               before: { ...previous, pixels: undefined }, after: { ...current }, crossing: Boolean(crossing) });
           }
           // Never compare a newly sampled boundary frame with stale pixels from
@@ -391,7 +394,7 @@ async function verifyPeriodicFrames(page, background) {
             current.pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
           }
           let stepIndex = null;
-          if (previous?.pixels && current.pixels && status === 'adjacent') {
+          if (previous?.pixels && current.pixels && status === 'closely-sampled') {
             let total = 0;
             for (let i = 0; i < current.pixels.length; i += 4) total += Math.abs(current.pixels[i] - previous.pixels[i]) + Math.abs(current.pixels[i + 1] - previous.pixels[i + 1]) + Math.abs(current.pixels[i + 2] - previous.pixels[i + 2]);
             const mean = total / (canvas.width * canvas.height * 3);
@@ -426,7 +429,7 @@ async function verifyPeriodicFrames(page, background) {
     assert.ok(adjacent.length >= 3, 'Loop comparison includes independently decoded neighbouring frames');
     assert.ok(seam.rate <= Math.max(...adjacent.map(step => step.rate)) * 3 + 4, `The decoded boundary has no anomalous jump relative to neighbouring motion: ${JSON.stringify({ seam, adjacent })}`);
   }
-  return { verified: true, report, ...evidence, provenance: 'Unmodified native playback, adjacent decoded source pixels at two natural wraps; positively identified missed callbacks are recorded, never treated as measured seams. Separate real-compositor motion and pause checks remain in this suite.' };
+  return { verified: true, report, ...evidence, provenance: 'Unmodified native playback, decoded source pixels at two natural wraps sampled at most three frames (100ms) apart; positively identified missed callbacks are recorded, never treated as measured seams. Separate real-compositor motion and pause checks remain in this suite.' };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial night fallback verified' };

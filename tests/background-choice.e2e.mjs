@@ -14,6 +14,7 @@ const results=[];
 const testRequire=createRequire(createRequire(import.meta.url).resolve('@playwright/test'));
 const { PNG }=createRequire(testRequire.resolve('playwright'))('playwright-core/lib/utilsBundle');
 let pixelCapture;
+let phaseDiagnostics=[];
 const member = {
   capabilities: { appearancePreview: false, testWorkspace: false },
   id: '10000000-0000-4000-8000-000000000001', email: 'Trader.Case@example.test',
@@ -140,11 +141,44 @@ async function motionDiagnostics(page) {
     reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
     hidden: document.hidden, visibility: document.visibilityState,
     events: window.__motionEvents,
+    mediaEvents: window.__mediaPhaseEvents,
     background: { ...document.querySelector('.flowing-water-background')?.dataset },
     videos: [...document.querySelectorAll('.flowing-water-background video')].map(video => ({
       readyState: video.readyState, networkState: video.networkState, paused: video.paused, time: video.currentTime,
     })),
   })).catch(() => null);
+}
+const mediaPhase = node => node.evaluate(n => ({
+  time:n.currentTime??Number(n.dataset.flowTimeMs),duration:n.duration,at:performance.now(),
+  src:n.getAttribute('src'),currentSrc:n.currentSrc,paused:n.paused,seeking:n.seeking,
+  readyState:n.readyState,networkState:n.networkState,events:window.__mediaPhaseEvents,
+}));
+async function verifyPausedThemePhase(page,video,workspace,width){
+  // Use the original decoded frame, naturally advanced beyond startup before
+  // opening this workspace. Near zero, a restart is otherwise ambiguous.
+  const retained=await video.elementHandle(),before=await mediaPhase(video),changes=[];
+  assert.ok(before.paused&&!before.seeking&&before.time>1&&before.time<before.duration-1,'Paused theme check starts at a decoded nonzero phase');
+  const control=workspace.locator('.window-foot').getByRole('switch',{name:'Dark mode',exact:true});
+  try{
+    for(const theme of ['dark','light']){
+      await tap(page,control,width);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+      await expect(control).toHaveAttribute('aria-checked',String(theme==='dark'));
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const after=await mediaPhase(video);const evidence={kind:'paused',theme,before,after};phaseDiagnostics.push(evidence);
+      assert.ok(await retained.evaluate(n=>n===document.querySelector('video.flowing-water-video')),'Paused theme change retains the exact video node');
+      assert.equal(after.src,before.src,'Paused theme change retains source attribute');
+      assert.equal(after.currentSrc,before.currentSrc,'Paused theme change retains decoded source');
+      assert.equal(after.paused,true,`Theme cannot resume the paused video: ${JSON.stringify(evidence)}`);
+      assert.equal(after.seeking,false,`Theme cannot seek the paused video: ${JSON.stringify(evidence)}`);
+      assert.equal(after.time,before.time,`Theme must preserve the exact nonzero paused phase: ${JSON.stringify(evidence)}`);
+      if(theme==='dark'&&await graphicsAvailable(page)){
+        await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-night-ready','true');
+        await expect.poll(async()=>Number(await page.locator('.flowing-water-video-palette').getAttribute('data-source-time'))).toBe(before.time);
+      }
+      changes.push({theme,time:after.time,sourceRetained:true,nodeRetained:true,paused:true});
+    }
+    return {time:before.time,changes};
+  }finally{await retained.dispose();}
 }
 const toggle=p=>p.locator('.home-display-controls').getByRole('switch',{name:'Dark mode',exact:true,includeHidden:true});
 async function tap(p,locator,width){if(width<760)await locator.tap();else await locator.click();}
@@ -166,9 +200,16 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
   try{for(const width of [1440,320,390]){
     if(process.env.ECO_TEST_WIDTH&&+process.env.ECO_TEST_WIDTH!==width)continue;
     const context=await browser.newContext({viewport:{width,height:width<760?844:960},hasTouch:width<760,isMobile:width<760,colorScheme:'light',reducedMotion:'no-preference'});
+    phaseDiagnostics=[];
     await installStagingCookies(context,base); const state=await mocks(context); const page=await context.newPage();const errors=[];
     await page.addInitScript(() => {
       window.__motionEvents = [];
+      window.__mediaPhaseEvents=[];
+      for(const type of ['loadstart','loadedmetadata','loadeddata','seeking','seeked','playing','pause','emptied','ended'])document.addEventListener(type,event=>{
+        const video=event.target;if(!(video instanceof HTMLVideoElement))return;
+        window.__mediaPhaseEvents.push({type,at:performance.now(),time:video.currentTime,paused:video.paused,seeking:video.seeking,readyState:video.readyState,src:video.getAttribute('src')});
+        if(window.__mediaPhaseEvents.length>80)window.__mediaPhaseEvents.shift();
+      },true);
       const motion = matchMedia('(prefers-reduced-motion: reduce)');
       motion.addEventListener('change', event => window.__motionEvents.push({
         matches: event.matches, at: performance.now(), hidden: document.hidden,
@@ -180,6 +221,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await page.goto(base,{waitUntil:'domcontentloaded'});await expect(page.locator('.access-login')).toBeVisible();
       await expect(page.getByLabel('Background',{exact:true})).toHaveValue('diffuse');await ready(page,'diffuse');
       for(const choice of ['diffuse','watercolour']){
+        let pausedThemePhase;
         await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
         await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         await expect(toggle(page)).toHaveAttribute('aria-checked','false');
@@ -205,18 +247,29 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);
         const mediaNode=page.locator(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas');
+        if(choice==='diffuse')await expect.poll(()=>mediaNode.evaluate(video=>
+          !video.seeking&&video.currentTime>.5&&video.currentTime<video.duration-.5),
+        {timeout:15000,message:'Post-reload decoder clock progressed beyond startup before theme comparison'}).toBe(true);
         const retained=await mediaNode.elementHandle();
-        const phase=await mediaNode.evaluate(n=>({time:n.currentTime??Number(n.dataset.flowTimeMs),duration:n.duration,at:performance.now()}));
+        const phase=await mediaPhase(mediaNode);
         await tap(page,toggle(page),width);await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         await expect(toggle(page)).toHaveAttribute('aria-checked','false');
-        assert.ok(await retained.evaluate(n=>n.isConnected),'Theme preserves media element');
+        assert.ok(await retained.evaluate((n,choice)=>n===document.querySelector(choice==='diffuse'?'.flowing-water-video':'.flowing-water-canvas'),choice),'Theme preserves the exact media element');
         if(Number.isFinite(phase.time)) {
-          const next=await mediaNode.evaluate(n=>({time:n.currentTime??Number(n.dataset.flowTimeMs),at:performance.now()}));
+          const next=await mediaPhase(mediaNode);
           if(choice==='diffuse') {
             assert.ok(Number.isFinite(phase.duration)&&phase.duration>0,'Playing video has a known loop duration');
-            const forward=(next.time-phase.time+phase.duration)%phase.duration;
-            // A real loop can wrap to zero; allow 250ms for media-clock sampling.
-            assert.ok(forward<=(next.at-phase.at)/1000+.25,'Theme preserves forward video phase across a natural loop');
+            const delta=next.time-phase.time,elapsed=(next.at-phase.at)/1000;
+            // One 30fps source frame may be reported just behind the preceding
+            // sample. Do not modulo that tiny correction into a whole 24s loop.
+            const clockCorrection=delta<0&&delta>=-1/30-1e-6;
+            const forward=clockCorrection?0:(delta+phase.duration)%phase.duration;
+            const evidence={kind:'playing',before:phase,after:next,delta,elapsed,clockCorrection,forward};phaseDiagnostics.push(evidence);
+            assert.equal(next.src,phase.src,'Theme retains video source attribute');
+            assert.equal(next.currentSrc,phase.currentSrc,'Theme retains decoded video source');
+            // Genuine loops retain the original wall-time bound; the separate
+            // nonzero paused check below rejects actual theme-triggered resets.
+            assert.ok(forward<=elapsed+.25,`Theme preserves forward video phase across a natural loop: ${JSON.stringify(evidence)}`);
           } else assert.ok(next.time>=phase.time,'Theme does not reset cumulative canvas phase');
         }
         else {
@@ -230,14 +283,17 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           assert.equal(source,width<760?'/flowing-water-diffuse-mobile.mp4':'/flowing-water-diffuse.mp4');
           assert.ok(await v.evaluate(n=>n.muted&&n.loop&&n.playsInline&&!n.controls));
           const t=await v.evaluate(n=>n.currentTime);await expect.poll(()=>v.evaluate(n=>n.currentTime)).toBeGreaterThan(t+.1);
+          await expect.poll(()=>v.evaluate(n=>!n.seeking&&n.currentTime>1.25&&n.currentTime<n.duration-2),
+            {timeout:15000,message:'A decoded nonzero phase is available for the paused theme check'}).toBe(true);
           await page.getByRole('button',{name:'Trading',exact:true}).click();await page.getByRole('button',{name:'Enquiries',exact:true}).click();
           await expect(page.getByRole('dialog',{name:'Enquiries',exact:true})).toBeVisible();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(true);
           const paused=await v.evaluate(n=>n.currentTime);await page.waitForTimeout(200);assert.equal(await v.evaluate(n=>n.currentTime),paused);
+          pausedThemePhase=await verifyPausedThemePhase(page,v,page.getByRole('dialog',{name:'Enquiries',exact:true}),width);
           await page.getByRole('button',{name:'Close workspace',exact:true}).click();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(false);
         }
         await authenticationNavigation(page,'logout',()=>tap(page,page.getByRole('button',{name:'Sign out',exact:true}),width),false);
         await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}),false);await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
-        results.push({engine,width,choice,passed:true,day,night,persistence:true});
+        results.push({engine,width,choice,passed:true,day,night,persistence:true,...(pausedThemePhase?{pausedThemePhase}:{})});
       }
       for(const choice of ['watercolour','diffuse']){
         await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
@@ -264,7 +320,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       assert.deepEqual(errors,[]);assert.deepEqual(state.unexpected,[]);
       assert.deepEqual(state.writes,['/api/access/login','/api/access/logout','/api/access/login','/api/access/logout']);
       console.log(`PASS ${engine} ${width}: both backgrounds, actual night pixels, touch and saved preferences`);
-    }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,pixelCapture,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
+    }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,pixelCapture,phaseDiagnostics,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
     finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await context.close();}
     if(width<760){
       const unsupported=await browser.newContext({viewport:{width,height:844},hasTouch:true,isMobile:true,colorScheme:'light',reducedMotion:'no-preference'});

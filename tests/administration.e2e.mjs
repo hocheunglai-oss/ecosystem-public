@@ -302,6 +302,23 @@ async function mock(context, options = {}) {
   return state;
 }
 
+async function selectRecord(record) {
+  const paint = () => record.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { background: style.backgroundColor, shadow: style.boxShadow,
+      geometry: [style.padding, style.fontSize, style.lineHeight,
+        style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth] };
+  });
+  await expect(record).toHaveAttribute("aria-pressed", "false");
+  const before = await paint();
+  await record.click();
+  await expect(record).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await paint()).background).not.toBe(before.background);
+  const selected = await paint();
+  assert.match(selected.shadow, /inset/, "Selected administration record has a visible selection marker");
+  assert.deepEqual(selected.geometry, before.geometry, "Selection paint keeps record typography, padding and border widths");
+}
+
 for (const [engine, type] of [
   ["chromium", chromium],
   ["webkit", webkit],
@@ -391,11 +408,10 @@ for (const [engine, type] of [
             }),
           ).toBeVisible();
           await shot("feedback");
-          await page
+          await selectRecord(page
             .getByRole("button", {
               name: /Delivery window needs clarification/,
-            })
-            .click();
+            }));
           const detail = page.getByRole("complementary", {
             name: "Feedback details",
           });
@@ -445,15 +461,15 @@ for (const [engine, type] of [
           await nav
             .getByRole("button", { name: "Audit Log", exact: true })
             .click();
-          await page.getByRole("button", { name: /feedback.triaged/ }).click();
+          await selectRecord(page.getByRole("button", { name: /feedback.triaged/ }));
           await shot("audit");
           await expect(page.locator(".admin-code")).toContainText("resolved");
           await nav
             .getByRole("button", { name: "Import Activity", exact: true })
             .click();
-          await page
+          await selectRecord(page
             .getByRole("button", { name: /Singapore delivery guidance.pdf/ })
-            .click();
+          );
           await expect(
             page.getByRole("region", { name: "Parser reports", exact: true }),
           ).toContainText("NO PARSER REPORTS.");

@@ -495,7 +495,7 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .directory-item.active, .port-card.active, .center-incoming-row.is-selected,
   .office-comparison-table tbody tr.is-selected, .users-access-offices > button.active,
-  .users-access-list > button.active, .admin-record[aria-selected="true"]
+  .users-access-list > button.active, .admin-record[aria-pressed="true"]
 ) { background: var(--ui-selection); color: var(--ui-ink); border-color: var(--ui-focus); box-shadow: inset 3px 0 var(--ui-focus); }
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .search-select-list > button:hover, .search-select-list > button.is-active,

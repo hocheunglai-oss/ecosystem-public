@@ -463,13 +463,12 @@ async function contributionColours(page) {
   }
 }
 async function verifyNightContrast(page) {
-  // Bound the brightest possible backdrop from the colour-map channel maxima,
-  // then conservatively composite a white sheen at its maximum opacity. The
-  // darker shade overlay is ignored, so this remains a safe contrast floor.
-  const backdrop = await page.evaluate(channels => {
-    const sheen = Number(getComputedStyle(document.querySelector('.flowing-water-sheen')).opacity);
-    return channels.map(channel => Math.max(...channel) * (1 - sheen) + sheen);
-  }, WATER_NIGHT_CHANNELS);
+  // The native video and matching poster use the same canonical colour map,
+  // already checked against actual pixels above. Its channel maxima bound every
+  // frame conservatively, even when the brightest channels do not coincide.
+  // No removed overlay may silently change that contrast bound.
+  await expect(page.locator('.flowing-water-sheen,.flowing-water-shade')).toHaveCount(0);
+  const backdrop = WATER_NIGHT_CHANNELS.map(channel => Math.max(...channel));
   const luminance = channels => channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
   const contrasts = [];
   const textTokens = await page.locator('.immersive-app').evaluate(node => {
@@ -482,7 +481,7 @@ async function verifyNightContrast(page) {
   });
   for (const { token, ink } of textTokens) {
     const foreground = luminance(ink), background = luminance(backdrop), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
-    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    assert.ok(contrast >= 4.5, `${token}: unboxed night text remains at least 4.5:1 across the brightest possible mapped video or poster (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   }
   const inspect = async (action, state) => {
@@ -495,7 +494,7 @@ async function verifyNightContrast(page) {
     const fill = style.fill.rgb.map((channel, index) => channel * style.fill.alpha + backdrop[index] * (1 - style.fill.alpha));
     const ink = style.ink.rgb.map((channel, index) => channel * style.ink.alpha + fill[index] * (1 - style.ink.alpha));
     const foreground = luminance(ink), background = luminance(fill), contrast = (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
-    assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible watercolour and sheen (${contrast.toFixed(2)}:1)`);
+    assert.ok(contrast >= 4.5, `${style.label} ${state}: night text remains at least 4.5:1 over the brightest possible mapped video or poster (${contrast.toFixed(2)}:1)`);
     contrasts.push(contrast);
   };
   const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();
@@ -526,7 +525,10 @@ async function verifyHiddenPause(page, background, waterImage) {
     const paused = await flowState(background);
     assert.equal(paused.renderer, beforePause.renderer, 'Visibility pauses the existing media without replacing its picture');
     assert.ok(await video.evaluate(node => node === document.querySelector('video.flowing-water-video')), 'Pausing preserves the existing media node');
-    const forward = (paused.time - beforePause.time + paused.period) % paused.period;
+    const delta = paused.time - beforePause.time;
+    // A native 30fps decoder may report one frame just behind its last sample.
+    // Preserve the strict phase bound without treating that correction as a loop.
+    const forward = delta < 0 && delta >= -1000 / 30 - .001 ? 0 : (delta + paused.period) % paused.period;
     assert.ok(forward < 1000, 'Pausing retains the current phase, including a natural boundary wrap');
     await verifyStillWater(page, background, 'Hidden document');
   } finally {

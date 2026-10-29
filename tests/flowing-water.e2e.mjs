@@ -329,14 +329,21 @@ async function verifyPeriodicFrames(page, background) {
     const context = canvas.getContext('2d', { willReadFrequently: true });
     const source = video.currentSrc, period = video.duration, steps = [], wraps = [], gaps = [];
     const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = 24500;
-    let previous, request = 0, samples = 0, done = false;
+    let previous, request = 0, samples = 0, done = false, maximumCallbackLagMs = 0;
     const native = typeof video.requestVideoFrameCallback === 'function';
     const classifyStep = step => {
+      const sourceFrames = Math.round(step.delta / frameSeconds);
+      // rVFC is dispatched on the main thread after compositor submission. Its
+      // callback delay is not the display interval. Bound both compositor clocks
+      // and the freshness/phase of the pixels read in this callback instead.
       const closelySampled = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 3 + 1e-6
-        && step.wallSeconds > 0 && step.wallSeconds <= .15
-        && (!native || Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta >= 1 && step.presentedFramesDelta <= 3
-          && Math.abs(step.delta - step.presentedFramesDelta * frameSeconds) <= 1e-6
-          && step.displaySeconds > 0 && step.displaySeconds <= .1 + 1e-6);
+        && (native
+          ? sourceFrames >= 1 && sourceFrames <= 3 && Math.abs(step.delta - sourceFrames * frameSeconds) <= 1e-6
+            && Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta >= 1 && step.presentedFramesDelta <= sourceFrames
+            && [step.displaySeconds, step.presentationSeconds].every(value => Number.isFinite(value) && value > 0 && value <= .1 + 1e-6)
+            && step.callbackLagSeconds.every(value => Number.isFinite(value) && Math.abs(value) <= .1 + 1e-6)
+            && step.phaseDistanceSeconds.every(value => Number.isFinite(value) && value <= .1 + 1e-6)
+          : step.wallSeconds > 0 && step.wallSeconds <= .15);
       if (closelySampled) return 'closely-sampled';
       // A missed callback is proven only when compositor frame counts explain
       // the media advance and both display and wall clocks agree. A media jump
@@ -358,7 +365,9 @@ async function verifyPeriodicFrames(page, background) {
       if (native) video.cancelVideoFrameCallback(request); else cancelAnimationFrame(request);
       resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
         observationMs: performance.now() - started, observationBudgetMs, maximumWraps: 4,
-        wraps, gaps, seams: seams(), ...(error ? { error } : {}),
+        wraps, gaps, seams: seams(), maximumCallbackLagMs,
+        playbackQuality: video.getVideoPlaybackQuality ? (() => { const quality = video.getVideoPlaybackQuality(); return { totalVideoFrames: quality.totalVideoFrames, droppedVideoFrames: quality.droppedVideoFrames, corruptedVideoFrames: quality.corruptedVideoFrames }; })() : null,
+        ...(error ? { error } : {}),
         final: { currentTime: video.currentTime, paused: video.paused, readyState: video.readyState, currentSrc: video.currentSrc },
         maximumStep: steps.length ? Math.max(...steps.map(step => step.mean)) : 0,
         meanStep: steps.length ? steps.reduce((sum, step) => sum + step.mean, 0) / steps.length : 0 });
@@ -366,21 +375,27 @@ async function verifyPeriodicFrames(page, background) {
     // Four six-second cycles plus a bounded tail for the final neighbours.
     const timer = setTimeout(() => finish('Two qualified natural boundaries were not observed within 24.5 seconds'), observationBudgetMs);
     const sample = (now, metadata) => {
+      const observedAt = performance.now();
       if (done) return;
       try {
         if (video !== document.querySelector('video.flowing-water-video') || video.currentSrc !== source || video.paused || video.playbackRate !== 1) {
           finish('Native loop changed media node/source, paused or changed speed'); return;
         }
-        const current = { time: metadata?.mediaTime ?? video.currentTime, now,
+        const current = { time: metadata?.mediaTime ?? video.currentTime, now, observedAt,
           presentedFrames: metadata?.presentedFrames, expectedDisplayTime: metadata?.expectedDisplayTime,
           presentationTime: metadata?.presentationTime, nativeTime: video.currentTime };
+        if (native && Number.isFinite(current.expectedDisplayTime)) maximumCallbackLagMs = Math.max(maximumCallbackLagMs, observedAt - current.expectedDisplayTime);
         if (!previous || Math.abs(current.time - previous.time) > 1e-6) {
           const crossing = previous && current.time < previous.time - period / 2;
           let timing, status;
           if (previous) {
+            const phaseDistance = frame => { const distance = ((frame.nativeTime - frame.time) % period + period) % period; return Math.min(distance, period - distance); };
             timing = { from: previous.time, to: current.time, delta: (current.time - previous.time + period) % period,
               wallSeconds: (now - previous.now) / 1000,
               displaySeconds: native ? (current.expectedDisplayTime - previous.expectedDisplayTime) / 1000 : null,
+              presentationSeconds: native ? (current.presentationTime - previous.presentationTime) / 1000 : null,
+              callbackLagSeconds: native ? [previous, current].map(frame => (frame.observedAt - frame.expectedDisplayTime) / 1000) : null,
+              phaseDistanceSeconds: native ? [previous, current].map(phaseDistance) : null,
               presentedFramesDelta: native ? current.presentedFrames - previous.presentedFrames : null };
             status = classifyStep(timing);
             if (status !== 'closely-sampled') gaps.push({ ...timing, status,

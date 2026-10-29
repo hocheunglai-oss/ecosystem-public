@@ -737,9 +737,12 @@ async function homepageGeometry(page, width) {
 for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
   if (process.env.ECO_TEST_ENGINE && process.env.ECO_TEST_ENGINE !== engine) continue;
   const executablePath = process.env[engine === 'chromium' ? 'ECO_CHROMIUM_EXECUTABLE' : 'ECO_WEBKIT_EXECUTABLE'];
-  const browser = await kind.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-  try { for (const width of [1440, 1920, 1024, 320, 390]) for (const theme of ['light', 'dark']) {
+  for (const width of [1440, 1920, 1024, 320, 390]) for (const theme of ['light', 'dark']) {
     if (process.env.ECO_TEST_WIDTH && +process.env.ECO_TEST_WIDTH !== width || process.env.ECO_TEST_THEME && process.env.ECO_TEST_THEME !== theme) continue;
+    // Isolate decoder/GPU resources and deliberate context-loss checks between
+    // independent cases, matching the hosted verifier's process isolation.
+    const browser = await kind.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+    try {
     const context = await browser.newContext({ viewport: { width, height: width < 760 ? 844 : 900 }, isMobile: width < 760, hasTouch: width < 760, reducedMotion: 'no-preference', colorScheme: theme });
     await installStagingCookies(context, base);
     const { state, locations } = await mocks(context);
@@ -941,5 +944,6 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await writeFile(`${reports}/verification.json`, JSON.stringify({ base, results, screenshotDirectory: out, limits: 'Synthetic authenticated responses in isolated browsers; native Safari and physical phones not tested. No live provider or business-data writes.' }, null, 2));
       await context.close();
     }
-  } } finally { await browser.close(); }
+    } finally { await browser.close(); }
+  }
 }

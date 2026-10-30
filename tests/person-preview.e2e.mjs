@@ -60,7 +60,13 @@ async function seed(page){
 async function selectPerson(page,id,shot){
  await btn(page,'View as').click();await btn(page,'USER').click();
  const chooser=page.getByRole('combobox',{name:'Preview user',exact:true});await expect(chooser).toBeVisible();
- await chooser.selectOption(id);if(page.viewportSize().width<760)assert.ok((await chooser.boundingBox()).height>=44,'Phone user selector has a 44px target');if(shot)await shot('user-picker');await btn(page,'VIEW AS USER').click();
+ await chooser.selectOption(id);
+ if(page.viewportSize().width<760){
+  const bounds=await chooser.boundingBox();
+  const styles=await chooser.evaluate(node=>{const s=getComputedStyle(node);return {height:s.height,minHeight:s.minHeight,appearance:s.appearance,fontSize:s.fontSize};});
+  assert.ok(bounds?.height>=44,`Phone user selector has a 44px target: ${JSON.stringify({bounds,styles})}`);
+ }
+ if(shot)await shot('user-picker');await btn(page,'VIEW AS USER').click();
  await expect(page.getByRole('status',{name:'Role preview'})).toContainText(id===person.id?'VINCENT REAL':id==='gianmichele'?'VINCENT (FICTIONAL)':'USER (FICTIONAL)');
 }
 for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){

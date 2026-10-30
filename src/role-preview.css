@@ -27,7 +27,8 @@
 @media (max-width: 760px) { .role-preview-banner { padding: 9px 10px; } }
 
 .home-preview-banner { --muted: var(--theme-muted,#4c6279); font-family: var(--ui-font); font-size: var(--ui-text-body,13px); }
-@media (max-width:760px), (pointer:coarse) { .role-preview-form select { font-size:16px; height:44px; } }
+/* Native WebKit menus can ignore height; retain the same touch target as a floor. */
+@media (max-width:760px), (pointer:coarse) { .role-preview-form select { font-size:16px; height:44px; min-height:44px; } }
 
 .home-preview-banner:empty, .workspace-preview-banner:empty { display:none; }
 

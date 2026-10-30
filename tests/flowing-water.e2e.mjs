@@ -374,10 +374,19 @@ async function verifyPeriodicFrames(page, background) {
             && freshNativePixels
           : step.wallSeconds > 0 && step.wallSeconds <= .15);
       if (closelySampled) return 'closely-sampled';
+      // Exact final-to-initial content with a delayed submission is observable
+      // but unmeasured. It never supplies a seam; two fresh pixel seams are
+      // still required within the same four-wrap/time budget.
+      const delayedBoundary = freshNativePixels && sourceFrames === 1
+        && Math.abs(step.delta - frameSeconds) <= 1e-6 && step.presentedFramesDelta === 1
+        && Math.abs(step.from - (period - frameSeconds)) <= 1e-6 && Math.abs(step.to) <= 1e-6
+        && Number.isFinite(step.presentationSeconds) && step.presentationSeconds > .1 + 1e-6;
+      if (delayedBoundary) return 'unmeasured-presentation-delay';
       // A missed callback is proven only when compositor frame counts explain
       // the media advance and recorded submission times agree. A media jump
       // with only one presented frame, or an unexplained stall, cannot pass.
-      const missed = freshNativePixels && Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta > 1
+      const missed = freshNativePixels && sourceFrames >= 2 && Math.abs(step.delta - sourceFrames * frameSeconds) <= 1e-6
+        && Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta >= 2 && step.presentedFramesDelta <= sourceFrames
         && Math.abs(step.delta - step.presentedFramesDelta * frameSeconds) <= frameSeconds + 1e-6
         && Number.isFinite(step.presentationSeconds) && step.presentationSeconds > 0
         && Math.abs(step.presentationSeconds - step.delta) <= .1;
@@ -394,6 +403,9 @@ async function verifyPeriodicFrames(page, background) {
       resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
         observationMs: performance.now() - started, observationBudgetMs, maximumWraps: 4,
         wraps, gaps, seams: seams(), maximumCallbackLagMs,
+        unmeasuredPresentationDelays: gaps.filter(gap => gap.status === 'unmeasured-presentation-delay').length,
+        warnings: gaps.some(gap => gap.status === 'unmeasured-presentation-delay')
+          ? ['Delayed boundary presentation was recorded but excluded from content-continuity measurements; this result does not establish stutter-free playback.'] : [],
         playbackQuality: video.getVideoPlaybackQuality ? (() => { const quality = video.getVideoPlaybackQuality(); return { totalVideoFrames: quality.totalVideoFrames, droppedVideoFrames: quality.droppedVideoFrames, corruptedVideoFrames: quality.corruptedVideoFrames }; })() : null,
         ...(error ? { error } : {}),
         final: { currentTime: video.currentTime, paused: video.paused, readyState: video.readyState, currentSrc: video.currentSrc },
@@ -445,7 +457,7 @@ async function verifyPeriodicFrames(page, background) {
             steps.push({ ...timing, mean, rate: mean / Math.max(timing.delta, frameSeconds), cycle: crossing ? wraps.length : Math.max(0, wraps.length - (current.time < .3 ? 1 : 0)) });
           }
           if (crossing) wraps.push({ cycle: wraps.length, ...timing, stepIndex,
-            status: stepIndex === null ? status === 'missed-callbacks' ? status : 'boundary-pixels-unavailable' : 'sampled' });
+            status: stepIndex === null ? ['missed-callbacks', 'unmeasured-presentation-delay'].includes(status) ? status : 'boundary-pixels-unavailable' : 'sampled' });
           previous = current; samples++;
           // Off-boundary timing gaps are recorded, not a new global cadence SLA.
           // An unobserved boundary itself cannot be excused without proof.
@@ -473,7 +485,7 @@ async function verifyPeriodicFrames(page, background) {
     assert.ok(adjacent.length >= 3, 'Loop comparison includes independently decoded neighbouring frames');
     assert.ok(seam.rate <= Math.max(...adjacent.map(step => step.rate)) * 3 + 4, `The decoded boundary has no anomalous jump relative to neighbouring motion: ${JSON.stringify({ seam, adjacent })}`);
   }
-  return { verified: true, ...summary, provenance: 'Unmodified native playback, decoded source pixels at two natural wraps sampled at most three frames (100ms) apart; positively identified missed callbacks are recorded, never treated as measured seams. Separate real-compositor motion and pause checks remain in this suite.' };
+  return { verified: true, ...summary, provenance: 'Unmodified native playback, decoded source pixels at two natural wraps sampled at most three frames (100ms) apart; positively identified missed callbacks and exact-boundary presentation delays are recorded, never treated as measured seams or proof of stutter-free playback. Separate real-compositor motion and pause checks remain in this suite.' };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial night fallback verified' };

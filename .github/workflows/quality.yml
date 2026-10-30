@@ -116,7 +116,7 @@ jobs:
 
   browser:
     name: Browser verification · ${{ matrix.label }}
-    runs-on: ${{ matrix.group == 'water-motion-webkit' && 'macos-15' || 'ubuntu-24.04' }}
+    runs-on: ${{ (matrix.group == 'water-motion-webkit' || matrix.group == 'administration') && 'macos-15' || 'ubuntu-24.04' }}
     # Native media checks use Chromium on Linux and WebKit on macOS. Both
     # preserve every width/theme case and all real playback assertions.
     timeout-minutes: ${{ (matrix.group == 'knowledge' || matrix.group == 'administration') && 35 || 20 }}
@@ -258,6 +258,13 @@ jobs:
       - name: Install isolated browsers for this verification group
         timeout-minutes: 8
         run: pnpm exec playwright install --with-deps ${{ matrix.engine || 'chromium webkit' }}
+      - name: Select installed Chrome for macOS interface verification
+        if: matrix.group == 'administration'
+        run: |
+          chrome_executable='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+          test -x "$chrome_executable"
+          "$chrome_executable" --version
+          printf 'ECO_CHROMIUM_EXECUTABLE=%s\n' "$chrome_executable" >> "$GITHUB_ENV"
       - run: pnpm build
       - name: Observe native video formats and routing (diagnostic only)
         if: matrix.group == 'suppliers'

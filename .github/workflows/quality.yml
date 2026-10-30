@@ -116,14 +116,24 @@ jobs:
 
   browser:
     name: Browser verification · ${{ matrix.label }}
-    runs-on: ubuntu-24.04
-    # Administration includes the full Chromium/WebKit water-motion matrix;
-    # allow the same bounded budget as the knowledge browser group.
+    runs-on: ${{ (matrix.group == 'water-motion-webkit' || matrix.group == 'administration') && 'macos-15' || 'ubuntu-24.04' }}
+    # Native media checks use Chromium on Linux and WebKit on macOS. Both
+    # preserve every width/theme case and all real playback assertions.
     timeout-minutes: ${{ (matrix.group == 'knowledge' || matrix.group == 'administration') && 35 || 20 }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          - group: water-motion-chromium
+            label: Water motion · Chromium
+            engine: chromium
+            scripts: tests/flowing-water.e2e.mjs
+            artifacts: output/flowing-water-ui
+          - group: water-motion-webkit
+            label: Water motion · WebKit
+            engine: webkit
+            scripts: tests/flowing-water.e2e.mjs
+            artifacts: output/flowing-water-ui
           - group: administration
             label: Administration
             scripts: |
@@ -137,7 +147,6 @@ jobs:
               tests/admin-health-refresh.e2e.mjs
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
-              tests/flowing-water.e2e.mjs
             artifacts: |
               output/administration-ui
               output/contribution-actions-ui
@@ -145,7 +154,6 @@ jobs:
               output/auth-session-ui
               output/shared-contribution-availability
               output/eco-release-gates-ui
-              output/flowing-water-ui
               output/theme-touch-ui
               output/theme-toggle-ui
               output/background-choice-ui
@@ -161,6 +169,7 @@ jobs:
               output/supplier-retirement-ui
               output/supplier-spc-view-ui
               output/supplier-pic-isolation-ui
+              output/native-video-diagnostic
           - group: enquiries
             label: Parser and test workspace
             scripts: |
@@ -228,6 +237,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Use official Ubuntu HTTPS mirrors for browser dependencies
+        if: runner.os == 'Linux'
         run: |
           # Keep the runner's suites, components and signing keys unchanged.
           # The Azure HTTP mirror can deliver packages too slowly for the job limit.
@@ -245,11 +255,33 @@ jobs:
           mirror_file.write_text('\n'.join(mirrors) + '\n')
           PY
           printf '%s\n' 'Acquire::Retries "2";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/80eco-ci-downloads
-      - run: timeout --signal=TERM --kill-after=30s 8m pnpm exec playwright install --with-deps chromium webkit
+      - name: Install isolated browsers for this verification group
+        timeout-minutes: 8
+        run: pnpm exec playwright install --with-deps ${{ matrix.engine || 'chromium webkit' }}
+      - name: Select installed Chrome for macOS interface verification
+        if: matrix.group == 'administration'
+        run: |
+          chrome_executable='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+          test -x "$chrome_executable"
+          "$chrome_executable" --version
+          printf 'ECO_CHROMIUM_EXECUTABLE=%s\n' "$chrome_executable" >> "$GITHUB_ENV"
       - run: pnpm build
+      - name: Observe native video formats and routing (diagnostic only)
+        if: matrix.group == 'suppliers'
+        timeout-minutes: 4
+        continue-on-error: true
+        env:
+          ECO_DIAGNOSTIC_ENGINE: webkit
+          ECO_DIAGNOSTIC_OUTPUT: output/native-video-diagnostic
+        run: |
+          timeout --signal=TERM --kill-after=10s 230s bash -c '
+            node tests/native-video-diagnostic.mjs
+            WEBKIT_GST_USE_PLAYBIN3=1 ECO_DIAGNOSTIC_CASES=desktop-http-unrouted ECO_DIAGNOSTIC_OUTPUT=output/native-video-diagnostic/playbin3 node tests/native-video-diagnostic.mjs
+          '
       - name: Verify themes, phone widths, access states and freshness
         env:
           ECO_BROWSER_SCRIPTS: ${{ matrix.scripts }}
+          ECO_TEST_ENGINE: ${{ matrix.engine || '' }}
           ECO_ADMIN_UI_ORIGIN: http://127.0.0.1:4286
           ECO_ADMIN_UI_OUTPUT: output/administration-ui
           ECO_ACTIONS_ORIGIN: http://127.0.0.1:4286

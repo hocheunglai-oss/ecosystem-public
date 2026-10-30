@@ -22,16 +22,17 @@ const member = {
   officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false,
   isActive: true, activated: true, passwordChangeSuggested: false, revision: 1,
 };
-async function mocks(context) {
+async function mocks(context, { isAdmin = true } = {}) {
+  const user = { ...member, isAdmin };
   const state = { signedIn: false, unexpected: [], writes: [] };
   await context.route('**/api/**', route => {
     const request = route.request(), path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') state.writes.push(path);
-    if (path === '/api/access/session') return route.fulfill(state.signedIn ? { json: { user: member, preview: null } } : { status: 401, json: { message: 'Sign in required.' } });
-    if (path === '/api/access/login') { state.signedIn = true; return route.fulfill({ json: { user: member, preview: null } }); }
+    if (path === '/api/access/session') return route.fulfill(state.signedIn ? { json: { user, preview: null } } : { status: 401, json: { message: 'Sign in required.' } });
+    if (path === '/api/access/login') { state.signedIn = true; return route.fulfill({ json: { user, preview: null } }); }
     if (path === '/api/access/logout') { state.signedIn = false; return route.fulfill({ json: { user: null } }); }
     if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
-    if (path === '/api/access/users') return route.fulfill({ json: { users: [member], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
+    if (path === '/api/access/users') return route.fulfill({ json: { users: [user], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
     if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
     if (path === '/api/enquiries/inbox') return route.fulfill({ json: { items: [], nextCursor: null, unreadCount: 0 } });
     if (path === '/api/enquiries/records') return route.fulfill({ json: { items: [], nextCursor: null } });
@@ -40,7 +41,7 @@ async function mocks(context) {
     state.unexpected.push(`${request.method()} ${path}`);
     return route.fulfill({ status: 503, json: { message: 'Unmatched synthetic test request.' } });
   });
-  await installSharedLocations(context, { user: () => state.signedIn ? member : null });
+  await installSharedLocations(context, { user: () => state.signedIn ? user : null });
   return state;
 }
 async function pixels(page) {
@@ -82,9 +83,8 @@ async function renderedPixels(page, accepts, message) {
 async function shot(page,name){
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal overflow');
   await expect(toggle(page)).toHaveAttribute('aria-checked',String(await page.locator('html').getAttribute('data-theme')==='dark'));
-  const choice=page.getByLabel('Background',{exact:true});
-  await expect(choice).toBeVisible();
-  const box=await choice.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=await page.evaluate(()=>innerWidth)+1&&box.height>=44,'Readable selector fits phone');
+  await expect(page.locator('.home-display-controls').getByLabel('Background',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Background',{exact:true})).toBeHidden();
   const theme=await page.locator('html').getAttribute('data-theme');
   const filters=await page.locator('.flowing-water-background img,.flowing-water-background video,.flowing-water-background canvas').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).filter));
   assert.ok(filters.length>=2&&filters.every(filter=>filter==='none'),'Artwork never depends on unsupported accelerated SVG fragment filters');
@@ -193,6 +193,47 @@ async function authenticationNavigation(page, path, action, signedIn = true) {
   assert.equal(response.status(), path === 'session' && !signedIn ? 401 : 200, 'Synthetic authentication response matches the expected session');
   await expect(page.locator(signedIn ? '.world-launcher' : '.access-login')).toBeVisible({ timeout: 15000 });
 }
+async function signIn(page, width) {
+  await page.getByLabel('Email',{exact:true}).fill(member.email);
+  await page.getByLabel('Password',{exact:true}).fill('Synthetic Password 8');
+  await authenticationNavigation(page,'login',()=>tap(page,page.getByRole('button',{name:'Sign in',exact:true}),width));
+}
+async function backgroundSettings(page, width) {
+  await tap(page,page.getByRole('button',{name:'Settings',exact:true}),width);
+  const settings=page.getByRole('dialog',{name:'Settings',exact:true});
+  await expect(settings).toBeVisible();
+  await tap(page,settings.getByRole('button',{name:'Background',exact:true}),width);
+  await expect(settings.getByLabel('Background',{exact:true})).toBeVisible();
+  return settings;
+}
+async function verifySettingsChoice(page, settings, choice, width, screenshotName) {
+  const selector=settings.getByLabel('Background',{exact:true});
+  await expect(selector).toHaveValue(choice);
+  assert.deepEqual(await selector.locator('option').evaluateAll(options=>options.map(option=>option.value)),['diffuse','watercolour']);
+  await selector.scrollIntoViewIfNeeded();
+  const box=await selector.boundingBox();
+  assert.ok(box&&box.x>=0&&box.x+box.width<=width+1&&box.height>=(width<760?44:40),'Settings selector remains readable and fits the viewport');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Settings has no horizontal overflow');
+  await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-background',choice);
+  await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-paused','true');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('ecosystem.background.v1')),choice,'Settings saves the browser preference');
+  if(screenshotName)await page.screenshot({path:`${out}/${screenshotName}.png`,fullPage:true});
+}
+async function selectBackground(page, choice, width, screenshotName) {
+  const signedOut=await page.locator('.access-login').isVisible();
+  if(signedOut)await signIn(page,width);
+  const settings=await backgroundSettings(page,width);
+  await settings.getByLabel('Background',{exact:true}).selectOption(choice);
+  await verifySettingsChoice(page,settings,choice,width,screenshotName);
+  await tap(page,settings.getByRole('button',{name:'Close workspace',exact:true}),width);
+  if(signedOut)await authenticationNavigation(page,'logout',()=>tap(page,page.getByRole('button',{name:'Sign out',exact:true}),width),false);
+  await expect(page.getByLabel('Background',{exact:true})).toBeHidden();
+}
+async function verifySavedChoice(page, choice, width, screenshotName) {
+  const settings=await backgroundSettings(page,width);
+  await verifySettingsChoice(page,settings,choice,width,screenshotName);
+  await tap(page,settings.getByRole('button',{name:'Close workspace',exact:true}),width);
+}
 for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
   if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
   const executablePath=process.env[engine==='chromium'?'ECO_CHROMIUM_EXECUTABLE':'ECO_WEBKIT_EXECUTABLE'];
@@ -219,10 +260,10 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
     const media=[];context.on('request',r=>{if(/flowing-water.*\.(mp4|jpg)/.test(r.url()))media.push(new URL(r.url()).pathname);});
     try{
       await page.goto(base,{waitUntil:'domcontentloaded'});await expect(page.locator('.access-login')).toBeVisible();
-      await expect(page.getByLabel('Background',{exact:true})).toHaveValue('diffuse');await ready(page,'diffuse');
+      await expect(page.getByLabel('Background',{exact:true})).toHaveCount(0);await ready(page,'diffuse');
       for(const choice of ['diffuse','watercolour']){
         let pausedThemePhase;
-        await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
+        await selectBackground(page,choice,width,`${engine}-${width}-${choice}-settings-light`);await ready(page,choice);
         await expect(page.locator('html')).toHaveAttribute('data-theme','light');
         await expect(toggle(page)).toHaveAttribute('aria-checked','false');
         const day=await renderedPixels(page,p=>p.count>100&&p.mean>80&&p.spread>30,'Day artwork reached the compositor');await shot(page,`${engine}-${width}-${choice}-signed-out-light`);
@@ -244,7 +285,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await authenticationNavigation(page,'login',()=>tap(page,page.getByRole('button',{name:'Sign in',exact:true}),width));
         await ready(page,choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}));await ready(page,choice);
-        await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+        await verifySavedChoice(page,choice,width,`${engine}-${width}-${choice}-settings-dark`);await ready(page,choice);await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);
         const mediaNode=page.locator('.flowing-water-video');
         await expect.poll(()=>mediaNode.evaluate(video=>
@@ -275,6 +316,10 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           assert.equal(source,`/flowing-water-${choice}${width<760?'-mobile':''}.mp4`);
           assert.equal(await v.getAttribute('data-flow-period-ms'),choice==='diffuse'?'24000':'6000');
           assert.ok(Math.abs(await v.evaluate(n=>n.duration)-(choice==='diffuse'?24:6))<1/30,'The selected supplied clip retains its native duration');
+          const speed=await v.evaluate(n=>({rate:n.playbackRate,defaultRate:n.defaultPlaybackRate,wallLoop:n.duration/n.playbackRate}));
+          assert.equal(speed.rate,choice==='diffuse'?1:.6,'Watercolour runs 40% slower while Diffuse retains its speed');
+          assert.equal(speed.defaultRate,speed.rate,'Media reloads retain the selected playback rate');
+          assert.ok(Math.abs(speed.wallLoop-(choice==='diffuse'?24:10))<1/30,'The native clip has the intended wall-clock loop duration');
           assert.ok(await v.evaluate(n=>n.muted&&n.loop&&n.playsInline&&!n.controls));
           const t=await v.evaluate(n=>n.currentTime);await expect.poll(()=>v.evaluate((n,t)=>(n.currentTime-t+n.duration)%n.duration,t)).toBeGreaterThan(.1);
           await expect.poll(()=>v.evaluate(n=>!n.seeking&&n.currentTime>1.25&&n.currentTime<n.duration-2),
@@ -286,11 +331,13 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           await page.getByRole('button',{name:'Close workspace',exact:true}).click();await expect.poll(()=>v.evaluate(n=>n.paused)).toBe(false);
         }
         await authenticationNavigation(page,'logout',()=>tap(page,page.getByRole('button',{name:'Sign out',exact:true}),width),false);
-        await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}),false);await expect(page.getByLabel('Background',{exact:true})).toHaveValue(choice);
+        await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}),false);await ready(page,choice);
+        await expect(page.getByLabel('Background',{exact:true})).toHaveCount(0);
+        assert.equal(await page.evaluate(()=>localStorage.getItem('ecosystem.background.v1')),choice,'Sign-out and reload preserve the saved background');
         results.push({engine,width,choice,passed:true,day,night,persistence:true,...(pausedThemePhase?{pausedThemePhase}:{})});
       }
       for(const choice of ['watercolour','diffuse']){
-        await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
+        await selectBackground(page,choice,width);await ready(page,choice);
         await motionPreference(page,'reduce');await ready(page,choice);
         await expect(page.locator('video.flowing-water-video')).toHaveCount(0);
         const image=page.locator('.flowing-water-image'),source=await image.getAttribute('src');
@@ -307,7 +354,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await motionPreference(page,'no-preference');await ready(page,choice);
       }
       for(const choice of ['watercolour','diffuse']){
-        await page.getByLabel('Background',{exact:true}).selectOption(choice);await ready(page,choice);
+        await selectBackground(page,choice,width);await ready(page,choice);
         await page.locator('video.flowing-water-video').evaluate(v=>v.dispatchEvent(new Event('error')));
         await expect(page.locator('.flowing-water-background')).toHaveAttribute('data-renderer','fallback');
         await expect(page.locator('.flowing-water-image')).toBeVisible();
@@ -320,13 +367,13 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         ['diffuse','watercolour'].map(choice=>`/flowing-water-${choice}${width<760?'-mobile':''}.mp4`).sort(),
         'Only matching renditions of the two selected clips load; no alternate night movie');
       assert.deepEqual(errors,[]);assert.deepEqual(state.unexpected,[]);
-      assert.deepEqual(state.writes,['/api/access/login','/api/access/logout','/api/access/login','/api/access/logout']);
+      assert.deepEqual(state.writes,Array.from({length:8},()=>['/api/access/login','/api/access/logout']).flat(),'Only the explicit synthetic sign-in/sign-out flows write to the API');
       console.log(`PASS ${engine} ${width}: both backgrounds, actual night pixels, touch and saved preferences`);
     }catch(error){results.push({engine,width,passed:false,error:error.message,errors,unexpected:state.unexpected,pixelCapture,phaseDiagnostics,motion:await motionDiagnostics(page)});await page.screenshot({path:`${out}/${engine}-${width}-failure.png`,fullPage:true}).catch(()=>{});throw error;}
     finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await context.close();}
     if(width<760){
       const unsupported=await browser.newContext({viewport:{width,height:844},hasTouch:true,isMobile:true,colorScheme:'light',reducedMotion:'no-preference'});
-      await installStagingCookies(unsupported,base);const fixture=await mocks(unsupported);
+      await installStagingCookies(unsupported,base);const fixture=await mocks(unsupported,{isAdmin:false});
       await unsupported.addInitScript(()=>{
         const original=HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext=function(type,...args){
@@ -339,7 +386,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       try{
         await fallbackPage.goto(base,{waitUntil:'domcontentloaded'});await expect(fallbackPage.locator('.access-login')).toBeVisible();
         for(const choice of ['diffuse','watercolour']){
-          await fallbackPage.getByLabel('Background',{exact:true}).selectOption(choice);await ready(fallbackPage,choice);
+          await selectBackground(fallbackPage,choice,width,`${engine}-${width}-${choice}-ordinary-user-settings`);await ready(fallbackPage,choice);
           const source=await fallbackPage.locator('.flowing-water-image').getAttribute('src');
           const day=await renderedPixels(fallbackPage,p=>p.count>100&&p.mean>80&&p.spread>30,'Unsupported-WebGL day artwork is painted');
           await shot(fallbackPage,`${engine}-${width}-${choice}-no-webgl-light`);
@@ -352,7 +399,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
           results.push({engine,width,choice,unsupportedWebGL:true,passed:true,day,night,originalSourceRetained:true});
           await tap(fallbackPage,toggle(fallbackPage),width);await expect(fallbackPage.locator('html')).toHaveAttribute('data-theme','light');
         }
-        assert.deepEqual(fixture.writes,[]);assert.deepEqual(fixture.unexpected,[]);assert.deepEqual(fallbackErrors,[]);
+        assert.deepEqual(fixture.writes,Array.from({length:2},()=>['/api/access/login','/api/access/logout']).flat());assert.deepEqual(fixture.unexpected,[]);assert.deepEqual(fallbackErrors,[]);
       }catch(error){results.push({engine,width,unsupportedWebGL:true,passed:false,error:error.message,errors:fallbackErrors,pixelCapture});await fallbackPage.screenshot({path:`${out}/${engine}-${width}-no-webgl-failure.png`,fullPage:true}).catch(()=>{});throw error;}
       finally{await writeFile(`${reports}/verification.json`,JSON.stringify({base,results,limits:'Synthetic accounts and isolated Chromium/WebKit; physical phones and installed Safari untested.'},null,2));await unsupported.close();}
     }

@@ -1,9 +1,13 @@
 import { useState } from 'react';
 
 export type WaterBackground = 'diffuse' | 'watercolour';
+export type WaterBackgroundControl = {
+  background: WaterBackground;
+  chooseBackground: (value: WaterBackground) => void;
+};
 export const BACKGROUND_STORAGE_KEY = 'ecosystem.background.v1';
 
-export function useWaterBackground() {
+export function useWaterBackground(): WaterBackgroundControl {
   const [background, setBackground] = useState<WaterBackground>(() => {
     try { return localStorage.getItem(BACKGROUND_STORAGE_KEY) === 'watercolour' ? 'watercolour' : 'diffuse'; }
     catch { return 'diffuse'; }

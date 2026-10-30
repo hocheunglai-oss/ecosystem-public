@@ -88,12 +88,23 @@ async function usable(page, control) {
   assert.ok(box.x >= -1 && box.x + box.width <= viewport.width + 1 && box.y >= -1 && box.y + box.height <= viewport.height + 1, 'Switch fits the viewport');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal overflow');
   const paint = await control.evaluate(node => {
-    const style = getComputedStyle(node), canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
-    const context = canvas.getContext('2d'); context.fillStyle = style.getPropertyValue('--mode-track').trim(); context.fillRect(0, 0, 1, 1);
-    return { actual: style.backgroundColor.match(/[\d.]+/g).map(Number), expected: [...context.getImageData(0, 0, 1, 1).data] };
+    const style = getComputedStyle(node), thumb = getComputedStyle(node.querySelector('.theme-mode-toggle__thumb'));
+    return {
+      mode: node.dataset.mode, track: style.backgroundColor, image: style.backgroundImage,
+      thumb: thumb.backgroundColor.match(/[\d.]+/g).map(Number),
+      icons: [...node.querySelectorAll('svg')].map(icon => ({ colour: getComputedStyle(icon).color, stroke: getComputedStyle(icon).stroke })),
+    };
   });
-  assert.deepEqual(paint.actual.slice(0, 3), paint.expected.slice(0, 3), 'Shared pill track retains its exact theme paint, including after hover/touch');
-  assert.equal(paint.actual[3] ?? 1, 1, 'Theme pill has an opaque readable track');
+  assert.equal(paint.track, 'rgba(0, 0, 0, 0)', 'Shared switch track stays transparent, including after hover/touch');
+  assert.equal(paint.image, 'none', 'No background image covers the transparent switch');
+  const dark = paint.mode === 'dark', ink = dark ? 'rgb(255, 255, 255)' : 'rgb(17, 17, 17)';
+  assert.equal(paint.icons.length, 2, 'The sun and moon remain visible line icons');
+  for (const icon of paint.icons) {
+    assert.equal(icon.colour, ink, 'Both icons use dark lines by day and white lines at night');
+    assert.equal(icon.stroke, ink, 'The rendered SVG strokes use the intended theme ink');
+  }
+  assert.deepEqual(paint.thumb.slice(0, 3), dark ? [255, 255, 255] : [17, 17, 17]);
+  assert.ok(Math.abs((paint.thumb[3] ?? 1) - (dark ? .12 : .06)) < .005, 'The selected half uses only the subtle translucent highlight');
 
   const peers = await control.locator('..').locator(':scope > button, :scope > label').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().width && node.getBoundingClientRect().height).map(node => {
     const { left, right, top, bottom } = node.getBoundingClientRect(); return { left, right, top, bottom };

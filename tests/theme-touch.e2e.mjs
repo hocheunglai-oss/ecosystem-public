@@ -98,7 +98,14 @@ async function motionDiagnostics(page) {
   })).catch(() => null);
 }
 async function motionSubscriptionSnapshot(page, name) {
+  const mobile=page.viewportSize().width<760;
   for (const choice of ['watercolour', 'diffuse']) {
+    await activate(page.getByRole('button',{name:'Settings',exact:true}),mobile);
+    const settings=page.getByRole('dialog',{name:'Settings',exact:true});
+    await expect(settings).toBeVisible();
+    await activate(settings.getByRole('button',{name:'Background',exact:true}),mobile);
+    const selector=settings.getByLabel('Background',{exact:true});
+    await expect(selector).toBeVisible();
     await page.evaluate(() => {
       const original = window.matchMedia.bind(window);
       const probe = { reduced: false, initialSnapshot: null, subscriptions: 0 };
@@ -124,7 +131,11 @@ async function motionSubscriptionSnapshot(page, name) {
       };
     });
     try {
-      await page.getByLabel('Background', { exact: true }).selectOption(choice);
+      await selector.selectOption(choice);
+      await expect(selector).toHaveValue(choice);
+      assert.equal(await page.evaluate(()=>localStorage.getItem('ecosystem.background.v1')),choice);
+      await activate(settings.getByRole('button',{name:'Close workspace',exact:true}),mobile);
+      await expect(page.getByLabel('Background',{exact:true})).toBeHidden();
       const background = page.locator('.flowing-water-background');
       await expect(background).toHaveAttribute('data-background', choice);
       await expect.poll(() => page.evaluate(() => window.__motionSnapshot.subscriptions)).toBeGreaterThan(0);
@@ -207,6 +218,7 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
     try {
       await page.goto(base, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+      await expect(page.getByLabel('Background',{exact:true})).toHaveCount(0);
       await mode(page, 'light'); await screenshot(page, `${engine}-${width}-signed-out-light`);
       await activate(homeToggle(page), mobile); await mode(page, 'dark');
       await activate(page.getByLabel('Email', { exact: true }), mobile);
@@ -244,11 +256,16 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await authenticationNavigation(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' }), false); await mode(page, 'dark');
       if (width === 390) {
         await reducedMotionReload(page, context, `${engine}-${width}`);
+        await page.getByLabel('Email',{exact:true}).fill(member.email);
+        await page.getByLabel('Password',{exact:true}).fill('Synthetic Password 8');
+        await authenticationNavigation(page,'login',()=>activate(page.getByRole('button',{name:'Sign in',exact:true}),mobile));
         await motionSubscriptionSnapshot(page, `${engine}-${width}`);
+        await authenticationNavigation(page,'logout',()=>activate(page.getByRole('button',{name:'Sign out',exact:true}),mobile),false);
+        await expect(page.getByLabel('Background',{exact:true})).toHaveCount(0);
       }
       assert.equal(await page.evaluate(() => window.__themeTouchProbe.snapshots), 0, 'Flowing mode never captures stale animated media in a page transition');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      assert.deepEqual(state.writes, ['/api/access/login', '/api/access/logout']);
+      assert.deepEqual(state.writes, Array.from({length:width===390?2:1},()=>['/api/access/login','/api/access/logout']).flat());
       results.push({ engine, width, passed: true, signedOut: true, signedIn: true, rapidReversal: true, delayedSnapshot: true, delayedMediaReload: width === 390, motionSubscriptionSnapshot: width === 390, storageAcrossReloadAndSignOut: true });
       console.log(`PASS ${engine} ${width}: touch/navigation, immediate theme commit, reload/sign-out persistence`);
     } catch (error) {

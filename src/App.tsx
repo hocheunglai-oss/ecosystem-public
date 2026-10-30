@@ -42,7 +42,7 @@ import { hatCount } from "./lib/hats";
 import { contributionActivity, contributionPreviewCounts, contributionStatus, type ContributionStatusKey } from "./lib/contributionActivity";
 import { ProfileMenu } from "./ProfileMenu";
 import { FlowingWaterBackground } from "./FlowingWaterBackground";
-import { useWaterBackground, type WaterBackground } from './backgroundPreference';
+import { useWaterBackground, type WaterBackgroundControl } from './backgroundPreference';
 import { useMobileInterface } from "./mobile";
 import {
   WorkspaceModule,
@@ -258,10 +258,12 @@ function WorkspaceWindow({
   onOpen,
   onClose,
   themeControl,
+  backgroundControl,
   pendingAdminRequest,
   onAdminOperationPending,
 }: {
   themeControl: { requested: 'light' | 'dark'; pending: boolean; error: string; toggle: () => void };
+  backgroundControl: WaterBackgroundControl;
   active: WorkspaceId | null;
   contexts: Partial<Record<WorkspaceId, WorkspaceNavigationContext | undefined>>;
   open: OpenModal;
@@ -367,7 +369,7 @@ function WorkspaceWindow({
       <div ref={contentRef} className="window-content">
         {visited.map((id) => (
           <section className="workspace-module" key={id} hidden={active !== id}>
-            <WorkspaceModule id={id} open={open} onOpen={onOpen} context={contexts[id]} onAdminOperationPending={onAdminOperationPending} />
+            <WorkspaceModule id={id} open={open} onOpen={onOpen} context={contexts[id]} backgroundControl={backgroundControl} onAdminOperationPending={onAdminOperationPending} />
           </section>
         ))}
       </div>
@@ -530,6 +532,7 @@ function Workspace() {
             key={actor.id}
             active={active}
             themeControl={{requested, pending: themePending, error: themeError, toggle: toggleTheme}}
+            backgroundControl={{background, chooseBackground}}
             contexts={workspaceContexts}
             open={setModal}
             onOpen={openWorkspace}
@@ -545,13 +548,6 @@ function Workspace() {
       <footer className="flowing-footer">
       <span className="world-controls">ECOSYSTEM | FRATELLI COSULICH</span>
       <div className="home-display-controls">
-        <label className="background-choice">
-          <span>Background</span>
-          <select aria-label="Background" value={background} onChange={event => chooseBackground(event.target.value as WaterBackground)}>
-            <option value="diffuse">Diffuse</option>
-            <option value="watercolour">Watercolour</option>
-          </select>
-        </label>
         {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
           <MessageSquare size={15} aria-hidden="true" /> Feedback for ecosystem
         </KnowledgeUpdateButton>}

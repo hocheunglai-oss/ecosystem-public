@@ -10,6 +10,7 @@
 .personal-settings { display:grid; grid-template-columns:minmax(0,440px) minmax(0,440px); align-items:start; gap:32px; max-width:940px; }
 .personal-password h2 { font-size:var(--ui-text-section); margin:0 0 18px; }
 .personal-password .password-settings { padding:0; max-width:none; }
+.background-settings { width:100%; max-width:280px; }
 @media(max-width:760px) { .personal-settings { grid-template-columns:minmax(0,1fr); gap:24px; } }
 .role-preview-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--ui-focus,#158da4); border-radius: 5px; background: var(--surface); color: var(--ink); min-width: 0; }
 .role-preview-banner > div { display: grid; gap: 3px; min-width: 0; }

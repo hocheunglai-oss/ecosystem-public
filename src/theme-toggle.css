@@ -1,19 +1,16 @@
-/* The reference's sun/moon pill is shared by home, sign-in and workspaces. */
+/* Transparent sun/moon control shared by home, sign-in and workspaces. */
 #root .theme-mode-toggle {
-  --mode-track: #f6f9fa;
-  --mode-thumb: #e2e9ec;
-  --mode-active: #182f36;
-  --mode-inactive: #74838b;
-  --mode-border: #d5e0e4;
-  --mode-shadow: inset 0 1px 0 #ffffff80;
+  --mode-track: transparent;
+  --mode-thumb: rgb(17 17 17 / 6%);
+  --mode-active: #111111;
+  --mode-inactive: #111111;
+  --mode-border: rgb(17 17 17 / 24%);
 }
 #root .theme-mode-toggle[data-mode="dark"] {
-  --mode-track: #100e19;
-  --mode-thumb: #393449;
-  --mode-active: #faf5f2;
-  --mode-inactive: #a59fb2;
-  --mode-border: #655870;
-  --mode-shadow: inset 0 1px 0 #ffffff08;
+  --mode-thumb: rgb(255 255 255 / 12%);
+  --mode-active: #ffffff;
+  --mode-inactive: #ffffff;
+  --mode-border: rgb(255 255 255 / 35%);
 }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle,
 #root .workspace-window .window-foot button.theme-mode-toggle {
@@ -33,7 +30,7 @@
   border-radius: 999px;
   background: var(--mode-track);
   color: var(--mode-inactive);
-  box-shadow: var(--mode-shadow);
+  box-shadow: none;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -55,10 +52,11 @@
   height: 24px;
   stroke-width: 1.8;
   color: var(--mode-inactive);
+  opacity: .6;
   pointer-events: none;
 }
 #root .theme-mode-toggle[data-mode="light"] .theme-mode-toggle__sun,
-#root .theme-mode-toggle[data-mode="dark"] .theme-mode-toggle__moon { color: var(--mode-active); }
+#root .theme-mode-toggle[data-mode="dark"] .theme-mode-toggle__moon { color: var(--mode-active); opacity: 1; }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle:hover,
 #root .workspace-window .window-foot button.theme-mode-toggle:hover { background: var(--mode-track); border-color: var(--ui-focus); filter: none; }
 #root .theme-mode-toggle:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }

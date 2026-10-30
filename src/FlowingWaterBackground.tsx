@@ -7,11 +7,11 @@ import type { WaterBackground } from './backgroundPreference';
 const backgroundMedia = {
   diffuse: {
     desktop: '/flowing-water-diffuse.mp4', mobile: '/flowing-water-diffuse-mobile.mp4',
-    poster: '/flowing-water-diffuse-poster.jpg', periodMs: 24000,
+    poster: '/flowing-water-diffuse-poster.jpg', periodMs: 24000, playbackRate: 1,
   },
   watercolour: {
     desktop: '/flowing-water-watercolour.mp4', mobile: '/flowing-water-watercolour-mobile.mp4',
-    poster: '/flowing-water-watercolour-poster.jpg', periodMs: 6000,
+    poster: '/flowing-water-watercolour-poster.jpg', periodMs: 6000, playbackRate: 0.6,
   },
 } as const;
 
@@ -87,12 +87,17 @@ function VideoWaterBackground({ paused, background }: { paused: boolean; backgro
     const video = videoRef.current;
     if (!video) return;
     let cancelled = false;
+    // Keep the original encoded duration/phase; 0.6x makes the six-second
+    // Watercolour clip take ten seconds without re-encoding its artwork.
+    // Apply before play, including when reduced motion recreates the element.
+    video.defaultPlaybackRate = media.playbackRate;
+    video.playbackRate = media.playbackRate;
     if (stopped) video.pause();
     else void video.play().catch(error => {
       if (!cancelled && !stoppedRef.current && error?.name !== 'AbortError') setFailed(true);
     });
     return () => { cancelled = true; video.pause(); };
-  }, [stopped, reduced, failed]);
+  }, [stopped, reduced, failed, media.playbackRate]);
   useLayoutEffect(() => {
     const canvas = paletteCanvasRef.current, video = videoRef.current;
     setPaletteReady(false);

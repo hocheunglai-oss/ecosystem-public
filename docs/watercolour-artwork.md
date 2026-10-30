@@ -38,6 +38,8 @@ The pinned Playwright 1.63.0 Linux WebKit revision 2359 has a reproduced media l
 
 Native loop checks establish sampled content continuity, not guaranteed frame cadence on every machine. They require two independently decoded, fresh boundary comparisons within four natural cycles and 24.5 seconds. Qualified comparisons retain the 100 ms submission limit, source-frame counts, current media phase and pixel-discontinuity checks. An otherwise valid exact final-to-first-frame crossing delayed by the compositor is recorded as unmeasured, never counted as a passing comparison. Persistent delays that prevent two qualified comparisons fail; early resets, inconsistent clocks or phase, and measured pixel jumps still fail. Retain delayed-frame observations and playback-quality telemetry in release evidence; a content-continuity pass must not be described as proof of stutter-free playback.
 
+The verifier permits up to 1 ms of negative callback lag for independently coarsened browser timestamps, retaining the raw readings and the unchanged positive freshness limit. This is a conservative measurement allowance, not a guaranteed browser clock resolution. [High Resolution Time](https://www.w3.org/TR/hr-time-3/#dfn-coarsen-time) allows timestamp coarsening and jitter; [video frame metadata](https://wicg.github.io/video-rvfc/#dom-videoframecallbackmetadata-presentationtime) uses those timestamps. Larger negative values and stale positive samples still fail.
+
 ## Encoded asset identity
 
 | Asset | Dimensions | Bytes | SHA-256 |

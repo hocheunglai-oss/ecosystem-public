@@ -358,13 +358,17 @@ async function verifyPeriodicFrames(page, background) {
     const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = 24500;
     let previous, request = 0, samples = 0, done = false, maximumCallbackLagMs = 0;
     const native = typeof video.requestVideoFrameCallback === 'function';
+    const timestampQuantizationSeconds = .001;
     const classifyStep = step => {
       const sourceFrames = Math.round(step.delta / frameSeconds);
       // rVFC is dispatched on the main thread after compositor submission. Its
       // callback delay is not the frame interval. expectedDisplayTime is only a
       // forecast; bound recorded submission times and pixel freshness/phase.
+      // Exposed high-resolution clocks may be independently coarsened/jittered.
+      // Allow 1 ms only on the negative side; retain raw timestamps and the
+      // unchanged positive freshness, submission and source-phase limits.
       const freshNativePixels = native
-        && step.callbackLagSeconds.every(value => Number.isFinite(value) && value >= -1e-6 && value <= .1 + 1e-6)
+        && step.callbackLagSeconds.every(value => Number.isFinite(value) && value >= -timestampQuantizationSeconds && value <= .1 + 1e-6)
         && step.phaseDistanceSeconds.every(value => Number.isFinite(value) && value <= .1 + 1e-6);
       const closelySampled = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 3 + 1e-6
         && (native
@@ -402,6 +406,7 @@ async function verifyPeriodicFrames(page, background) {
       if (native) video.cancelVideoFrameCallback(request); else cancelAnimationFrame(request);
       resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
         observationMs: performance.now() - started, observationBudgetMs, maximumWraps: 4,
+        timestampQuantizationAllowanceMs: timestampQuantizationSeconds * 1000,
         wraps, gaps, seams: seams(), maximumCallbackLagMs,
         unmeasuredPresentationDelays: gaps.filter(gap => gap.status === 'unmeasured-presentation-delay').length,
         warnings: gaps.some(gap => gap.status === 'unmeasured-presentation-delay')

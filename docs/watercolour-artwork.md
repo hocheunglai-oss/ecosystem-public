@@ -54,3 +54,7 @@ The verifier permits up to 1 ms of negative callback lag for independently coars
 WATERCOLOUR package SHA-256: `732782de1744823af6c4e99dd4780a9d75ab37cd88238345a3cf9d96c993b171`. Preserve these supplied compressed assets without repeated re-encoding; any future creative replacement needs the owner’s direction.
 
 DIFFUSE encoding: software H.264 High, slow CRF 12 with grain tuning, YUV420P limited range, 30 fps, 24 seconds. Explicit VUI/container tags use BT.709 primaries/matrix and IEC 61966-2-1 (sRGB) transfer. These tags matter: relying on defaults lifted the artwork’s colours in browsers. The JPEG is a quality-95 format conversion of the first lossless source frame. Source-frame SHA, encoder comparisons, normal-rate playback and screenshot colour measurements are retained in private release evidence. The compressed wrap difference averages below 1/255 across RGB, although it exceeds ordinary adjacent predictive-codec texture differences; do not claim pixel-identical endpoints.
+
+## 30 October display refinement
+
+The owner selected WATERCOLOUR as the default and requested a 30–50% speed reduction. Play the unchanged six-second source at 0.6× speed, yielding a ten-second viewing loop, in both day and night. DIFFUSE retains its original speed. BACKGROUND now belongs under SETTINGS → PERSONAL DETAILS. Save the real account’s choice separately on this browser; signed-out entry uses WATERCOLOUR. No device synchronization or video re-encoding is implied. The sun/moon toggle keeps its geometry with translucent surfaces and theme-aware ink.

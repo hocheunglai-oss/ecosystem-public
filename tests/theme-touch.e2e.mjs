@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { chooseBackground } from './fixtures/background-settings.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -98,7 +99,7 @@ async function motionDiagnostics(page) {
   })).catch(() => null);
 }
 async function motionSubscriptionSnapshot(page, name) {
-  for (const choice of ['watercolour', 'diffuse']) {
+  for (const choice of ['diffuse', 'watercolour']) {
     await page.evaluate(() => {
       const original = window.matchMedia.bind(window);
       const probe = { reduced: false, initialSnapshot: null, subscriptions: 0 };
@@ -124,7 +125,7 @@ async function motionSubscriptionSnapshot(page, name) {
       };
     });
     try {
-      await page.getByLabel('Background', { exact: true }).selectOption(choice);
+      await chooseBackground(page, choice);
       const background = page.locator('.flowing-water-background');
       await expect(background).toHaveAttribute('data-background', choice);
       await expect.poll(() => page.evaluate(() => window.__motionSnapshot.subscriptions)).toBeGreaterThan(0);
@@ -153,7 +154,7 @@ async function reducedMotionReload(page, context, name) {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   let requests = 0;
-  const pattern = '**/flowing-water-diffuse-mobile.mp4';
+  const pattern = '**/flowing-water-watercolour-mobile.mp4';
   const hold = async route => {
     requests++;
     await gate;
@@ -244,11 +245,14 @@ for (const engine of (process.env.ECO_THEME_BROWSER ? [process.env.ECO_THEME_BRO
       await authenticationNavigation(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' }), false); await mode(page, 'dark');
       if (width === 390) {
         await reducedMotionReload(page, context, `${engine}-${width}`);
+        await page.getByLabel('Email', { exact: true }).fill(member.email);
+        await page.getByLabel('Password', { exact: true }).fill('Synthetic Password 8');
+        await authenticationNavigation(page, 'login', () => activate(page.getByRole('button', { name: 'Sign in', exact: true }), mobile));
         await motionSubscriptionSnapshot(page, `${engine}-${width}`);
       }
       assert.equal(await page.evaluate(() => window.__themeTouchProbe.snapshots), 0, 'Flowing mode never captures stale animated media in a page transition');
       assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      assert.deepEqual(state.writes, ['/api/access/login', '/api/access/logout']);
+      assert.deepEqual(state.writes, width === 390 ? ['/api/access/login', '/api/access/logout', '/api/access/login'] : ['/api/access/login', '/api/access/logout']);
       results.push({ engine, width, passed: true, signedOut: true, signedIn: true, rapidReversal: true, delayedSnapshot: true, delayedMediaReload: width === 390, motionSubscriptionSnapshot: width === 390, storageAcrossReloadAndSignOut: true });
       console.log(`PASS ${engine} ${width}: touch/navigation, immediate theme commit, reload/sign-out persistence`);
     } catch (error) {

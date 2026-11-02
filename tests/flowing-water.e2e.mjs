@@ -162,7 +162,10 @@ async function readyRenderer(page) {
     const video = background.locator('video.flowing-water-video');
     await expect(image).toBeHidden(); await expect(video).toHaveCount(1);
     assert.ok(await video.evaluate(node => node.readyState >= 2 && node.muted && node.loop && node.playsInline && !node.controls));
-    assert.equal(await video.getAttribute('data-flow-period-ms'), '6000');
+    assert.equal(await video.getAttribute('data-flow-period-ms'), '10000');
+    assert.equal(await video.getAttribute('data-flow-source-period-ms'), '6000');
+    assert.deepEqual(await video.evaluate(node => ({ rate: node.playbackRate, defaultRate: node.defaultPlaybackRate })),
+      { rate: 0.6, defaultRate: 0.6 }, 'WATERCOLOUR runs at 40% lower speed without changing the source');
     if (night) {
       await expect(background).toHaveAttribute('data-night-ready', 'true');
       await expect(background.locator('.flowing-water-video-palette')).toHaveCSS('opacity', '1');
@@ -182,7 +185,8 @@ const flowState = background => background.evaluate(node => {
   const video = node.querySelector('video.flowing-water-video');
   return { renderer: node.dataset.renderer, state: node.dataset.flowState,
     time: node.dataset.renderer === 'video' ? video.currentTime * 1000 : 0,
-    period: video ? Number(video.dataset.flowPeriodMs) : 6000 };
+    period: video ? Number(video.dataset.flowSourcePeriodMs) : 6000,
+    rate: video?.playbackRate ?? 0.6 };
 });
 async function verifyStillWater(page, background, label, inspectPixels = true) {
   await expect.poll(async () => (await flowState(background)).state !== 'running').toBe(true);
@@ -288,6 +292,7 @@ async function verifyInternalMotion(page, background) {
   assert.equal(await video.evaluate(node => getComputedStyle(node).transform), 'none', 'The supplied video is never translated or zoomed');
   const plan = await waterPixelPlan(page), first = await waterPixels(page, plan), changes = [];
   let previous = await flowState(background), elapsed = 0, wraps = 0;
+  const started = await page.evaluate(() => performance.now());
   if (capability.mode === 'video') await expect(background).toHaveAttribute('data-flow-state', 'running');
   // Real wall-clock compositor proof: no mocked clock, seeking, playback-rate
   // changes, hidden elements or altered pixels participate in these samples.
@@ -307,7 +312,9 @@ async function verifyInternalMotion(page, background) {
   }
   const strongest = changes.reduce((best, item) => item.mean > best.mean ? item : best);
   if (capability.mode === 'video') {
-    assert.ok(elapsed > 3500, 'The real decoded video clock advances across native loop wraps');
+    const wallElapsed = await page.evaluate(() => performance.now()) - started;
+    assert.ok(elapsed > 3500 * 0.6, 'The slowed decoded video clock advances across native loop wraps');
+    assert.ok(Math.abs(elapsed / wallElapsed - 0.6) < .08, `Decoded media advances at the requested 0.6x speed: ${JSON.stringify({ elapsed, wallElapsed })}`);
     assert.ok(strongest.mean > .15 && strongest.changedFraction > .01, `Visible water pixels change inside the stationary frame (${JSON.stringify(strongest)})`);
   } else {
     assert.equal(elapsed, 0, 'Unsupported night graphics keeps the matching still fallback');
@@ -354,8 +361,8 @@ async function verifyPeriodicFrames(page, background) {
   const evidence = await video.evaluate(video => new Promise(resolve => {
     const canvas = document.createElement('canvas'); canvas.width = 96; canvas.height = 54;
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    const source = video.currentSrc, period = video.duration, steps = [], wraps = [], gaps = [];
-    const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = 24500;
+    const source = video.currentSrc, period = video.duration, playbackRate = video.playbackRate, steps = [], wraps = [], gaps = [];
+    const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = period / playbackRate * 4000 + 500;
     let previous, request = 0, samples = 0, done = false, maximumCallbackLagMs = 0;
     const native = typeof video.requestVideoFrameCallback === 'function';
     const timestampQuantizationSeconds = .001;
@@ -369,7 +376,7 @@ async function verifyPeriodicFrames(page, background) {
       // unchanged positive freshness, submission and source-phase limits.
       const freshNativePixels = native
         && step.callbackLagSeconds.every(value => Number.isFinite(value) && value >= -timestampQuantizationSeconds && value <= .1 + 1e-6)
-        && step.phaseDistanceSeconds.every(value => Number.isFinite(value) && value <= .1 + 1e-6);
+        && step.phaseDistanceSeconds.every(value => Number.isFinite(value) && value / playbackRate <= .1 + 1e-6);
       const closelySampled = step.delta > frameSeconds / 2 && step.delta <= frameSeconds * 3 + 1e-6
         && (native
           ? sourceFrames >= 1 && sourceFrames <= 3 && Math.abs(step.delta - sourceFrames * frameSeconds) <= 1e-6
@@ -393,7 +400,7 @@ async function verifyPeriodicFrames(page, background) {
         && Number.isInteger(step.presentedFramesDelta) && step.presentedFramesDelta >= 2 && step.presentedFramesDelta <= sourceFrames
         && Math.abs(step.delta - step.presentedFramesDelta * frameSeconds) <= frameSeconds + 1e-6
         && Number.isFinite(step.presentationSeconds) && step.presentationSeconds > 0
-        && Math.abs(step.presentationSeconds - step.delta) <= .1;
+        && Math.abs(step.presentationSeconds - step.delta / playbackRate) <= .1;
       return missed ? 'missed-callbacks' : 'unexplained-gap';
     };
     const seams = () => wraps.filter(wrap => wrap.stepIndex !== null).map(wrap => ({
@@ -404,7 +411,7 @@ async function verifyPeriodicFrames(page, background) {
     const finish = error => {
       if (done) return; done = true; clearTimeout(timer);
       if (native) video.cancelVideoFrameCallback(request); else cancelAnimationFrame(request);
-      resolve({ period, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
+      resolve({ period, playbackRate, wallPeriodSeconds: period / playbackRate, source, samples, callback: native ? 'requestVideoFrameCallback' : 'requestAnimationFrame',
         observationMs: performance.now() - started, observationBudgetMs, maximumWraps: 4,
         timestampQuantizationAllowanceMs: timestampQuantizationSeconds * 1000,
         wraps, gaps, seams: seams(), maximumCallbackLagMs,
@@ -417,13 +424,13 @@ async function verifyPeriodicFrames(page, background) {
         maximumStep: steps.length ? Math.max(...steps.map(step => step.mean)) : 0,
         meanStep: steps.length ? steps.reduce((sum, step) => sum + step.mean, 0) / steps.length : 0 });
     };
-    // Four six-second cycles plus a bounded tail for the final neighbours.
-    const timer = setTimeout(() => finish('Two qualified natural boundaries were not observed within 24.5 seconds'), observationBudgetMs);
+    // Four encoded cycles at the configured speed, plus a bounded neighbour tail.
+    const timer = setTimeout(() => finish(`Two qualified natural boundaries were not observed within ${observationBudgetMs / 1000} seconds`), observationBudgetMs);
     const sample = (now, metadata) => {
       const observedAt = performance.now();
       if (done) return;
       try {
-        if (video !== document.querySelector('video.flowing-water-video') || video.currentSrc !== source || video.paused || video.playbackRate !== 1) {
+        if (video !== document.querySelector('video.flowing-water-video') || video.currentSrc !== source || video.paused || video.playbackRate !== playbackRate || playbackRate !== 0.6) {
           finish('Native loop changed media node/source, paused or changed speed'); return;
         }
         const current = { time: metadata?.mediaTime ?? video.currentTime, now, observedAt,
@@ -482,7 +489,9 @@ async function verifyPeriodicFrames(page, background) {
   // Persist native timing and all observed/missed wraps before any assertion.
   await persistLoopEvidence(report, { engine, width, theme, ...evidence });
   assert.equal(evidence.error, undefined, `Native loop observation failed: ${evidence.error}; see ${report}`);
-  assert.ok(Math.abs(evidence.period - 6) < 1 / 30, 'The exact supplied video retains its six-second loop');
+  assert.ok(Math.abs(evidence.period - 6) < 1 / 30, 'The exact supplied video retains its six-second encoded loop');
+  assert.equal(evidence.playbackRate, 0.6, 'The loop uses the requested slower speed');
+  assert.ok(Math.abs(evidence.wallPeriodSeconds - 10) < .06, 'The same source plays as a ten-second wall-clock loop');
   assert.ok(evidence.samples > 100 && evidence.wraps.length >= 2 && evidence.seams.length >= 2, 'Native decoding presented moving frames through two qualified real wraps');
   assert.ok(evidence.maximumStep > .15 && evidence.meanStep > .01, 'Loop evidence cannot pass on a frozen or blank video');
   for (const { seam, adjacent } of evidence.seams) {
@@ -490,7 +499,7 @@ async function verifyPeriodicFrames(page, background) {
     assert.ok(adjacent.length >= 3, 'Loop comparison includes independently decoded neighbouring frames');
     assert.ok(seam.rate <= Math.max(...adjacent.map(step => step.rate)) * 3 + 4, `The decoded boundary has no anomalous jump relative to neighbouring motion: ${JSON.stringify({ seam, adjacent })}`);
   }
-  return { verified: true, ...summary, provenance: 'Unmodified native playback, decoded source pixels at two natural wraps sampled at most three frames (100ms) apart; positively identified missed callbacks and exact-boundary presentation delays are recorded, never treated as measured seams or proof of stutter-free playback. Separate real-compositor motion and pause checks remain in this suite.' };
+  return { verified: true, ...summary, provenance: 'Native playback at the configured 0.6x speed, decoded source pixels at two natural wraps with compositor submissions at most 100ms apart; positively identified missed callbacks and exact-boundary presentation delays are recorded, never treated as measured seams or proof of stutter-free playback. Separate real-compositor motion and pause checks remain in this suite.' };
 }
 async function verifyContextLossFallback(page, background) {
   if (!rendererCapabilities.get(page)) return { verified: false, reason: 'WebGL1 unavailable; initial night fallback verified' };
@@ -810,7 +819,6 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     await context.addInitScript(value => {
       if (location.protocol === 'http:' || location.protocol === 'https:') {
         localStorage.setItem('ecosystem.theme.v1', value);
-        localStorage.setItem('ecosystem.background.v1', 'watercolour');
       }
     }, theme);
     const page = await context.newPage(), errors = [], pauseChecks = [];
@@ -858,15 +866,16 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       // Broken/absent old harbour artwork must never block theme switching.
       const retainedVideo = await background.locator('video.flowing-water-video').elementHandle();
       const themeBounds = await background.locator('video.flowing-water-video').boundingBox();
-      let themeFlow = await retainedVideo.evaluate(node => ({ time: node.currentTime, duration: node.duration, source: node.currentSrc, at: performance.now() }));
+      let themeFlow = await retainedVideo.evaluate(node => ({ time: node.currentTime, duration: node.duration, rate: node.playbackRate, source: node.currentSrc, at: performance.now() }));
       const verifyThemeContinuity = async () => {
         assert.ok(await retainedVideo.evaluate(node => node === document.querySelector('video.flowing-water-video')), 'Theme changes retain the same supplied media element');
         assert.ok(boxDifference(await background.locator('video.flowing-water-video').boundingBox(), themeBounds) < .1, 'Theme changes preserve the exact animated frame bounds');
-        const next = await retainedVideo.evaluate(node => ({ time: node.currentTime, duration: node.duration, source: node.currentSrc, at: performance.now() }));
+        const next = await retainedVideo.evaluate(node => ({ time: node.currentTime, duration: node.duration, rate: node.playbackRate, source: node.currentSrc, at: performance.now() }));
         assert.equal(next.source, themeFlow.source, 'Theme changes retain the exact supplied video source');
+        assert.equal(next.rate, 0.6, 'Theme changes retain the requested slower speed');
         const delta = next.time - themeFlow.time;
         const forward = delta < 0 && delta >= -1 / 30 - 1e-6 ? 0 : (delta + next.duration) % next.duration;
-        assert.ok(forward <= (next.at - themeFlow.at) / 1000 + .25, 'Theme changes preserve native playback phase across natural loops');
+        assert.ok(forward <= (next.at - themeFlow.at) / 1000 * next.rate + .25, 'Theme changes preserve native playback phase across natural loops');
         themeFlow = next;
       };
       await toggle().click(); await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'light' ? 'dark' : 'light');

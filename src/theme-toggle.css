@@ -1,19 +1,11 @@
 /* The reference's sun/moon pill is shared by home, sign-in and workspaces. */
 #root .theme-mode-toggle {
-  --mode-track: #f6f9fa;
-  --mode-thumb: #e2e9ec;
-  --mode-active: #182f36;
-  --mode-inactive: #74838b;
-  --mode-border: #d5e0e4;
-  --mode-shadow: inset 0 1px 0 #ffffff80;
-}
-#root .theme-mode-toggle[data-mode="dark"] {
-  --mode-track: #100e19;
-  --mode-thumb: #393449;
-  --mode-active: #faf5f2;
-  --mode-inactive: #a59fb2;
-  --mode-border: #655870;
-  --mode-shadow: inset 0 1px 0 #ffffff08;
+  --mode-track: color-mix(in srgb, var(--ui-surface) 12%, transparent);
+  --mode-thumb: color-mix(in srgb, var(--ui-ink) 14%, transparent);
+  --mode-active: var(--ui-ink);
+  --mode-inactive: var(--ui-ink);
+  --mode-border: color-mix(in srgb, var(--ui-ink) 28%, transparent);
+  --mode-shadow: none;
 }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle,
 #root .workspace-window .window-foot button.theme-mode-toggle {

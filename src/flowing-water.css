@@ -73,8 +73,9 @@
 }
 /* Personal display preferences live inside Settings, never over the artwork. */
 .personal-display-settings { display: grid; gap: 24px; min-width: 0; }
-.background-choice { display: grid; gap: 8px; max-width: 280px; color: var(--ui-ink); font-size: var(--ui-text-action); }
-.background-choice select { appearance: none; -webkit-appearance: none; width: 100%; height: 44px; min-height: 44px; padding: 8px 32px 8px 12px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-control); background-color: var(--ui-field); color: var(--ui-ink); font: inherit; text-transform: uppercase; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat; }
+.background-choice { position: relative; display: grid; gap: 8px; max-width: 280px; color: var(--ui-ink); font-size: var(--ui-text-action); }
+.background-choice select { appearance: none; -webkit-appearance: none; width: 100%; height: 44px; min-height: 44px; padding: 8px 32px 8px 12px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-control); background-color: var(--ui-field); color: var(--ui-ink); font: inherit; text-transform: uppercase; }
+.background-choice::after { content: ""; position: absolute; right: 15px; bottom: 20px; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .background-choice select:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
 .background-choice option { background: var(--ui-field); color: var(--ui-ink); }
 .flowing-water-sheen {

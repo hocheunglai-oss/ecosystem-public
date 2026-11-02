@@ -7,6 +7,10 @@ export async function openBackgroundSettings(page) {
   await dialog.getByRole('button', { name: 'Personal details', exact: true }).click();
   const choice = dialog.getByLabel('Background', { exact: true });
   await expect(choice).toBeVisible();
+  // The workspace entrance scales its content briefly. Measure the final touch
+  // target only after it settles; retain the exact 44px requirement.
+  await expect.poll(async () => (await choice.boundingBox())?.height ?? 0,
+    { timeout: 3000, message: 'Settings entrance settled at its full touch height' }).toBeGreaterThanOrEqual(44);
   return choice;
 }
 export async function chooseBackground(page, value) {

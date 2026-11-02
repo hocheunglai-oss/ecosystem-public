@@ -19,6 +19,7 @@ import Administration, { FeedbackWorkspace } from './Administration';
 import { PasswordSettings } from './PasswordSettings';
 import PrivacyDetails from './PrivacyDetails';
 import { PersonalDetails } from './ProfileMenu';
+import { useWaterBackground, type WaterBackground } from './backgroundPreference';
 import { useAccess } from './auth';
 import {
   ManagementPage,
@@ -263,6 +264,7 @@ function ContributionRecords({
 
 function SettingsWorkspace({ open, onAdminOperationPending }: { open: OpenModal; onAdminOperationPending?: (reference: string | null) => void }) {
   const { user, preview } = useAccess();
+  const { background, chooseBackground, canChooseBackground } = useWaterBackground();
   const [tab, setTab] = useState<
     "users" | "management" | "administration" | "lost-reasons" | "password" | "privacy"
   >(user?.isAdmin ? "users" : "password");
@@ -303,7 +305,13 @@ function SettingsWorkspace({ open, onAdminOperationPending }: { open: OpenModal;
           </>}
         </div>
       </div>
-      {tab === 'password' ? <div className="personal-settings"><PersonalDetails /><section className="personal-password" aria-label="Change password"><h2>Change password</h2><PasswordSettings /></section></div> : tab === 'privacy' ? <PrivacyDetails /> : !user.isAdmin || preview ? null : tab === 'users' ? <UsersAccess onPendingChange={onPendingChange} /> : tab === "management" ? (
+      {tab === 'password' ? <div className="personal-settings"><div className="personal-display-settings"><PersonalDetails /><label className="background-choice">
+        <span>Background</span>
+        <select aria-label="Background" value={background} disabled={!canChooseBackground} onChange={event => chooseBackground(event.target.value as WaterBackground)}>
+          <option value="watercolour">Watercolour</option>
+          <option value="diffuse">Diffuse</option>
+        </select>
+      </label></div><section className="personal-password" aria-label="Change password"><h2>Change password</h2><PasswordSettings /></section></div> : tab === 'privacy' ? <PrivacyDetails /> : !user.isAdmin || preview ? null : tab === 'users' ? <UsersAccess onPendingChange={onPendingChange} /> : tab === "management" ? (
         <ManagementPage open={open} />
       ) : tab === "lost-reasons" ? (
         <LostReasonSettings />

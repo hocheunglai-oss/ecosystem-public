@@ -89,11 +89,23 @@ async function usable(page, control) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal overflow');
   const paint = await control.evaluate(node => {
     const style = getComputedStyle(node), canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
-    const context = canvas.getContext('2d'); context.fillStyle = style.getPropertyValue('--mode-track').trim(); context.fillRect(0, 0, 1, 1);
-    return { actual: style.backgroundColor.match(/[\d.]+/g).map(Number), expected: [...context.getImageData(0, 0, 1, 1).data] };
+    const context = canvas.getContext('2d');
+    const rgba = colour => {
+      context.clearRect(0, 0, 1, 1); context.fillStyle = colour; context.fillRect(0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data];
+    };
+    return {
+      actual: rgba(style.backgroundColor), expected: rgba(style.getPropertyValue('--mode-track').trim()),
+      thumb: rgba(getComputedStyle(node.querySelector('.theme-mode-toggle__thumb')).backgroundColor),
+      ink: rgba(style.getPropertyValue('--ui-ink').trim()),
+      icons: [...node.querySelectorAll('svg')].map(icon => rgba(getComputedStyle(icon).color)),
+    };
   });
-  assert.deepEqual(paint.actual.slice(0, 3), paint.expected.slice(0, 3), 'Shared pill track retains its exact theme paint, including after hover/touch');
-  assert.equal(paint.actual[3] ?? 1, 1, 'Theme pill has an opaque readable track');
+  assert.deepEqual(paint.actual, paint.expected, 'Shared switch retains its exact translucent theme paint, including after hover/touch');
+  assert.ok(paint.actual[3] > 0 && paint.actual[3] < 64, 'Theme track remains subtly translucent');
+  assert.ok(paint.thumb[3] > 0 && paint.thumb[3] < 64, 'Selected thumb remains subtly translucent');
+  assert.equal(paint.icons.length, 2, 'Both theme icons remain present');
+  for (const ink of paint.icons) assert.deepEqual(ink, paint.ink, 'Both icons use the shared dark/light theme ink');
 
   const peers = await control.locator('..').locator(':scope > button, :scope > label').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().width && node.getBoundingClientRect().height).map(node => {
     const { left, right, top, bottom } = node.getBoundingClientRect(); return { left, right, top, bottom };

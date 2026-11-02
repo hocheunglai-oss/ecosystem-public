@@ -7,11 +7,11 @@ import type { WaterBackground } from './backgroundPreference';
 const backgroundMedia = {
   diffuse: {
     desktop: '/flowing-water-diffuse.mp4', mobile: '/flowing-water-diffuse-mobile.mp4',
-    poster: '/flowing-water-diffuse-poster.jpg', periodMs: 24000,
+    poster: '/flowing-water-diffuse-poster.jpg', sourcePeriodMs: 24000, playbackRate: 1,
   },
   watercolour: {
     desktop: '/flowing-water-watercolour.mp4', mobile: '/flowing-water-watercolour-mobile.mp4',
-    poster: '/flowing-water-watercolour-poster.jpg', periodMs: 6000,
+    poster: '/flowing-water-watercolour-poster.jpg', sourcePeriodMs: 6000, playbackRate: 0.6,
   },
 } as const;
 
@@ -83,6 +83,14 @@ function VideoWaterBackground({ paused, background }: { paused: boolean; backgro
       preference.removeEventListener('change', motion);
     };
   }, []);
+  useLayoutEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    // Apply the chosen speed before play, including when reduced motion restores
+    // the media element. Theme changes keep this node and its current phase.
+    video.defaultPlaybackRate = media.playbackRate;
+    video.playbackRate = media.playbackRate;
+  }, [media.playbackRate, reduced, failed]);
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -118,7 +126,8 @@ function VideoWaterBackground({ paused, background }: { paused: boolean; backgro
     <img ref={imageRef} className="flowing-water-image" src={media.poster} alt="" decoding="async" fetchPriority="high" />
     <NightStill imageRef={imageRef} />
     {!reduced && !failed && <video ref={videoRef} className="flowing-water-video" src={source}
-      muted loop playsInline preload="auto" disablePictureInPicture tabIndex={-1} data-flow-period-ms={media.periodMs}
+      muted loop playsInline preload="auto" disablePictureInPicture tabIndex={-1} data-flow-period-ms={media.sourcePeriodMs / media.playbackRate}
+      data-flow-source-period-ms={media.sourcePeriodMs} data-flow-playback-rate={media.playbackRate}
       onPlaying={event => {
         const video = event.currentTarget;
         if (video !== videoRef.current) return;

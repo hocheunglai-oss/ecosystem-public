@@ -37,17 +37,11 @@ jobs:
         run: >-
           env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
           -u BASH_ENV -u ENV bash scripts/recovery/install-tools.sh
-      - name: Signal independent backup monitor start
-        continue-on-error: true
-        env:
-          ECO_BACKUP_HEARTBEAT_URL: ${{ secrets.ECO_BACKUP_HEARTBEAT_URL }}
-        run: node scripts/recovery/heartbeat.mjs start
       - name: Check backup startup guards without source credentials
         run: >-
           env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
           node --test tests/backup-github.test.mjs
       - name: Capture, encrypt, verify Drive copy and retain five nights
-        id: capture
         env:
           ECO_NIGHTLY_BACKUP_ENABLED: ${{ vars.ECO_NIGHTLY_BACKUP_ENABLED }}
           ECO_BACKUP_CONFIGURATION: ${{ secrets.ECO_BACKUP_CONFIGURATION }}
@@ -62,11 +56,4 @@ jobs:
         run: >-
           env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
           node scripts/recovery/run-github.mjs --cleanup
-      - name: Signal independent backup monitor result
-        if: always()
-        env:
-          ECO_BACKUP_HEARTBEAT_URL: ${{ secrets.ECO_BACKUP_HEARTBEAT_URL }}
-          ECO_BACKUP_CAPTURE_OUTCOME: ${{ steps.capture.outcome }}
-          ECO_BACKUP_JOB_STATUS: ${{ job.status }}
-        run: node scripts/recovery/heartbeat.mjs finish
       # No artifact upload, cache save, debug trace or decrypted data in this workflow.

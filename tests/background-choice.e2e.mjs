@@ -251,7 +251,12 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
         await authenticationNavigation(page,'session',()=>page.reload({waitUntil:'domcontentloaded'}));await ready(page,choice);
         await expect(await openBackgroundSettings(page)).toHaveValue(choice);
         await page.screenshot({path:`${out}/${engine}-${width}-${choice}-settings-dark.png`,fullPage:true});
-        const selectBox=await page.getByLabel('Background',{exact:true}).boundingBox();assert.ok(selectBox&&selectBox.x>=0&&selectBox.x+selectBox.width<=width+1&&selectBox.height>=44,'Settings selector fits phone and touch target');
+        // A full-page capture can restart the finite workspace entrance. Check
+        // the settled geometry without relaxing the viewport or 44 px target.
+        await expect.poll(async()=>{
+          const selectBox=await page.getByLabel('Background',{exact:true}).boundingBox();
+          return Boolean(selectBox&&selectBox.x>=0&&selectBox.x+selectBox.width<=width+1&&selectBox.height>=44);
+        },{timeout:3000,message:'Settings selector fits phone and touch target'}).toBe(true);
         await page.getByRole('button',{name:'Close workspace',exact:true}).click();
         await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
         await shot(page,`${engine}-${width}-${choice}-signed-in-dark`);

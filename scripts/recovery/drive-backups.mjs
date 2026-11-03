@@ -23,6 +23,38 @@ const check = (condition, code) => { if (!condition) fail(code); };
 export class DriveBackupError extends Error {
   constructor(code) { super(`Drive backup operation failed (${code}).`); this.name = 'DriveBackupError'; this.code = code; }
 }
+// Public diagnostics must use this finite vocabulary, never an arbitrary error's
+// message/code or a Google response body. The caller supplies the operation phase.
+export const DRIVE_BACKUP_DIAGNOSTIC_CODES = Object.freeze([
+  'ACCOUNT_MISMATCH', 'AGE_CIPHERTEXT_REQUIRED', 'ARCHIVE_NOT_VERIFIED', 'COMPLETION_MISMATCH',
+  'CURRENT_ARCHIVE_CHANGED', 'CURRENT_ARCHIVE_MISSING', 'CURRENT_VERIFICATION_REQUIRED',
+  'DOWNLOAD_HASH_MISMATCH', 'DUPLICATE_LIST_ENTRY', 'FILE_ID_MISMATCH', 'FILE_LIST_LIMIT',
+  'FILE_SCOPE_MISMATCH', 'FIVE_NEWER_NIGHTS_REQUIRED', 'FOLDER_MISMATCH', 'FUTURE_SNAPSHOT',
+  'HTTP_400', 'HTTP_401', 'HTTP_403', 'HTTP_404', 'HTTP_408', 'HTTP_409', 'HTTP_410',
+  'HTTP_412', 'HTTP_413', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504',
+  'ID_COLLISION', 'INCOMPLETE_FOLDER_LIST', 'INSUFFICIENT_DRIVE_QUOTA', 'INVALID_ARCHIVE_METADATA',
+  'INVALID_CLIENT', 'INVALID_FILE_ID', 'INVALID_FILE_TAGS', 'INVALID_GENERATED_ID',
+  'INVALID_GOOGLE_RESPONSE', 'INVALID_LIMITS', 'INVALID_LOCAL_ARCHIVE', 'INVALID_PERMISSIONS',
+  'INVALID_SNAPSHOT_TIME', 'INVALID_TARGET', 'INVALID_UPLOAD_RANGE', 'INVALID_UPLOAD_SESSION',
+  'INVALID_VERIFICATION_METADATA', 'LOCAL_FILE_CHANGED', 'LOCAL_HASH_MISMATCH',
+  'MISSING_FILE_VERSION', 'MISSING_RESPONSE_BODY', 'MUTATION_AUTHORIZATION_FAILED',
+  'NIGHT_COLLISION', 'NIGHT_NAME_COLLISION', 'NONPRIVATE_PERMISSIONS', 'OWNER_OR_SHARING_MISMATCH',
+  'PAGINATION_LIMIT', 'PAGINATION_LOOP', 'PENDING_ARCHIVE_CHANGED', 'PERMISSIONS_LIMIT',
+  'QUOTA_UNAVAILABLE', 'REDIRECT_REJECTED', 'REMOTE_CHANGED_BEFORE_COMPLETION',
+  'REMOTE_CHANGED_DURING_VERIFICATION', 'REMOTE_SIZE_OR_HASH_MISMATCH', 'REQUEST_TIMEOUT',
+  'RESPONSE_SIZE_LIMIT', 'RETAINED_ARCHIVE_CHANGED', 'RETENTION_FILE_CHANGED',
+  'RETENTION_NIGHT_COLLISION', 'TRANSPORT_FAILED', 'TRASH_READBACK_FAILED', 'UNMANAGED_FILE',
+  'UNSAFE_GOOGLE_ENDPOINT', 'UNSAFE_LOCAL_ARCHIVE', 'UPLOADED_METADATA_MISMATCH',
+  'UPLOAD_FAILED', 'UPLOAD_NO_PROGRESS', 'UPLOAD_RETRY_LIMIT',
+]);
+const diagnosticCodes = new Set(DRIVE_BACKUP_DIAGNOSTIC_CODES);
+export function classifyDriveBackupError(error) {
+  try {
+    if (!(error instanceof DriveBackupError)) return null;
+    const code = error.code;
+    return typeof code === 'string' && diagnosticCodes.has(code) ? code : null;
+  } catch { return null; }
+}
 export function hongKongNight(value) {
   const date = new Date(value); check(Number.isFinite(date.getTime()), 'INVALID_SNAPSHOT_TIME');
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
@@ -348,6 +380,12 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
   async function listManagedBackups() {
     await verifyTarget(); return (await listFolder()).filter(isManaged).map(file => descriptor(file, { pending: true }));
   }
+  /** Diagnose an existing copy without completing it, uploading, or authorizing retention. */
+  async function verifyArchiveReadOnly({ fileId }) {
+    await verifyTarget();
+    const checked = await verifyBytes(await metadata(fileId), true);
+    return Object.freeze({ ...checked.value, readbackVerifiedAt: new Date(now()).toISOString() });
+  }
   async function retainLatestNights({ currentReceipt }) {
     check(currentReceipt && minted.has(currentReceipt) && currentReceipt.verified === true, 'CURRENT_VERIFICATION_REQUIRED');
     await verifyTarget();
@@ -384,5 +422,5 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     }
     return { keepNights: cfg.keepNights, retainedNights: nights.slice(0, cfg.keepNights), trashed, permanentDeletionUsed: false };
   }
-  return Object.freeze({ verifyTarget, findVerifiedNight, uploadAndVerify, retainLatestNights, listManagedBackups });
+  return Object.freeze({ verifyTarget, findVerifiedNight, uploadAndVerify, retainLatestNights, listManagedBackups, verifyArchiveReadOnly });
 }

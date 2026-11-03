@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { ecoConnections } from '../config/ecoConnections.ts';
 import { verifyBackupToken, createGithubJwksLoader, BackupAuthError } from '../server/backup/oidc.ts';
-import { handleBackupDownloads, type BackupStorage, BACKUP_DOWNLOAD_LIMITS } from '../server/backup/handler.ts';
+import { handleBackupDownloads, type BackupStorage, type BackupDownloadFailure, BackupStorageError, BACKUP_DOWNLOAD_LIMITS } from '../server/backup/handler.ts';
 
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const otherKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -203,4 +203,22 @@ test('general attachments require managed metadata and allow pending actual byte
   assert.equal((await handleBackupDownloads(request({objects:[general]}),f.storage,f.options)).status,409);
  }
  const f=fixture();assert.equal((await handleBackupDownloads(request({objects:[{...general,size:general.size+1}]}),f.storage,f.options)).status,400);assert.deepEqual(f.calls,[]);
+});
+
+test('failure diagnostics contain only a fixed operation and status without source details or provider exceptions', async () => {
+  for (const stage of ['OBJECT_INFO', 'ATTACHMENT_INVENTORY', 'SIGNING'] as const) {
+    const f = fixture(), failures: BackupDownloadFailure[] = [];
+    if (stage === 'SIGNING') f.storage.sign = async () => { throw new BackupStorageError(stage); };
+    else f.storage.info = async () => { throw new BackupStorageError(stage); };
+    const response = await handleBackupDownloads(request(), f.storage, { ...f.options, onFailure: failure => { failures.push(failure); } });
+    assert.equal(response.status, 503); assert.deepEqual(failures, [{ stage, status: 503 }]);
+    assert.doesNotMatch(JSON.stringify(failures) + await response.text(), /synthetic|token=|11111111|22222222|supabase\.co/);
+  }
+  const f = fixture(), failures: BackupDownloadFailure[] = [];
+  f.storage.info = async () => { throw Error('private path / supplier secret token'); };
+  const response = await handleBackupDownloads(request(), f.storage, { ...f.options, onFailure: failure => { failures.push(failure); throw Error('logging failure'); } });
+  assert.equal(response.status, 503); assert.deepEqual(failures, [{ stage: 'INVENTORY', status: 503 }]);
+  assert.doesNotMatch(await response.text(), /private|supplier|token|logging/);
+  const denied = await handleBackupDownloads(request({}, 'invalid'), f.storage, { ...f.options, onFailure: failure => { failures.push(failure); } });
+  assert.equal(denied.status, 401); assert.deepEqual(failures.at(-1), { stage: 'AUTHENTICATION', status: 401 });
 });

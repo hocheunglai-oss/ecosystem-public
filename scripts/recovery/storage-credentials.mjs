@@ -1,4 +1,13 @@
 import { captureStorage, StorageCaptureError } from './capture-storage.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
+
+const AUTHORIZATION_HTTP_STATUSES = Object.freeze([400, 401, 403, 404, 405, 408, 409, 413, 429, 500, 502, 503, 504]);
+const TRANSIENT_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+// Only these fixed scalar codes may cross into public workflow diagnostics.
+export const AUTHORIZATION_DIAGNOSTIC_CODES = Object.freeze(['OIDC', 'STORAGE_AUTH'].flatMap(stage => [
+  ...AUTHORIZATION_HTTP_STATUSES.map(status => `${stage}_HTTP_${status}`), `${stage}_HTTP_OTHER`,
+  `${stage}_RESPONSE_INVALID`, `${stage}_RESPONSE_TOO_LARGE`, `${stage}_TRANSPORT_FAILED`,
+]));
 
 // GitHub supplies these short-lived request credentials to this job only. They
 // are passed by the launcher, never read from a stored connector/session token.
@@ -13,21 +22,23 @@ function lockUrl(value) {
     && !url.port && !url.username && !url.password && !url.hash, 'OIDC_CONFIGURATION_INVALID');
   return url;
 }
-async function jsonResponse(response, expectedUrl, limit = 32_768) {
-  check(response.status === 200 && !response.redirected && (!response.url || response.url === expectedUrl)
-    && response.headers.get('content-type')?.split(';')[0].trim() === 'application/json'
-    && response.body, 'AUTHORIZATION_RESPONSE_INVALID');
+async function jsonResponse(response, expectedUrl, stage, limit = 32_768) {
+  check(!response.redirected && (!response.url || response.url === expectedUrl), `${stage}_RESPONSE_INVALID`);
+  check(response.status === 200, `${stage}_HTTP_${AUTHORIZATION_HTTP_STATUSES.includes(response.status) ? response.status : 'OTHER'}`);
+  check(response.headers.get('content-type')?.split(';')[0].trim() === 'application/json'
+    && response.body, `${stage}_RESPONSE_INVALID`);
   const reader = response.body.getReader(), chunks = []; let bytes = 0;
   try {
     for (;;) {
       const next = await reader.read(); if (next.done) break;
-      bytes += next.value.byteLength; check(bytes <= limit, 'AUTHORIZATION_RESPONSE_TOO_LARGE'); chunks.push(next.value);
+      bytes += next.value.byteLength; check(bytes <= limit, `${stage}_RESPONSE_TOO_LARGE`); chunks.push(next.value);
     }
-    try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail('AUTHORIZATION_RESPONSE_INVALID'); }
+    try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail(`${stage}_RESPONSE_INVALID`); }
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export function createStorageCapture({ target, secrets, signal, fetchImpl = fetch, now = () => Date.now() }) {
+export function createStorageCapture({ target, secrets, signal, fetchImpl = fetch, now = () => Date.now(),
+  sleep = (ms, requestSignal) => delay(ms, undefined, { signal: requestSignal }) }) {
   check(target && /^[a-z0-9]{20}$/u.test(target.supabaseProjectRef ?? '') && target.backup
     && target.productionOrigin === new URL(target.productionOrigin).origin
     && new URL(target.productionOrigin).protocol === 'https:'
@@ -44,13 +55,41 @@ export function createStorageCapture({ target, secrets, signal, fetchImpl = fetc
   const sourceOrigin = `https://${target.supabaseProjectRef}.supabase.co`;
   let pendingToken, cachedToken, tokenExpires = 0;
   const requestSignal = extra => AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : []), ...(extra ? [extra] : [])]);
+  async function authorizeJson(url, options, stage, extraSignal) {
+    const cancelled = () => signal?.aborted || extraSignal?.aborted;
+    // These calls only obtain a job token or a short-lived GET link. Retrying
+    // does not write source data. Permanent auth/conflict failures stay closed.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (cancelled()) fail('CAPTURE_CANCELLED');
+      let response;
+      try {
+        const attemptOptions = typeof options === 'function' ? await options() : options;
+        if (cancelled()) fail('CAPTURE_CANCELLED');
+        response = await fetchImpl(url, { ...attemptOptions, redirect: 'error', signal: requestSignal(extraSignal) });
+        return await jsonResponse(response, url, stage);
+      } catch (error) {
+        if (cancelled()) fail('CAPTURE_CANCELLED');
+        const retryable = error instanceof StorageCaptureError
+          ? TRANSIENT_HTTP_STATUSES.has(response?.status) && error.code === `${stage}_HTTP_${response.status}`
+          : true;
+        if (!retryable || attempt === 2) {
+          if (error instanceof StorageCaptureError) throw error;
+          fail(`${stage}_TRANSPORT_FAILED`);
+        }
+      } finally {
+        // Discard error bodies without logging their possibly sensitive content.
+        if (response?.body && !response.body.locked) void response.body.cancel().catch(() => {});
+      }
+      try { await sleep(500 * 2 ** attempt, AbortSignal.any([...(signal ? [signal] : []), ...(extraSignal ? [extraSignal] : [])])); }
+      catch { fail('CAPTURE_CANCELLED'); }
+    }
+  }
   async function getToken() {
     if (cachedToken && now() + 60_000 < tokenExpires) return cachedToken;
     if (!pendingToken) pendingToken = (async () => {
       const url = requestUrl.href;
-      const response = await fetchImpl(url, { method: 'GET', redirect: 'error', signal: requestSignal(),
-        headers: { Authorization: `Bearer ${requestToken}`, Accept: 'application/json' } });
-      const data = await jsonResponse(response, url);
+      const data = await authorizeJson(url, { method: 'GET',
+        headers: { Authorization: `Bearer ${requestToken}`, Accept: 'application/json' } }, 'OIDC');
       check(typeof data.value === 'string' && data.value.length < 16_384
         && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(data.value), 'OIDC_TOKEN_INVALID');
       // Expiry is used only for refreshing this cache. ECO verifies the signature
@@ -94,10 +133,11 @@ export function createStorageCapture({ target, secrets, signal, fetchImpl = fetc
         serviceKey: 'signed-download-transport', objects: copied, outputDir,
         async fetchImpl(input, init) {
           check(typeof input === 'string' && sources.has(input) && init?.method === 'GET', 'UNEXPECTED_STORAGE_REQUEST');
-          const {expectedHash,...item} = sources.get(input), authSignal = requestSignal(init.signal);
-          const response = await fetchImpl(endpoint, { method: 'POST', redirect: 'error', signal: authSignal,
-            headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ objects: [item] }) });
-          const result = await jsonResponse(response, endpoint);
+          const {expectedHash,...item} = sources.get(input);
+          // Re-check expiry for every attempt: retries may outlast the cached
+          // token's refresh margin even though the original request was valid.
+          const result = await authorizeJson(endpoint, async () => ({ method: 'POST',
+            headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ objects: [item] }) }), 'STORAGE_AUTH', init.signal);
           check(result?.schemaVersion === 1 && result.projectRef === target.supabaseProjectRef
             && Array.isArray(result.objects) && result.objects.length === 1, 'BACKUP_MANIFEST_INVALID');
           const entry = result.objects[0];

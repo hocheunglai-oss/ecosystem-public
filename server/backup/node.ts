@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 import { ecoConnections } from '../../config/ecoConnections.ts';
 import { authConfig } from '../auth/config.ts';
-import { BACKUP_DOWNLOAD_LIMITS, handleBackupDownloads } from './handler.ts';
+import { BACKUP_DOWNLOAD_LIMITS, BackupStorageError, handleBackupDownloads } from './handler.ts';
 
 export async function serveBackupDownloads(req: IncomingMessage & { body?: unknown }, res: ServerResponse, environment = process.env) {
   res.setHeader('Cache-Control', 'private, no-store'); res.setHeader('Content-Type', 'application/json');
@@ -33,24 +33,27 @@ export async function serveBackupDownloads(req: IncomingMessage & { body?: unkno
     const getBucket = (id: string) => { if (!([ecoConnections.supplierReportsBucket, ecoConnections.profileAttachmentsBucket] as readonly string[]).includes(id)) throw Error('Unknown bucket'); return service.storage.from(id); };
     const response = await handleBackupDownloads(request, {
       async info(path, bucketId = ecoConnections.supplierReportsBucket) {
-        const { data, error } = await getBucket(bucketId).info(path);
-        if (error || !data) throw Error('Storage unavailable');
+        const { data, error } = await getBucket(bucketId).info(path).catch(() => { throw new BackupStorageError('OBJECT_INFO'); });
+        if (error || !data) throw new BackupStorageError('OBJECT_INFO');
         let verified: {managed?: boolean;sha256?:string|null} = {};
         if (bucketId === ecoConnections.profileAttachmentsBucket) {
-          const result = await service.rpc('eco_profile_attachment_backup', {p_path:path});
-          if (result.error || !result.data || result.data.state === 'active' && (result.data.objectId !== data.id || result.data.version !== (data.version ?? null) || result.data.size !== data.size || result.data.mime !== data.contentType)) throw Error('Attachment inventory mismatch');
+          const result = await service.rpc('eco_profile_attachment_backup', {p_path:path}).then(value => value, () => { throw new BackupStorageError('ATTACHMENT_INVENTORY'); });
+          if (result.error || !result.data || result.data.state === 'active' && (result.data.objectId !== data.id || result.data.version !== (data.version ?? null) || result.data.size !== data.size || result.data.mime !== data.contentType)) throw new BackupStorageError('ATTACHMENT_INVENTORY');
           verified = {managed:true,sha256:result.data.sha256};
         }
         return { ...verified, id: data.id, bucketId: data.bucketId, name: data.name, version: data.version ?? null,
           size: data.size ?? NaN, contentType: data.contentType ?? '' };
       },
       async sign(path, seconds, bucketId = ecoConnections.supplierReportsBucket) {
-        const { data, error } = await getBucket(bucketId).createSignedUrl(path, seconds);
-        if (error || !data?.signedUrl) throw Error('Storage unavailable');
+        const { data, error } = await getBucket(bucketId).createSignedUrl(path, seconds).catch(() => { throw new BackupStorageError('SIGNING'); });
+        if (error || !data?.signedUrl) throw new BackupStorageError('SIGNING');
         return data.signedUrl;
       },
-    }, { enabled: true });
+    }, { enabled: true, onFailure: ({ stage, status }) => console.warn(`ECO backup download stage=${stage} status=${status}.`) });
     res.statusCode = response.status; response.headers.forEach((value, name) => res.setHeader(name, value));
     res.end(await response.text());
-  } catch { res.statusCode = 503; res.end('{"message":"Backup service unavailable."}'); }
+  } catch {
+    console.warn('ECO backup download stage=CONFIGURATION status=503.');
+    res.statusCode = 503; res.end('{"message":"Backup service unavailable."}');
+  }
 }

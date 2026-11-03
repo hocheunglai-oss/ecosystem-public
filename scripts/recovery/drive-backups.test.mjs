@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { createDriveBackupClient, DriveBackupError, hongKongNight } from './drive-backups.mjs';
+import { createDriveBackupClient, DriveBackupError, DRIVE_BACKUP_DIAGNOSTIC_CODES, classifyDriveBackupError, hongKongNight } from './drive-backups.mjs';
 
 const EMAIL = 'backup@example.invalid', FOLDER = 'expected_folder', NOW = '2026-10-21T00:00:00.000Z';
 const hash = data => createHash('sha256').update(data).digest('hex');
@@ -234,6 +234,39 @@ test('pending complete files recover verification, while corrupt pending files c
   assert.equal(completed.fileId, 'pending'); assert.equal(broken.generated, 0);
   assert.equal(broken.writes.find(write => write.kind === 'start').method, 'PATCH');
 });
+test('read-only archive verification checks pending and verified bytes without changing metadata or minting retention authority', async () => {
+  for (const status of ['pending', 'verified']) {
+    const drive = new FakeDrive(), record = drive.add('diagnostic_archive', '2026-10-20');
+    record.meta.appProperties.ecoBackupStatus = status;
+    if (status === 'pending') { delete record.meta.appProperties.ecoBackupMethod; delete record.meta.appProperties.ecoBackupVerifiedAt; }
+    const original = structuredClone(record.meta), api = client(drive);
+    const checked = await api.verifyArchiveReadOnly({ fileId: record.meta.id });
+    assert.deepEqual(checked, { fileId: 'diagnostic_archive', night: '2026-10-20',
+      sha256: hash(record.bytes), size: record.bytes.length, status, readbackVerifiedAt: NOW });
+    assert.equal(Object.isFrozen(checked), true);
+    assert.deepEqual(record.meta, original);
+    assert.equal(drive.calls.every(call => call.method === 'GET'), true);
+    assert.equal(drive.calls.filter(call => new URL(call.url).searchParams.get('alt') === 'media').length, 1);
+    await assert.rejects(api.retainLatestNights({ currentReceipt: checked }), { code: 'CURRENT_VERIFICATION_REQUIRED' });
+    assert.equal(drive.writes.length, 0);
+  }
+});
+test('read-only archive verification retains the exact identity, checksum, privacy and unchanged-metadata checks', async () => {
+  for (const [configure, code] of [
+    [(drive, record) => { record.meta.parents = ['other_folder']; }, 'FILE_SCOPE_MISMATCH'],
+    [(drive, record) => { record.meta.appProperties = {}; }, 'UNMANAGED_FILE'],
+    [(drive, record) => { record.meta.shared = true; }, 'OWNER_OR_SHARING_MISMATCH'],
+    [drive => { drive.permissionExtra = { id: 'external', type: 'anyone', role: 'reader' }; }, 'NONPRIVATE_PERMISSIONS'],
+    [drive => { drive.corruptDownload = 'diagnostic_archive'; }, 'DOWNLOAD_HASH_MISMATCH'],
+    [drive => { drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; }; }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+  ]) {
+    const drive = new FakeDrive(), record = drive.add('diagnostic_archive', '2026-10-20');
+    configure(drive, record);
+    await assert.rejects(client(drive).verifyArchiveReadOnly({ fileId: record.meta.id }), { code });
+    assert.equal(drive.calls.every(call => call.method === 'GET'), true);
+    assert.equal(drive.writes.length, 0);
+  }
+});
 test('pre-existing or concurrent night collisions never overwrite or prune data', async t => {
   const input = await fixture(t), pre = new FakeDrive();
   pre.add('user_file', '2026-10-21', bytesFor('user'), { appProperties: {} });
@@ -283,6 +316,42 @@ test('transport diagnostics never expose opaque OAuth-client errors', async () =
     assert.equal(String(error.stack).includes('synthetic-secret'), false); return true;
   });
   assert.equal(drive.calls.length, 3);
+});
+test('public Drive diagnostics distinguish upload verification failures without exposing provider details', async t => {
+  const input = await fixture(t);
+  for (const [configure, expected] of [
+    [drive => { drive.corruptDownload = 'generated_1'; }, 'DOWNLOAD_HASH_MISMATCH'],
+    [drive => { drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; }; }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [drive => { drive.redirectDownload = true; }, 'REDIRECT_REJECTED'],
+    [drive => { drive.permissionExtra = { id: 'external', type: 'anyone', role: 'reader' }; }, 'NONPRIVATE_PERMISSIONS'],
+  ]) {
+    const drive = new FakeDrive(); configure(drive);
+    await assert.rejects(client(drive).uploadAndVerify(input), error => {
+      error.message = 'Bearer synthetic-private-token; private source path';
+      error.cause = { url: 'https://private.example.invalid/secret', response: 'private response' };
+      assert.equal(classifyDriveBackupError(error), expected);
+      return true;
+    });
+    assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
+  }
+});
+test('Drive diagnostic vocabulary is immutable and rejects untrusted, unknown or hostile error values', () => {
+  assert.equal(Object.isFrozen(DRIVE_BACKUP_DIAGNOSTIC_CODES), true);
+  assert.equal(new Set(DRIVE_BACKUP_DIAGNOSTIC_CODES).size, DRIVE_BACKUP_DIAGNOSTIC_CODES.length);
+  for (const code of DRIVE_BACKUP_DIAGNOSTIC_CODES) {
+    assert.match(code, /^[A-Z][A-Z0-9_]+$/u);
+    assert.equal(classifyDriveBackupError(new DriveBackupError(code)), code);
+  }
+  const hostile = new DriveBackupError('DOWNLOAD_HASH_MISMATCH');
+  Object.defineProperty(hostile, 'code', { get() { throw new Error('private getter content'); } });
+  const unknown = new DriveBackupError('Bearer private-token');
+  for (const value of [null, undefined, 'HTTP_403', new Error('HTTP_403'),
+    { name: 'DriveBackupError', code: 'HTTP_403', message: 'private body' }, unknown, hostile]) {
+    assert.equal(classifyDriveBackupError(value), null);
+  }
+  const safe = new DriveBackupError('HTTP_403');
+  for (const key of ['message', 'cause', 'stack']) Object.defineProperty(safe, key, { get() { throw new Error('must not inspect private details'); } });
+  assert.equal(classifyDriveBackupError(safe), 'HTTP_403');
 });
 test('loss of the caller lock during upload blocks the next chunk and completion', async t => {
   const input = await fixture(t, Buffer.concat([bytesFor('lock-loss'), Buffer.alloc(600_000, 5)]));

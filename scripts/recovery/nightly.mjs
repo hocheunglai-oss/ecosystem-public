@@ -8,7 +8,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { capturePostgres, validateConnection, SqlSession, assertReadOnlySourceRole } from './capture-postgres.mjs';
 import { sealDirectory, MANIFEST_NAME, validateRelativePath, validateManifest } from './archive.mjs';
-import { createDriveBackupClient, hongKongNight } from './drive-backups.mjs';
+import { createDriveBackupClient, hongKongNight, DRIVE_BACKUP_DIAGNOSTIC_CODES, classifyDriveBackupError } from './drive-backups.mjs';
+import { AUTHORIZATION_DIAGNOSTIC_CODES } from './storage-credentials.mjs';
 
 const fail = code => { throw new NightlyError(code); };
 const check = (value, code) => { if (!value) fail(code); };
@@ -19,7 +20,8 @@ const MAX_DURATION_MS = 45 * 60_000;
 const PRIVATE_MARKER = 'AGE-SECRET-KEY-1';
 const DIAGNOSTIC_PREFIX = 'ECO_BACKUP_DIAGNOSTIC ';
 const DIAGNOSTIC_PHASES = new Set(['CONFIGURATION','RUN_LOCK','DRIVE_TARGET','DATABASE_CAPTURE','STORAGE','ENCRYPTION','DRIVE_UPLOAD','RETENTION','CLEANUP','WORKER']);
-const DIAGNOSTIC_CODES = new Set(['STARTED','COMPLETED','FAILED','TIMEOUT','CANCELLED','CLEANUP_FAILED','AUTHORIZATION_FAILED','OIDC_TOKEN_INVALID','SOURCE_LOCK_LOST','CHECKSUM_MISMATCH']);
+const DIAGNOSTIC_CODES = new Set(['STARTED','COMPLETED','FAILED','TIMEOUT','CANCELLED','CLEANUP_FAILED','AUTHORIZATION_FAILED','OIDC_TOKEN_INVALID','SOURCE_LOCK_LOST','CHECKSUM_MISMATCH', ...DRIVE_BACKUP_DIAGNOSTIC_CODES, ...AUTHORIZATION_DIAGNOSTIC_CODES]);
+const authorizationDiagnosticCodes = new Set(AUTHORIZATION_DIAGNOSTIC_CODES);
 
 /** Rebuild exactly three allowlisted scalar fields; never serialize an exception. */
 export function safeDiagnostic(value) {
@@ -54,6 +56,9 @@ export function diagnosticReader(onDiagnostic = () => {}) {
 }
 function diagnosticCode(error) {
   try {
+    const driveCode = classifyDriveBackupError(error);
+    if (driveCode) return driveCode;
+    if (authorizationDiagnosticCodes.has(error?.code)) return error.code;
     if (['AUTHORIZATION_RESPONSE_INVALID','DRIVE_AUTH_FAILED','HTTP_401','HTTP_403'].includes(error?.code)) return 'AUTHORIZATION_FAILED';
     if (error?.code === 'OIDC_TOKEN_INVALID') return 'OIDC_TOKEN_INVALID';
     if (['RUN_LOCK_LOST','RUN_LOCK_UNAVAILABLE'].includes(error?.code)) return 'SOURCE_LOCK_LOST';

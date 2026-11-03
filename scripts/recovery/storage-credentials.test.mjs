@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, stat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createStorageCapture } from './storage-credentials.mjs';
+import { AUTHORIZATION_DIAGNOSTIC_CODES, createStorageCapture } from './storage-credentials.mjs';
 
 const target = { productionOrigin: 'https://eco.example.invalid', supabaseProjectRef: 'abcdefghijklmnopqrst',
   supplierReportsBucket: 'eco-supplier-reports', backup: { storagePath: '/api/backup/storage-downloads' } };
@@ -123,7 +123,103 @@ test('an aborted backup cancels outbound authorization and leaves no partial dir
     const controller = new AbortController(); controller.abort(); const f = fixture();
     await assert.rejects(createStorageCapture({ target, secrets, signal: controller.signal, fetchImpl: f.fetchImpl, now })([makeObject()], outputDir));
     await assert.rejects(stat(outputDir), { code: 'ENOENT' });
-    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls.length, 0);
+  });
+});
+
+test('temporary signing service and job-token failures retry a bounded number of times and retain byte validation', async () => {
+  for (const stage of ['OIDC', 'STORAGE_AUTH']) for (const status of [408, 429, 500, 502, 503, 504, 'network']) {
+    await directory(async outputDir => {
+      const f = fixture(), sleeps = []; let attempts = 0;
+      const fetchImpl = async (url, init) => {
+        const selected = stage === 'OIDC' ? String(url).startsWith('https://run.actions.githubusercontent.com/') : url === target.productionOrigin + target.backup.storagePath;
+        if (selected && ++attempts < 3) {
+          if (status === 'network') throw new TypeError('private provider URL and token');
+          return new Response('private provider response', { status });
+        }
+        return f.fetchImpl(url, init);
+      };
+      const result = await createStorageCapture({ target, secrets, fetchImpl, now, sleep: async ms => { sleeps.push(ms); } })([makeObject()], outputDir);
+      assert.equal(attempts, 3); assert.deepEqual(sleeps, [500, 1000]);
+      assert.equal(result.objects[0].sha256, digest); assert.deepEqual(await readFile(join(outputDir, result.objects[0].path)), bytes);
+      assert.doesNotMatch(JSON.stringify(result), /private provider|token|synthetic-link/);
+    });
+  }
+});
+
+test('permanent HTTP failures never retry and safe diagnostics identify the exact stage and status', async () => {
+  for (const stage of ['OIDC', 'STORAGE_AUTH']) for (const status of [400, 401, 403, 404, 405, 409, 413, 418]) {
+    await directory(async outputDir => {
+      const f = fixture(); let attempts = 0;
+      const fetchImpl = async (url, init) => {
+        const selected = stage === 'OIDC' ? String(url).startsWith('https://run.actions.githubusercontent.com/') : url === target.productionOrigin + target.backup.storagePath;
+        if (selected) { attempts++; return new Response('secret-key private report token=abc', { status }); }
+        return f.fetchImpl(url, init);
+      };
+      const code = `${stage}_HTTP_${status === 418 ? 'OTHER' : status}`;
+      assert.ok(AUTHORIZATION_DIAGNOSTIC_CODES.includes(code));
+      await assert.rejects(createStorageCapture({ target, secrets, fetchImpl, now, sleep: async () => assert.fail('Permanent failure retried') })([makeObject()], outputDir), error => {
+        assert.equal(error.code, code); assert.doesNotMatch(error.message, /secret-key|private report|token=/); return true;
+      });
+      assert.equal(attempts, 1); await assert.rejects(stat(outputDir), { code: 'ENOENT' });
+    });
+  }
+});
+
+test('each signing retry refreshes a job token that entered its expiry margin during the previous attempt', async () => {
+  await directory(async outputDir => {
+    const f = fixture(), authorizations = []; let clock = now(), tokenRequests = 0;
+    const fetchImpl = async (url, init) => {
+      if (String(url).startsWith('https://run.actions.githubusercontent.com/')) {
+        tokenRequests++;
+        assert.equal(new URL(url).searchParams.get('audience'), target.productionOrigin + target.backup.storagePath);
+        assert.equal(init.headers.Authorization, `Bearer ${secrets.oidcRequestToken}`);
+        const value = 'eyJhbGciOiJSUzI1NiJ9.' + Buffer.from(JSON.stringify({ exp: clock / 1000 + 65 })).toString('base64url') + '.c2lnbmF0dXJl';
+        return Response.json({ value });
+      }
+      if (url === target.productionOrigin + target.backup.storagePath) {
+        authorizations.push(init.headers.Authorization);
+        const claims = JSON.parse(Buffer.from(init.headers.Authorization.split('.')[1], 'base64url').toString());
+        assert.ok(claims.exp * 1000 > clock + 60_000);
+        if (authorizations.length < 3) { clock += 30_000; return new Response('temporary upstream failure', { status: 503 }); }
+      }
+      return f.fetchImpl(url, init);
+    };
+    const result = await createStorageCapture({ target, secrets, fetchImpl, now: () => clock, sleep: async () => {} })([makeObject()], outputDir);
+    assert.equal(tokenRequests, 3); assert.equal(new Set(authorizations).size, 3);
+    assert.equal(result.objects[0].sha256, digest);
+  });
+});
+
+test('persistent transient failure stops after three attempts and malformed successes are not retried', async () => {
+  for (const mode of ['503', 'network', 'json', 'large', 'redirect']) {
+    await directory(async outputDir => {
+      const f = fixture(); let attempts = 0;
+      const fetchImpl = async (url, init) => {
+        if (url !== target.productionOrigin + target.backup.storagePath) return f.fetchImpl(url, init);
+        attempts++;
+        if (mode === 'network') throw new TypeError('private token');
+        if (mode === 'redirect') return new Response(null, { status: 302, headers: { location: 'https://attacker.invalid' } });
+        return new Response(mode === 'large' ? 'x'.repeat(33_000) : 'private invalid JSON', { status: mode === '503' ? 503 : 200, headers: { 'Content-Type': 'application/json' } });
+      };
+      const suffix = { '503':'HTTP_503', network:'TRANSPORT_FAILED', json:'RESPONSE_INVALID', large:'RESPONSE_TOO_LARGE', redirect:'HTTP_OTHER' }[mode];
+      await assert.rejects(createStorageCapture({ target, secrets, fetchImpl, now, sleep: async () => {} })([makeObject()], outputDir), { code: `STORAGE_AUTH_${suffix}` });
+      assert.equal(attempts, ['503', 'network'].includes(mode) ? 3 : 1);
+      await assert.rejects(stat(outputDir), { code: 'ENOENT' });
+    });
+  }
+});
+
+test('cancelling during retry backoff prevents another request and cleans partial output', async () => {
+  await directory(async outputDir => {
+    const controller = new AbortController(), f = fixture(); let attempts = 0;
+    const fetchImpl = async (url, init) => {
+      if (url !== target.productionOrigin + target.backup.storagePath) return f.fetchImpl(url, init);
+      attempts++; return new Response('private provider response', { status: 503 });
+    };
+    await assert.rejects(createStorageCapture({ target, secrets, fetchImpl, now, signal: controller.signal,
+      sleep: async () => controller.abort() })([makeObject()], outputDir), { code: 'CAPTURE_CANCELLED' });
+    assert.equal(attempts, 1); await assert.rejects(stat(outputDir), { code: 'ENOENT' });
   });
 });
 

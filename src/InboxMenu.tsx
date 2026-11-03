@@ -7,6 +7,7 @@ import { useDemo } from "./store";
 import { canTrade } from "./lib/model";
 import { incomingScenarios } from "./lib/incomingScenarios";
 import { PhoneChangeRequestQueue, usePhoneChangeRequests } from './PhoneChangeRequests';
+import BackupAlert from './BackupAlert';
 import "./demo-scenarios.css";
 
 function preview(item: IncomingEnquiry) {
@@ -84,6 +85,7 @@ export function InboxMenu({ onOpen, presentation }: { onOpen: () => void; presen
         </div>
       </div>
       <PhoneChangeRequestQueue compact />
+      <BackupAlert enabled={!testAvailable} />
       {testAvailable && canTrade(actor) && <div className="inbox-arrivals">
         <button type="button" aria-expanded={scenarioChannel === "whatsapp"} onClick={() => setScenarioChannel(value => value === "whatsapp" ? null : "whatsapp")}>
           <MessageCircle size={15} />

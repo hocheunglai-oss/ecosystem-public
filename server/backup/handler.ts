@@ -9,6 +9,16 @@ export interface BackupStorage {
   info(path: string, bucketId?: string): Promise<{ id: string; bucketId: string; name: string; size: number; version: string | null; contentType: string; managed?: boolean; sha256?: string | null }>;
   sign(path: string, seconds: number, bucketId?: string): Promise<string>;
 }
+const FAILURE_STAGES = ['REQUEST', 'AUTHENTICATION', 'INVENTORY', 'OBJECT_INFO', 'ATTACHMENT_INVENTORY', 'SIGNING'] as const;
+type FailureStage = typeof FAILURE_STAGES[number];
+export interface BackupDownloadFailure { stage: FailureStage; status: number }
+/** No provider exception, object path, credential or response body is retained. */
+export class BackupStorageError extends Error {
+  readonly stage: FailureStage;
+  constructor(stage: 'OBJECT_INFO' | 'ATTACHMENT_INVENTORY' | 'SIGNING') {
+    super('Backup storage unavailable.'); this.stage = stage;
+  }
+}
 class RequestError extends Error {
   readonly status: number;
   constructor(status: number) { super('Backup request rejected.'); this.status = status; }
@@ -39,25 +49,30 @@ export function parseBackupObjects(value: unknown): BackupObject[] {
 }
 export async function handleBackupDownloads(request: Request, storage: BackupStorage, options: {
   enabled: boolean; authenticate?: typeof verifyBackupToken; now?: () => number;
+  onFailure?: (failure: BackupDownloadFailure) => void;
 }): Promise<Response> {
   const respond = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers: {
     'Content-Type': 'application/json', 'Cache-Control': 'private, no-store, max-age=0',
     Pragma: 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
   } });
+  let stage: FailureStage = 'REQUEST';
   try {
     if (!options.enabled) return respond({ message: 'Not found.' }, 404);
     const url = new URL(request.url);
     if (url.pathname !== ecoConnections.backup.storagePath || url.search) reject(404);
     if (request.method !== 'POST') reject(405);
+    stage = 'AUTHENTICATION';
     const authorization = request.headers.get('authorization');
     if (!authorization || !/^Bearer [A-Za-z0-9_.-]{1,16384}$/.test(authorization)) throw new BackupAuthError();
     await (options.authenticate ?? verifyBackupToken)(authorization.slice(7));
+    stage = 'REQUEST';
     if (request.headers.has('origin') || request.headers.has('sec-fetch-site')) reject(403);
     if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') reject();
     const raw = await request.text(); if (Buffer.byteLength(raw) > BACKUP_DOWNLOAD_LIMITS.requestBytes) reject(413);
     let parsed: unknown; try { parsed = JSON.parse(raw); } catch { return reject(); }
     const items = parseBackupObjects(parsed), output = [];
     for (const item of items) {
+      stage = 'INVENTORY';
       const current = await storage.info(item.path, item.bucketId);
       const report = item.bucketId === ecoConnections.supplierReportsBucket;
       if (current.id !== item.id || current.bucketId !== item.bucketId || current.name !== item.path
@@ -66,6 +81,7 @@ export async function handleBackupDownloads(request: Request, storage: BackupSto
           || !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(current.contentType)
           || !(current.sha256 === null || typeof current.sha256 === 'string' && /^[a-f0-9]{64}$/.test(current.sha256)))) reject(409);
       const expiresAt = new Date((options.now ?? Date.now)() + BACKUP_DOWNLOAD_LIMITS.signedSeconds * 1000).toISOString();
+      stage = 'SIGNING';
       const signed = new URL(await storage.sign(item.path, BACKUP_DOWNLOAD_LIMITS.signedSeconds, item.bucketId));
       if (signed.origin !== `https://${ecoConnections.supabaseProjectRef}.supabase.co`
         || signed.username || signed.password || signed.hash
@@ -76,6 +92,8 @@ export async function handleBackupDownloads(request: Request, storage: BackupSto
     return respond({ schemaVersion: 1, projectRef: ecoConnections.supabaseProjectRef, objects: output }, 200);
   } catch (error) {
     const status = error instanceof BackupAuthError ? 401 : error instanceof RequestError ? error.status : 503;
+    if (error instanceof BackupStorageError && FAILURE_STAGES.includes(error.stage)) stage = error.stage;
+    try { options.onFailure?.({ stage, status }); } catch { /* Diagnostics never alter access or the response. */ }
     return respond({ message: status === 401 ? 'Backup authentication failed.' : 'Backup request unavailable.' }, status);
   }
 }

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { validateConnection } from './capture-postgres.mjs';
+import { DriveBackupError } from './drive-backups.mjs';
 import { validateExecutionContext, validateRuntime, readPrivateFile, loadSecrets, runNightly,
   superviseWorker, createGoogleAuthorizedFetch, publicStatus, writeManifest,
   safeDiagnostic, diagnosticLine, publicDiagnostic, diagnosticReader } from './nightly.mjs';
@@ -133,7 +134,7 @@ test('failure stages are fixed enums and underlying provider errors never enter 
   }
 });
 test('nested storage authorization failure retains its stage and only an approved error code',async()=>{
-  for(const [code,expected]of [['AUTHORIZATION_RESPONSE_INVALID','AUTHORIZATION_FAILED'],['OIDC_TOKEN_INVALID','OIDC_TOKEN_INVALID'],['PRIVATE_TOKEN_WITH_SQL SELECT * FROM auth.users','FAILED']]){
+  for(const [code,expected]of [['AUTHORIZATION_RESPONSE_INVALID','AUTHORIZATION_FAILED'],['OIDC_TOKEN_INVALID','OIDC_TOKEN_INVALID'],['STORAGE_AUTH_HTTP_503','STORAGE_AUTH_HTTP_503'],['OIDC_HTTP_403','OIDC_HTTP_403'],['PRIVATE_TOKEN_WITH_SQL SELECT * FROM auth.users','FAILED']]){
     const f=await fixture(),diagnostics=[],original=f.deps.capture;
     f.deps.onDiagnostic=value=>diagnostics.push(value);
     f.deps.capture=async options=>{await original(options);return options.captureObjects([],options.outputDir);};
@@ -143,6 +144,21 @@ test('nested storage authorization failure retains its stage and only an approve
       assert.equal(diagnostics.at(-1).phase,'STORAGE');assert.equal(diagnostics.at(-1).code,expected);
       assert.equal(f.events.includes('seal'),false);assert.equal(f.events.includes('retain'),false);
       assert.doesNotMatch(JSON.stringify(diagnostics),/SYNTHETIC|PRIVATE_TOKEN|SELECT|bearer|provider/u);
+    }finally{await rm(f.directory,{recursive:true,force:true});}
+  }
+});
+test('Drive failures retain their exact safe check while preventing retention',async()=>{
+  for(const code of ['REMOTE_CHANGED_DURING_VERIFICATION','NONPRIVATE_PERMISSIONS','DOWNLOAD_HASH_MISMATCH','HTTP_503']){
+    const f=await fixture(), diagnostics=[];
+    f.deps.onDiagnostic=value=>diagnostics.push(value);
+    f.deps.drive.uploadAndVerify=async()=>{const error=new DriveBackupError(code);error.message=password;throw error;};
+    try{
+      await assert.rejects(runNightly(f.payload,f.deps));
+      assert.equal(diagnostics.at(-1).phase,'DRIVE_UPLOAD');
+      assert.equal(diagnostics.at(-1).code,code);
+      assert.equal(f.events.includes('retain'),false);
+      assert.ok(diagnostics.every(safeDiagnostic));
+      assert.doesNotMatch(JSON.stringify(diagnostics),/SYNTHETIC|password|bearer|https:/u);
     }finally{await rm(f.directory,{recursive:true,force:true});}
   }
 });

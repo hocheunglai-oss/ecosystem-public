@@ -145,6 +145,7 @@ jobs:
               tests/person-preview.e2e.mjs
               tests/auth-session-persistence.e2e.mjs
               tests/admin-health-refresh.e2e.mjs
+              tests/backup-alert.e2e.mjs
               tests/shared-contribution-availability.e2e.mjs
               tests/eco-release-gates.e2e.mjs
             artifacts: |
@@ -157,6 +158,7 @@ jobs:
               output/theme-touch-ui
               output/theme-toggle-ui
               output/background-choice-ui
+              output/backup-alert-ui
           - group: suppliers
             label: Suppliers
             scripts: |
@@ -284,6 +286,8 @@ jobs:
           ECO_TEST_ENGINE: ${{ matrix.engine || '' }}
           ECO_ADMIN_UI_ORIGIN: http://127.0.0.1:4286
           ECO_ADMIN_UI_OUTPUT: output/administration-ui
+          ECO_BACKUP_ALERT_ORIGIN: http://127.0.0.1:4286
+          ECO_BACKUP_ALERT_OUTPUT: output/backup-alert-ui
           ECO_ACTIONS_ORIGIN: http://127.0.0.1:4286
           ECO_ACTIONS_OUTPUT: output/contribution-actions-ui
           ECO_PERSON_PREVIEW_ORIGIN: http://127.0.0.1:4286

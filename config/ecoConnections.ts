@@ -10,6 +10,7 @@ export const ecoConnections = Object.freeze({
   supplierReportsBucket: 'eco-supplier-reports',
   profileAttachmentsBucket: 'eco-profile-attachments',
   backup: Object.freeze({
+    heartbeatOrigin: 'https://hc-ping.com',
     storagePath: '/api/backup/storage-downloads',
     githubRepositoryId: '1427776183',
     githubOwnerId: '265701760',

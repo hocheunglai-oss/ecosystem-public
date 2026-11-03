@@ -1,0 +1,15 @@
+.backup-alert {
+  margin-block: 10px;
+  padding: 12px;
+  min-width: 0;
+  border: 1px solid var(--ui-boundary);
+  border-radius: var(--ui-radius-panel);
+  background: var(--ui-field);
+  color: var(--ui-ink);
+  font-size: var(--ui-text-label);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.backup-alert-heading { display: flex; align-items: flex-start; gap: 8px; }
+.backup-alert-heading svg { flex: 0 0 16px; margin-top: 2px; }
+.backup-alert p { margin: 8px 0 12px; }

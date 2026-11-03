@@ -14,7 +14,8 @@ const AGE_HEADER = 'age-encryption.org/v1\n';
 const FILE_FIELDS = 'id,name,mimeType,parents,owners(emailAddress),ownedByMe,shared,driveId,trashed,size,sha256Checksum,version,appProperties,capabilities(canEdit,canTrash,canAddChildren,canListChildren)';
 const DEFAULTS = Object.freeze({ applicationTag: 'eco-nightly-v1',
   namePrefix: 'ECO-nightly', propertyPrefix: 'ecoBackup', keepNights: 5, maxArchiveBytes: 512 * 1024 ** 2,
-  chunkBytes: 8 * 1024 ** 2, requestTimeoutMs: 120_000, maxPages: 100, maxFiles: 10_000, retryLimit: 3 });
+  chunkBytes: 8 * 1024 ** 2, requestTimeoutMs: 120_000, verificationTimeoutMs: 300_000,
+  maxPages: 100, maxFiles: 10_000, retryLimit: 3 });
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/u;
 const validId = value => typeof value === 'string' && ID_PATTERN.test(value);
 const HASH_PATTERN = /^[a-f0-9]{64}$/u;
@@ -41,7 +42,9 @@ export const DRIVE_BACKUP_DIAGNOSTIC_CODES = Object.freeze([
   'NIGHT_COLLISION', 'NIGHT_NAME_COLLISION', 'NONPRIVATE_PERMISSIONS', 'OWNER_OR_SHARING_MISMATCH',
   'PAGINATION_LIMIT', 'PAGINATION_LOOP', 'PENDING_ARCHIVE_CHANGED', 'PERMISSIONS_LIMIT',
   'QUOTA_UNAVAILABLE', 'REDIRECT_REJECTED', 'REMOTE_CHANGED_BEFORE_COMPLETION',
-  'REMOTE_CHANGED_DURING_VERIFICATION', 'REMOTE_SIZE_OR_HASH_MISMATCH', 'REQUEST_TIMEOUT',
+  'REMOTE_CHANGED_DURING_VERIFICATION', 'REMOTE_ARCHIVE_METADATA_CHANGED', 'REMOTE_CHECKSUM_CHANGED',
+  'REMOTE_CHECKSUM_UNSTABLE', 'REMOTE_METADATA_UNSTABLE', 'REMOTE_VERSION_REGRESSED', 'REMOTE_VERSION_UNSTABLE',
+  'REMOTE_SIZE_OR_HASH_MISMATCH', 'REQUEST_TIMEOUT',
   'RESPONSE_SIZE_LIMIT', 'RETAINED_ARCHIVE_CHANGED', 'RETENTION_FILE_CHANGED',
   'RETENTION_NIGHT_COLLISION', 'TRANSPORT_FAILED', 'TRASH_READBACK_FAILED', 'UNMANAGED_FILE',
   'UNSAFE_GOOGLE_ENDPOINT', 'UNSAFE_LOCAL_ARCHIVE', 'UPLOADED_METADATA_MISMATCH',
@@ -96,7 +99,10 @@ async function consume(response, signal, { hash = false, maxBytes = 2 * 1024 ** 
       size += value.byteLength; check(size <= maxBytes, 'RESPONSE_SIZE_LIMIT');
       if (hash) digest.update(value); else chunks.push(value);
     }
-  } finally { try { reader.releaseLock(); } catch {} }
+  } finally {
+    if (signal.aborted) void reader.cancel().catch(() => {});
+    try { reader.releaseLock(); } catch {}
+  }
   return hash ? { size, sha256: digest.digest('hex') } : Buffer.concat(chunks);
 }
 
@@ -116,15 +122,20 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     && cfg.chunkBytes >= 256 * 1024 && cfg.chunkBytes <= 32 * 1024 ** 2 && cfg.chunkBytes % (256 * 1024) === 0,
   'INVALID_LIMITS');
   for (const key of ['requestTimeoutMs', 'maxPages', 'maxFiles', 'retryLimit']) check(Number.isSafeInteger(cfg[key]) && cfg[key] > 0, 'INVALID_LIMITS');
+  check(Number.isSafeInteger(cfg.verificationTimeoutMs) && cfg.verificationTimeoutMs > 0
+    && cfg.verificationTimeoutMs <= 300_000, 'INVALID_LIMITS');
   const email = cfg.expectedEmail.toLowerCase(), minted = new WeakSet();
   const key = name => `${cfg.propertyPrefix}${name}`;
   const get = (file, name) => file.appProperties?.[key(name)];
   const nameFor = night => `${cfg.namePrefix}-${night}.tar.gz.age`;
 
-  async function request(url, options = {}, { allowed = [200], retries = cfg.retryLimit, mode = 'json', maxBytes, resume = false } = {}) {
+  async function request(url, options = {}, { allowed = [200], retries = cfg.retryLimit, mode = 'json', maxBytes, resume = false, signal } = {}) {
     url = allowedUrl(url, resume);
     for (let attempt = 0; ; attempt++) {
+      check(!signal?.aborted, 'REQUEST_TIMEOUT');
       const controller = new AbortController();
+      const abort = () => controller.abort();
+      signal?.addEventListener('abort', abort, { once: true });
       const timer = setTimeout(() => controller.abort(), cfg.requestTimeoutMs);
       let response;
       try {
@@ -140,7 +151,8 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
           check(resume && response.status === 308 && !response.headers.get('location'), 'REDIRECT_REJECTED');
         if (!allowed.includes(response.status)) {
           if ([408, 429, 500, 502, 503, 504].includes(response.status) && attempt < retries) {
-            await response.body?.cancel().catch(() => {}); await sleep(Math.min(250 * 2 ** attempt, 4000)); continue;
+            await abortRace(response.body?.cancel().catch(() => {}) || Promise.resolve(), controller.signal);
+            await abortRace(sleep(Math.min(250 * 2 ** attempt, 4000)), controller.signal); continue;
           }
           fail(`HTTP_${Number(response.status) || 0}`);
         }
@@ -150,25 +162,26 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
         let json; try { json = JSON.parse(data.toString('utf8')); } catch { fail('INVALID_GOOGLE_RESPONSE'); }
         return { status: response.status, headers: response.headers, json };
       } catch (error) {
+        check(!signal?.aborted, 'REQUEST_TIMEOUT');
         if ((!(error instanceof DriveBackupError) || error.code === 'REQUEST_TIMEOUT') && attempt < retries) {
-          await sleep(Math.min(250 * 2 ** attempt, 4000)); continue;
+          await abortRace(sleep(Math.min(250 * 2 ** attempt, 4000)), signal || new AbortController().signal); continue;
         }
         if (error instanceof DriveBackupError) throw error;
         throw new DriveBackupError('TRANSPORT_FAILED');
-      } finally { clearTimeout(timer); controller.abort(); }
+      } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); controller.abort(); }
     }
   }
-  async function metadata(id) {
+  async function metadata(id, options) {
     check(validId(id), 'INVALID_FILE_ID');
-    const file = (await request(urlFor(`/drive/v3/files/${id}`, { fields: FILE_FIELDS }))).json;
+    const file = (await request(urlFor(`/drive/v3/files/${id}`, { fields: FILE_FIELDS }), {}, options)).json;
     check(file.id === id, 'FILE_ID_MISMATCH'); return file;
   }
-  async function permissions(id) {
+  async function permissions(id, options) {
     const all = [], seen = new Set(); let pageToken;
     for (let page = 0; page < cfg.maxPages; page++) {
       const { json } = await request(urlFor(`/drive/v3/files/${id}/permissions`, {
         fields: 'nextPageToken,permissions(id,type,role,emailAddress,deleted,pendingOwner)', pageSize: 100, pageToken,
-      }));
+      }), {}, options);
       check(Array.isArray(json.permissions), 'INVALID_PERMISSIONS'); all.push(...json.permissions);
       check(all.length <= cfg.maxFiles, 'PERMISSIONS_LIMIT');
       if (!json.nextPageToken) return all;
@@ -181,9 +194,9 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     check(file && file.trashed === false && file.ownedByMe === true && file.shared === false && !file.driveId
       && Array.isArray(file.owners) && file.owners.length === 1 && file.owners[0].emailAddress?.toLowerCase() === email, 'OWNER_OR_SHARING_MISMATCH');
   }
-  async function verifyPrivate(file) {
+  async function verifyPrivate(file, options) {
     privateOwner(file);
-    const grants = await permissions(file.id);
+    const grants = await permissions(file.id, options);
     check(grants.length === 1 && grants[0].type === 'user' && grants[0].role === 'owner'
       && grants[0].emailAddress?.toLowerCase() === email && !grants[0].deleted && !grants[0].pendingOwner, 'NONPRIVATE_PERMISSIONS');
   }
@@ -229,20 +242,60 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     check(typeof file.version === 'string' && /^\d+$/u.test(file.version), 'MISSING_FILE_VERSION');
     return { fileId: file.id, night, sha256, size: Number(sizeText), status };
   }
-  function fingerprint(file) {
+  function archiveFingerprint(file) {
     // Google returns appProperties as an unordered JSON map. Compare every key
     // and value in a stable order; a response's serialization order is not a change.
     const properties = Object.keys(file.appProperties).sort().map(name => [name, file.appProperties[name]]);
-    return JSON.stringify([file.id, file.name, file.parents, file.size, file.version, file.sha256Checksum, properties]);
+    return JSON.stringify([file.id, file.name, file.mimeType, file.parents, file.size, properties]);
+  }
+  function fingerprint(file) {
+    return JSON.stringify([archiveFingerprint(file), file.version, file.sha256Checksum]);
   }
   async function verifyBytes(file, pending = false) {
-    const value = descriptor(file, { pending }); await verifyPrivate(file);
-    check(String(file.size) === String(value.size) && (!file.sha256Checksum || file.sha256Checksum === value.sha256), 'REMOTE_SIZE_OR_HASH_MISMATCH');
-    const actual = await request(urlFor(`/drive/v3/files/${file.id}`, { alt: 'media' }), {}, { mode: 'hash', maxBytes: value.size });
-    check(actual.size === value.size && actual.sha256 === value.sha256, 'DOWNLOAD_HASH_MISMATCH');
-    const after = await metadata(file.id); descriptor(after, { pending });
-    check(fingerprint(after) === fingerprint(file), 'REMOTE_CHANGED_DURING_VERIFICATION');
-    return { file: after, value };
+    const value = descriptor(file, { pending }), pinned = archiveFingerprint(file);
+    check(String(file.size) === String(value.size)
+      && (file.sha256Checksum === undefined || file.sha256Checksum === value.sha256), 'REMOTE_SIZE_OR_HASH_MISMATCH');
+    let lastVersion = BigInt(file.version), checksumSeen = false;
+    const controller = new AbortController(), options = { signal: controller.signal };
+    const timer = setTimeout(() => controller.abort(), cfg.verificationTimeoutMs);
+    function observe(candidate) {
+      descriptor(candidate, { pending });
+      // Keep every original archive tag, snapshot, size and scope pinned across
+      // retries. A server version bump never authorizes different content/tags.
+      check(archiveFingerprint(candidate) === pinned, 'REMOTE_ARCHIVE_METADATA_CHANGED');
+      check(String(candidate.size) === String(value.size), 'REMOTE_SIZE_OR_HASH_MISMATCH');
+      const checksum = candidate.sha256Checksum;
+      check(checksum === undefined || checksum === value.sha256, 'REMOTE_CHECKSUM_CHANGED');
+      check(!checksumSeen || checksum === value.sha256, 'REMOTE_CHECKSUM_CHANGED');
+      checksumSeen ||= checksum === value.sha256;
+      const version = BigInt(candidate.version);
+      check(version >= lastVersion, 'REMOTE_VERSION_REGRESSED'); lastVersion = version;
+    }
+    try {
+      observe(file);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        check(!controller.signal.aborted, 'REQUEST_TIMEOUT');
+        if (attempt) { file = await metadata(value.fileId, options); observe(file); }
+        await verifyPrivate(file, options);
+        const actual = await request(urlFor(`/drive/v3/files/${value.fileId}`, { alt: 'media' }), {},
+          { ...options, mode: 'hash', maxBytes: value.size, retries: 0 });
+        check(actual.size === value.size && actual.sha256 === value.sha256, 'DOWNLOAD_HASH_MISMATCH');
+        const after = await metadata(value.fileId, options); observe(after);
+        await verifyPrivate(after, options);
+        if (fingerprint(after) === fingerprint(file)) return { file: after, value };
+        // Google documents that version includes invisible server changes and
+        // SHA256 is optional. It does not guarantee a settling interval. Only
+        // an increasing version / newly available correct checksum may retry;
+        // acceptance still requires a whole hash read within an unchanged window.
+        if (attempt === 2) {
+          const versionChanged = after.version !== file.version;
+          const checksumChanged = after.sha256Checksum !== file.sha256Checksum;
+          fail(versionChanged && checksumChanged ? 'REMOTE_METADATA_UNSTABLE'
+            : versionChanged ? 'REMOTE_VERSION_UNSTABLE' : 'REMOTE_CHECKSUM_UNSTABLE');
+        }
+        await abortRace(sleep(250 * (attempt + 1)), controller.signal);
+      }
+    } finally { clearTimeout(timer); controller.abort(); }
   }
   function mint(file) {
     const value = descriptor(file);

@@ -138,11 +138,10 @@ test('reordered Google property maps preserve successful readback, same-night re
 test('reordering does not hide real metadata, content hash, ownership or folder changes during readback', async t => {
   const input = await fixture(t);
   const changes = [
-    [meta => { meta.version = String(Number(meta.version) + 1); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
-    [meta => { meta.size = String(Number(meta.size) + 1); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
-    [meta => { meta.sha256Checksum = 'b'.repeat(64); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
-    [meta => { meta.appProperties.ecoBackupSha256 = 'b'.repeat(64); }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
-    [meta => { meta.appProperties.additionalMetadata = 'changed'; }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [meta => { meta.size = String(Number(meta.size) + 1); }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.sha256Checksum = 'b'.repeat(64); }, 'REMOTE_CHECKSUM_CHANGED'],
+    [meta => { meta.appProperties.ecoBackupSha256 = 'b'.repeat(64); }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.appProperties.additionalMetadata = 'changed'; }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
     [meta => { meta.parents = ['other_folder']; }, 'FILE_SCOPE_MISMATCH'],
     [meta => { meta.shared = true; }, 'OWNER_OR_SHARING_MISMATCH'],
     [meta => { meta.owners = [{ emailAddress: 'other@example.invalid' }]; }, 'OWNER_OR_SHARING_MISMATCH'],
@@ -160,6 +159,153 @@ test('a property value change after readback still blocks marking the archive ve
   drive.onMetadataRead = (meta, count) => { if (count === 3) meta.appProperties.additionalMetadata = 'changed-after-readback'; };
   await assert.rejects(client(drive).uploadAndVerify(input), { code: 'REMOTE_CHANGED_BEFORE_COMPLETION' });
   assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
+});
+const mediaReads = drive => drive.calls.filter(call => new URL(call.url).searchParams.get('alt') === 'media').length;
+test('server version or newly available checksum must settle over a second complete readback before completion', async t => {
+  for (const change of ['version', 'checksum', 'both']) {
+    const input = await fixture(t), drive = new FakeDrive();
+    drive.onMetadataRead = (meta, count) => {
+      if (count === 1 && change !== 'version') delete meta.sha256Checksum;
+      if (count === 2) {
+        if (change !== 'checksum') meta.version = '2';
+        if (change !== 'version') meta.sha256Checksum = input.expectedSha256;
+      }
+    };
+    const result = await client(drive).uploadAndVerify(input);
+    assert.equal(result.verified, true); assert.equal(result.sha256, input.expectedSha256);
+    assert.equal(mediaReads(drive), 2); assert.equal(drive.started, 1);
+    assert.equal(drive.writes.filter(write => write.kind === 'complete').length, 1);
+    assert.equal(drive.writes.some(write => write.kind === 'trash'), false);
+  }
+});
+test('an existing pending archive settles and recovers without new upload or different ciphertext', async () => {
+  const drive = new FakeDrive(), existing = drive.add('pending', '2026-10-21');
+  existing.meta.appProperties.ecoBackupStatus = 'pending';
+  drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; };
+  const receipt = await client(drive).findVerifiedNight({ snapshotAt: NOW });
+  assert.equal(receipt.fileId, 'pending'); assert.equal(receipt.sha256, hash(existing.bytes));
+  assert.equal(mediaReads(drive), 2); assert.equal(drive.started, 0); assert.equal(drive.generated, 0);
+  assert.deepEqual(drive.writes.map(write => write.kind), ['complete']);
+});
+test('unstable metadata stops at three full readbacks and reports only a finite changed-field category', async t => {
+  for (const field of ['version', 'checksum', 'both']) {
+    const input = await fixture(t), drive = new FakeDrive(), pauses = [];
+    drive.onMetadataRead = (meta, count) => {
+      if (count === 1) delete meta.sha256Checksum;
+      // Attempts end at metadata reads 2, 4 and 6; intervening reads start a
+      // fresh stable-window check while retaining all original archive pins.
+      if (count === 2 || count === 4 || (count === 6 && field !== 'checksum')) meta.version = String(BigInt(meta.version) + 1n);
+      if (count === 6 && field !== 'version') meta.sha256Checksum = input.expectedSha256;
+    };
+    const api = createDriveBackupClient({ authorizedFetch: drive.fetch.bind(drive), config,
+      now: () => new Date(NOW), sleep: async ms => { pauses.push(ms); } });
+    const expected = field === 'both' ? 'REMOTE_METADATA_UNSTABLE'
+      : field === 'version' ? 'REMOTE_VERSION_UNSTABLE' : 'REMOTE_CHECKSUM_UNSTABLE';
+    await assert.rejects(api.uploadAndVerify(input), error => {
+      assert.equal(classifyDriveBackupError(error), expected);
+      assert.doesNotMatch(String(error), /generated_|example|Bearer|secret|2026|[a-f0-9]{64}/u);
+      return true;
+    });
+    assert.equal(mediaReads(drive), 3); assert.deepEqual(pauses, [250, 500]);
+    assert.equal(drive.files.get('generated_1').meta.appProperties.ecoBackupStatus, 'pending');
+    assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
+  }
+});
+test('versions retain exact integer precision and must be monotonic across every observation', async () => {
+  const drive = new FakeDrive(), existing = drive.add('large_version', '2026-10-20');
+  existing.meta.version = '9007199254740993';
+  drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '9007199254740994'; };
+  const result = await client(drive).verifyArchiveReadOnly({ fileId: 'large_version' });
+  assert.equal(result.sha256, hash(existing.bytes)); assert.equal(mediaReads(drive), 2); assert.equal(drive.writes.length, 0);
+  for (const sequence of [['3', '2'], ['1', '3', '2']]) {
+    const bad = new FakeDrive(); bad.add('regression', '2026-10-20');
+    bad.onMetadataRead = (meta, count) => { meta.version = sequence[Math.min(count - 1, sequence.length - 1)]; };
+    await assert.rejects(client(bad).verifyArchiveReadOnly({ fileId: 'regression' }), { code: 'REMOTE_VERSION_REGRESSED' });
+    assert.equal(mediaReads(bad), 1); assert.equal(bad.writes.length, 0);
+  }
+});
+test('a newly observed correct checksum can never disappear or change on a later read', async () => {
+  for (const replacement of [undefined, null, '', 'b'.repeat(64)]) {
+    const drive = new FakeDrive(), record = drive.add('checksum', '2026-10-20');
+    drive.onMetadataRead = (meta, count) => {
+      if (count === 1) delete meta.sha256Checksum;
+      if (count === 2) meta.sha256Checksum = hash(record.bytes);
+      if (count === 3) { if (replacement === undefined) delete meta.sha256Checksum; else meta.sha256Checksum = replacement; }
+    };
+    await assert.rejects(client(drive).verifyArchiveReadOnly({ fileId: 'checksum' }), { code: 'REMOTE_CHECKSUM_CHANGED' });
+    assert.equal(mediaReads(drive), 1); assert.equal(drive.writes.length, 0);
+  }
+});
+test('retry never rebaselines archive tags, content, scope or privacy to changed remote state', async t => {
+  const input = await fixture(t);
+  const changes = [
+    [meta => { meta.appProperties.extra = 'Bearer SYNTHETIC_PRIVATE'; }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.appProperties.ecoBackupSnapshotAt = '2026-10-21T01:00:00.000Z'; }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.appProperties.ecoBackupSha256 = 'b'.repeat(64); }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.appProperties.ecoBackupSize = String(Number(meta.appProperties.ecoBackupSize) + 1); }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.size = String(Number(meta.size) + 1); }, 'REMOTE_ARCHIVE_METADATA_CHANGED'],
+    [meta => { meta.parents = ['other_folder']; }, 'FILE_SCOPE_MISMATCH'],
+    [meta => { meta.mimeType = 'text/plain'; }, 'FILE_SCOPE_MISMATCH'],
+    [meta => { meta.owners = [{ emailAddress: 'other@example.invalid' }]; }, 'OWNER_OR_SHARING_MISMATCH'],
+    [meta => { meta.shared = true; }, 'OWNER_OR_SHARING_MISMATCH'],
+  ];
+  for (const [change, code] of changes) {
+    const drive = new FakeDrive();
+    drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; if (count === 3) change(meta); };
+    await assert.rejects(client(drive).uploadAndVerify(input), error => error.code === code && !String(error).includes('SYNTHETIC_PRIVATE'));
+    assert.equal(mediaReads(drive), 1); assert.equal(drive.files.size, 1);
+    assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
+  }
+});
+test('a later full download or post-download permission failure cannot complete an archive', async t => {
+  for (const mode of ['bytes', 'permissions', 'unauthorized']) {
+    const input = await fixture(t), drive = new FakeDrive(); let reads = 0;
+    drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; };
+    const api = createDriveBackupClient({ config, now: () => new Date(NOW), sleep: async () => {},
+      authorizedFetch: async (url, options) => {
+        const parsed = new URL(url);
+        if (parsed.searchParams.get('alt') === 'media' && ++reads === 2) {
+          if (mode === 'bytes') drive.corruptDownload = 'generated_1';
+          if (mode === 'unauthorized') return json({ error: 'Bearer SYNTHETIC_PRIVATE' }, 401);
+        }
+        if (mode === 'permissions' && reads === 2 && parsed.pathname.endsWith('/permissions'))
+          drive.permissionExtra = { id: 'share', type: 'anyone', role: 'reader' };
+        return drive.fetch(url, options);
+      } });
+    await assert.rejects(api.uploadAndVerify(input), { code: mode === 'bytes' ? 'DOWNLOAD_HASH_MISMATCH'
+      : mode === 'permissions' ? 'NONPRIVATE_PERMISSIONS' : 'HTTP_401' });
+    assert.equal(reads, 2); assert.equal(drive.writes.some(write => ['complete', 'trash'].includes(write.kind)), false);
+  }
+});
+test('one total verification deadline covers metadata, ACL pages, streamed bytes and all backoff', async () => {
+  for (const mode of ['metadata', 'permissions', 'body', 'backoff', 'http-retry']) {
+    const drive = new FakeDrive(); drive.add('deadline', '2026-10-20');
+    let aborted = false, bodyCancelled = false, stalled = false;
+    if (mode === 'backoff') drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; };
+    const api = createDriveBackupClient({ config: { ...config, requestTimeoutMs: 1000, verificationTimeoutMs: 30 },
+      now: () => new Date(NOW), sleep: () => new Promise(() => {}), authorizedFetch: async (url, options) => {
+        const parsed = new URL(url), media = parsed.searchParams.get('alt') === 'media';
+        const acl = parsed.pathname === '/drive/v3/files/deadline/permissions';
+        if (mode === 'body' && media) return new Response(new ReadableStream({ cancel() { bodyCancelled = true; } }));
+        if (mode === 'http-retry' && acl) return json({ error: 'SYNTHETIC_PRIVATE' }, 503);
+        if (mode === 'permissions' && acl && !parsed.searchParams.has('pageToken'))
+          return json({ permissions: [{ type: 'user', role: 'owner', emailAddress: EMAIL }], nextPageToken: 'next' });
+        if ((mode === 'metadata' && parsed.pathname === '/drive/v3/files/deadline' && !media && mediaReads(drive) === 1)
+          || (mode === 'permissions' && acl && parsed.searchParams.has('pageToken'))) {
+          stalled = true; options.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+          return new Promise(() => {});
+        }
+        return drive.fetch(url, options);
+      } });
+    const start = performance.now();
+    await assert.rejects(api.verifyArchiveReadOnly({ fileId: 'deadline' }), { code: 'REQUEST_TIMEOUT' });
+    assert.ok(performance.now() - start < 2000); assert.ok(mediaReads(drive) <= 1);
+    assert.equal(drive.writes.length, 0);
+    if (stalled) assert.equal(aborted, true);
+    if (mode === 'body') assert.equal(bodyCancelled, true);
+  }
+  for (const verificationTimeoutMs of [0, -1, 300001, Infinity, 1.5])
+    assert.throws(() => client(new FakeDrive(), { verificationTimeoutMs }), { code: 'INVALID_LIMITS' });
 });
 test('account or folder sharing mismatch blocks every write', async t => {
   const input = await fixture(t);
@@ -258,7 +404,7 @@ test('read-only archive verification retains the exact identity, checksum, priva
     [(drive, record) => { record.meta.shared = true; }, 'OWNER_OR_SHARING_MISMATCH'],
     [drive => { drive.permissionExtra = { id: 'external', type: 'anyone', role: 'reader' }; }, 'NONPRIVATE_PERMISSIONS'],
     [drive => { drive.corruptDownload = 'diagnostic_archive'; }, 'DOWNLOAD_HASH_MISMATCH'],
-    [drive => { drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; }; }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [drive => { drive.onMetadataRead = meta => { meta.version = String(BigInt(meta.version) + 1n); }; }, 'REMOTE_VERSION_UNSTABLE'],
   ]) {
     const drive = new FakeDrive(), record = drive.add('diagnostic_archive', '2026-10-20');
     configure(drive, record);
@@ -321,7 +467,7 @@ test('public Drive diagnostics distinguish upload verification failures without 
   const input = await fixture(t);
   for (const [configure, expected] of [
     [drive => { drive.corruptDownload = 'generated_1'; }, 'DOWNLOAD_HASH_MISMATCH'],
-    [drive => { drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; }; }, 'REMOTE_CHANGED_DURING_VERIFICATION'],
+    [drive => { drive.onMetadataRead = meta => { meta.version = String(BigInt(meta.version) + 1n); }; }, 'REMOTE_VERSION_UNSTABLE'],
     [drive => { drive.redirectDownload = true; }, 'REDIRECT_REJECTED'],
     [drive => { drive.permissionExtra = { id: 'external', type: 'anyone', role: 'reader' }; }, 'NONPRIVATE_PERMISSIONS'],
   ]) {

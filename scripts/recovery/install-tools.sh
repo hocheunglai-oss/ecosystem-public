@@ -73,6 +73,9 @@ SOURCE
   ldd /usr/lib/postgresql/17/bin/pg_dump | awk '/libssl\.so/ {found=1} END {exit !found}'
   test -f /usr/share/postgresql/17/extension/pgcrypto.control
   test -f /usr/share/postgresql/17/extension/uuid-ossp.control
+  # Optional WebDAV metadata parsing uses only the isolated system Python stdlib.
+  test -x /usr/bin/python3
+  /usr/bin/python3 -I -c 'import xml.etree.ElementTree; import sys; assert sys.version_info.major == 3'
   curl "${curl_options[@]}" --location \
     https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz \
     -o "$backup_tools_dir/age.tar.gz"

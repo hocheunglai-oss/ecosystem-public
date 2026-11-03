@@ -10,6 +10,8 @@ import { capturePostgres, validateConnection, SqlSession, assertReadOnlySourceRo
 import { sealDirectory, MANIFEST_NAME, validateRelativePath, validateManifest } from './archive.mjs';
 import { createDriveBackupClient, hongKongNight, DRIVE_BACKUP_DIAGNOSTIC_CODES, classifyDriveBackupError } from './drive-backups.mjs';
 import { AUTHORIZATION_DIAGNOSTIC_CODES } from './storage-credentials.mjs';
+import { createNextcloudBackupClient, validateNextcloudConfiguration, NEXTCLOUD_DIAGNOSTIC_CODES,
+  classifyNextcloudBackupError } from './nextcloud-backups.mjs';
 
 const fail = code => { throw new NightlyError(code); };
 const check = (value, code) => { if (!value) fail(code); };
@@ -19,8 +21,8 @@ const MAX_RUNTIME_BYTES = 64 * 1024;
 const MAX_DURATION_MS = 45 * 60_000;
 const PRIVATE_MARKER = 'AGE-SECRET-KEY-1';
 const DIAGNOSTIC_PREFIX = 'ECO_BACKUP_DIAGNOSTIC ';
-const DIAGNOSTIC_PHASES = new Set(['CONFIGURATION','RUN_LOCK','DRIVE_TARGET','DATABASE_CAPTURE','STORAGE','ENCRYPTION','DRIVE_UPLOAD','RETENTION','CLEANUP','WORKER']);
-const DIAGNOSTIC_CODES = new Set(['STARTED','COMPLETED','FAILED','TIMEOUT','CANCELLED','CLEANUP_FAILED','AUTHORIZATION_FAILED','OIDC_TOKEN_INVALID','SOURCE_LOCK_LOST','CHECKSUM_MISMATCH', ...DRIVE_BACKUP_DIAGNOSTIC_CODES, ...AUTHORIZATION_DIAGNOSTIC_CODES]);
+const DIAGNOSTIC_PHASES = new Set(['CONFIGURATION','RUN_LOCK','DRIVE_TARGET','DRIVE_RECOVERY','NEXTCLOUD_UPLOAD','DATABASE_CAPTURE','STORAGE','ENCRYPTION','DRIVE_UPLOAD','RETENTION','CLEANUP','WORKER']);
+const DIAGNOSTIC_CODES = new Set(['STARTED','COMPLETED','FAILED','TIMEOUT','CANCELLED','CLEANUP_FAILED','AUTHORIZATION_FAILED','OIDC_TOKEN_INVALID','SOURCE_LOCK_LOST','CHECKSUM_MISMATCH', ...DRIVE_BACKUP_DIAGNOSTIC_CODES, ...AUTHORIZATION_DIAGNOSTIC_CODES, ...NEXTCLOUD_DIAGNOSTIC_CODES]);
 const authorizationDiagnosticCodes = new Set(AUTHORIZATION_DIAGNOSTIC_CODES);
 
 /** Rebuild exactly three allowlisted scalar fields; never serialize an exception. */
@@ -58,6 +60,8 @@ function diagnosticCode(error) {
   try {
     const driveCode = classifyDriveBackupError(error);
     if (driveCode) return driveCode;
+    const secondaryCode = classifyNextcloudBackupError(error);
+    if (secondaryCode) return secondaryCode;
     if (authorizationDiagnosticCodes.has(error?.code)) return error.code;
     if (['AUTHORIZATION_RESPONSE_INVALID','DRIVE_AUTH_FAILED','HTTP_401','HTTP_403'].includes(error?.code)) return 'AUTHORIZATION_FAILED';
     if (error?.code === 'OIDC_TOKEN_INVALID') return 'OIDC_TOKEN_INVALID';
@@ -79,7 +83,7 @@ export class NightlyError extends Error {
 
 /** No provider exception, URL, business count, source path or secret enters public logs. */
 export function publicStatus(ok) {
-  return ok ? 'ECO encrypted backup verified; retention completed.' : 'ECO backup did not complete. Previous verified copies were preserved unless retention had already verified five newer nights.';
+  return ok ? 'ECO configured encrypted backup copies verified.' : 'ECO backup did not complete. Previous verified copies were preserved unless retention had already verified five newer nights.';
 }
 export function validateExecutionContext(env, target) {
   check(env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted', 'TRUSTED_RUNNER_REQUIRED');
@@ -94,11 +98,13 @@ export function validateRuntime({ target, config, secrets }) {
     && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(target.githubRepository || '')
     && target.identityMode === 'independent-password' && /^https:\/\/[^/]+$/u.test(target.productionOrigin || '')
     && /^[a-z0-9][a-z0-9._-]{0,99}$/u.test(target.supplierReportsBucket || ''), 'INVALID_CANONICAL_TARGET');
-  check(exact(config, ['schemaVersion','expectedProjectRef','expectedSourceRole','database','pgBin','ageBin','recipient','drive','timeoutMs'])
+  const secondary = plain(config) && Object.hasOwn(config, 'nextcloud');
+  check(exact(config, ['schemaVersion','expectedProjectRef','expectedSourceRole','database','pgBin','ageBin','recipient','drive','timeoutMs', ...(secondary ? ['nextcloud'] : [])])
     && config.schemaVersion === 1 && config.expectedProjectRef === target.supabaseProjectRef, 'TARGET_CONFIGURATION_MISMATCH');
   check(config.expectedSourceRole === 'eco_backup_reader', 'DEDICATED_READ_ROLE_REQUIRED');
   check(exact(config.database, ['PGHOST','PGPORT','PGUSER','PGDATABASE','PGSSLMODE','PGSSLROOTCERT']), 'UNEXPECTED_CONNECTION_OPTION');
-  check(exact(secrets, ['dbPassword','driveClientId','driveClientSecret','driveRefreshToken','storage']), 'INVALID_CREDENTIAL_FIELDS');
+  check(exact(secrets, ['dbPassword','driveClientId','driveClientSecret','driveRefreshToken','storage', ...(secondary ? ['nextcloudAppPassword'] : [])]), 'INVALID_CREDENTIAL_FIELDS');
+  if (secondary) validateNextcloudConfiguration(config.nextcloud, secrets.nextcloudAppPassword);
   for (const key of ['dbPassword','driveClientId','driveClientSecret','driveRefreshToken'])
     check(typeof secrets[key] === 'string' && secrets[key].length > 0 && secrets[key].length <= 16_384
       && !/[\r\n\0]/u.test(secrets[key]), 'INVALID_CREDENTIAL');
@@ -138,6 +144,7 @@ export async function loadSecrets(env) {
     check(!env[name], 'RECOVERY_IDENTITY_FORBIDDEN');
   const names = { dbPassword:'ECO_BACKUP_DB_PASSWORD', driveClientId:'ECO_DRIVE_CLIENT_ID',
     driveClientSecret:'ECO_DRIVE_CLIENT_SECRET', driveRefreshToken:'ECO_DRIVE_REFRESH_TOKEN', storage:'ECO_BACKUP_STORAGE_JSON' };
+  if (env.ECO_NEXTCLOUD_APP_PASSWORD || env.ECO_NEXTCLOUD_APP_PASSWORD_FILE) names.nextcloudAppPassword = 'ECO_NEXTCLOUD_APP_PASSWORD';
   const values = {};
   for (const [key, name] of Object.entries(names)) {
     check(Boolean(env[name]) !== Boolean(env[`${name}_FILE`]), 'ONE_CREDENTIAL_SOURCE_REQUIRED');
@@ -208,6 +215,8 @@ export async function runNightly({ target, config, secrets, runDirectory, proven
   try {
     enter('RUN_LOCK');
     lock = await deps.lock({ bin: config.pgBin, connection, projectRef: target.supabaseProjectRef, expectedSourceRole: config.expectedSourceRole });
+    if (config.nextcloud) return await runDualDestination({ target, config, runDirectory, provenance,
+      connection, deps, lock, startedAt, runId, enter, emit });
     const drive = deps.createDrive ? deps.createDrive({ beforeMutation: () => lock.assertAlive() }) : deps.drive;
     check(drive && typeof drive.verifyTarget === 'function', 'DRIVE_CLIENT_REQUIRED');
     enter('DRIVE_TARGET');
@@ -260,6 +269,103 @@ export async function runNightly({ target, config, secrets, runDirectory, proven
       retention, restorationVerified: false, provenance };
   } catch (error) { emit(phase,diagnosticCode(error)); fail('RUN_FAILED'); }
   finally { try { await lock?.close(); } catch { emit('CLEANUP','CLEANUP_FAILED'); fail('RUN_FAILED'); } }
+}
+
+/** Optional second copy: one sealed snapshot, independent outcomes, and no pruning.
+ * Legacy Drive-only recovery/retention above remains unchanged when not configured.
+ */
+async function runDualDestination({ target, config, runDirectory, provenance, connection, deps,
+  lock, startedAt, runId, enter, emit }) {
+  const results = { drive: { verified:false }, nextcloud: { verified:false } };
+  // Both destinations can run concurrently, but this PostgreSQL connection has
+  // one pending query slot. Serialize only the short liveness checks.
+  let lockQueue = Promise.resolve();
+  const assertAlive = () => { lockQueue = lockQueue.then(() => lock.assertAlive()); return lockQueue; };
+  const attempt = async (destination, phase, operation) => {
+    enter(phase);
+    try { const value = await operation(); emit(phase,'COMPLETED'); return value; }
+    catch (error) { results[destination] = { verified:false, code:diagnosticCode(error) }; emit(phase,diagnosticCode(error)); return null; }
+  };
+  let drive, receipt, encrypted, snapshotAt, reused = false;
+  // Reserve time for a new capture and both destinations if Drive is unavailable.
+  const preflight = new AbortController(), preflightTimer = setTimeout(() => preflight.abort(), 5 * 60_000);
+  try {
+    const existing = await attempt('drive','DRIVE_TARGET',async () => {
+      drive = deps.createDrive ? deps.createDrive({ beforeMutation:assertAlive, signal:preflight.signal }) : deps.drive;
+      check(drive && typeof drive.verifyTarget === 'function', 'DRIVE_CLIENT_REQUIRED');
+      await drive.verifyTarget();
+      return drive.findVerifiedNight({ snapshotAt:startedAt });
+    });
+    if (existing) {
+      // A pending Drive upload may have been completed by findVerifiedNight.
+      // Recover its exact ciphertext; never silently skip the second destination.
+      const recovered = await attempt('drive','DRIVE_RECOVERY',async () => {
+        check(existing.verified === true && existing.night === hongKongNight(startedAt), 'INVALID_EXISTING_RECEIPT');
+        const copy = await drive.downloadVerifiedArchive({ currentReceipt:existing, archiveFile:join(runDirectory,'recovered.tar.gz.age') });
+        check(copy?.verified === true && copy.expectedSha256 === existing.sha256 && copy.size === existing.size
+          && copy.snapshotAt === existing.snapshotAt && hongKongNight(copy.snapshotAt) === hongKongNight(startedAt), 'INVALID_EXISTING_RECEIPT');
+        return copy;
+      });
+      if (recovered) {
+        receipt = existing; snapshotAt = recovered.snapshotAt; reused = true;
+        encrypted = { archiveFile:recovered.archiveFile, sha256:recovered.expectedSha256, size:recovered.size };
+      }
+    }
+  } finally { clearTimeout(preflightTimer); }
+  if (!encrypted) {
+    const sourceDir = join(runDirectory,'capture');
+    enter('DATABASE_CAPTURE');
+    const inventory = await deps.capture({ bin:config.pgBin, connection, expectedProjectRef:target.supabaseProjectRef,
+      expectedSourceRole:config.expectedSourceRole, supplierReportsBucket:target.supplierReportsBucket, profileAttachmentsBucket:target.profileAttachmentsBucket,
+      outputDir:sourceDir, captureObjects:async (...args) => {
+        enter('STORAGE'); const value = await deps.captureObjects(...args); emit('STORAGE','COMPLETED'); enter('DATABASE_CAPTURE'); return value;
+      } });
+    check(inventory?.sourceProjectRef === target.supabaseProjectRef && inventory.source?.role === config.expectedSourceRole
+      && Number.isFinite(Date.parse(inventory.source.snapshot_time))
+      && Math.abs(Date.parse(inventory.source.snapshot_time)-Date.parse(startedAt)) <= config.timeoutMs, 'CAPTURE_IDENTITY_MISMATCH');
+    snapshotAt = inventory.source.snapshot_time;
+    check(hongKongNight(snapshotAt) === hongKongNight(startedAt), 'NIGHT_CHANGED_DURING_CAPTURE');
+    enter('ENCRYPTION');
+    await deps.manifest(sourceDir,{ runId, sourceProjectRef:target.supabaseProjectRef, snapshotTime:snapshotAt,
+      databaseServer:inventory.source.server_version, toolVersion:'eco-nightly-v1', unattended:true, restorationVerified:false, provenance });
+    encrypted = await deps.seal({ sourceDir, outputFile:join(runDirectory,'backup.tar.gz.age'), recipient:config.recipient, ageBin:config.ageBin });
+    check(/^[a-f0-9]{64}$/u.test(encrypted?.sha256 || '') && Number.isSafeInteger(encrypted.size) && encrypted.size > 0, 'ENCRYPTION_RECEIPT_INVALID');
+    enter('CLEANUP'); await rm(sourceDir,{recursive:true,force:true});
+  }
+  const verifyReceipt = value => {
+    check(value?.verified === true && value.sha256 === encrypted.sha256 && value.size === encrypted.size
+      && value.night === hongKongNight(startedAt), 'UPLOAD_RECEIPT_MISMATCH');
+    return value;
+  };
+  const uploadDrive = async () => receipt || attempt('drive','DRIVE_UPLOAD',async () => {
+    await assertAlive();
+    // Even if the earlier target probe failed, the other destination is not gated by it.
+    drive = deps.createDrive ? deps.createDrive({ beforeMutation:assertAlive }) : deps.drive;
+    return verifyReceipt(await drive.uploadAndVerify({ archiveFile:encrypted.archiveFile, snapshotAt, expectedSha256:encrypted.sha256 }));
+  });
+  const uploadSecondary = () => attempt('nextcloud','NEXTCLOUD_UPLOAD',async () => {
+    await assertAlive();
+    const client = deps.createNextcloud ? deps.createNextcloud({ beforeMutation:assertAlive }) : deps.nextcloud;
+    check(client && typeof client.uploadAndVerify === 'function', 'SECONDARY_CLIENT_REQUIRED');
+    const value = verifyReceipt(await client.uploadAndVerify({ archiveFile:encrypted.archiveFile, snapshotAt, expectedSha256:encrypted.sha256 }));
+    check(value.snapshotAt === new Date(snapshotAt).toISOString(), 'UPLOAD_RECEIPT_MISMATCH');
+    return value;
+  });
+  const copies = await Promise.all([uploadDrive(),uploadSecondary()]);
+  receipt = copies[0]; const secondary = copies[1];
+  if (receipt) results.drive = { verified:true, receipt };
+  if (secondary) results.nextcloud = { verified:true, receipt:secondary };
+  // Local private receipts aid direct supervised diagnostics; the supervisor removes
+  // them with the run directory. No destination identity or archive path is logged.
+  enter('WORKER');
+  await writeFile(join(runDirectory,'destination-receipts.json'),JSON.stringify({schemaVersion:1,runId,snapshotAt,
+    sha256:encrypted.sha256,destinations:results}),{flag:'wx',mode:0o600});
+  check(results.drive.verified && results.nextcloud.verified,'DESTINATION_INCOMPLETE');
+  enter('RUN_LOCK'); await assertAlive();
+  return {schemaVersion:1,runId,completedAt:deps.now().toISOString(),verified:true,reused,
+    encryptedCopy:{fileId:receipt.fileId,night:receipt.night,sha256:receipt.sha256,size:receipt.size},
+    destinations:results,retention:{skipped:true,reason:'DUAL_DESTINATION_POLICY_PENDING',permanentDeletionUsed:false},
+    restorationVerified:false,provenance};
 }
 
 /** Refresh tokens remain in memory; only fixed Google OAuth/Drive endpoints receive credentials. */
@@ -370,8 +476,10 @@ async function workerMain() {
   const captureObjects = await createStorageCapture({ target:payload.target, secrets:payload.secrets.storage });
   const authorizedFetch = createGoogleAuthorizedFetch({ clientId:payload.secrets.driveClientId,
     clientSecret:payload.secrets.driveClientSecret, refreshToken:payload.secrets.driveRefreshToken });
-  const createDrive = ({ beforeMutation }) => createDriveBackupClient({ authorizedFetch, config:payload.config.drive, beforeMutation });
-  const result = await runNightly(payload, { captureObjects, createDrive,
+  const createDrive = ({ beforeMutation, signal }) => createDriveBackupClient({ authorizedFetch, config:payload.config.drive, beforeMutation, signal });
+  const createNextcloud = payload.config.nextcloud ? ({ beforeMutation }) => createNextcloudBackupClient({
+    config:payload.config.nextcloud, appPassword:payload.secrets.nextcloudAppPassword, beforeMutation }) : undefined;
+  const result = await runNightly(payload, { captureObjects, createDrive, createNextcloud,
     onDiagnostic: value => process.stderr.write(diagnosticLine(value)) });
   process.stdout.write(JSON.stringify(result));
 }

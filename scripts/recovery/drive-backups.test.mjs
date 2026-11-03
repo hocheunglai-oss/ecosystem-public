@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -280,9 +280,10 @@ test('a later full download or post-download permission failure cannot complete 
 test('one total verification deadline covers metadata, ACL pages, streamed bytes and all backoff', async () => {
   for (const mode of ['metadata', 'permissions', 'body', 'backoff', 'http-retry']) {
     const drive = new FakeDrive(); drive.add('deadline', '2026-10-20');
+    const operation = new AbortController();
     let aborted = false, bodyCancelled = false, stalled = false;
     if (mode === 'backoff') drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; };
-    const api = createDriveBackupClient({ config: { ...config, requestTimeoutMs: 1000, verificationTimeoutMs: 30 },
+    const api = createDriveBackupClient({ signal: operation.signal, config: { ...config, requestTimeoutMs: 1000, verificationTimeoutMs: 30 },
       now: () => new Date(NOW), sleep: () => new Promise(() => {}), authorizedFetch: async (url, options) => {
         const parsed = new URL(url), media = parsed.searchParams.get('alt') === 'media';
         const acl = parsed.pathname === '/drive/v3/files/deadline/permissions';
@@ -300,12 +301,42 @@ test('one total verification deadline covers metadata, ACL pages, streamed bytes
     const start = performance.now();
     await assert.rejects(api.verifyArchiveReadOnly({ fileId: 'deadline' }), { code: 'REQUEST_TIMEOUT' });
     assert.ok(performance.now() - start < 2000); assert.ok(mediaReads(drive) <= 1);
+    assert.equal(operation.signal.aborted, false);
     assert.equal(drive.writes.length, 0);
     if (stalled) assert.equal(aborted, true);
     if (mode === 'body') assert.equal(bodyCancelled, true);
   }
   for (const verificationTimeoutMs of [0, -1, 300001, Infinity, 1.5])
     assert.throws(() => client(new FakeDrive(), { verificationTimeoutMs }), { code: 'INVALID_LIMITS' });
+});
+test('caller cancellation overrides an active verification deadline in reads and settle backoff', async () => {
+  for (const mode of ['metadata', 'body', 'backoff', 'http-retry']) {
+    const drive = new FakeDrive(); drive.add('cancel_verify', '2026-10-20');
+    const operation = new AbortController(); let fetchAborted = false, bodyCancelled = false;
+    if (mode === 'backoff') drive.onMetadataRead = (meta, count) => { if (count === 2) meta.version = '2'; };
+    const cancelSoon = () => { setTimeout(() => operation.abort(), 5); };
+    const api = createDriveBackupClient({ signal: operation.signal,
+      config: { ...config, requestTimeoutMs: 1000, verificationTimeoutMs: 1000 }, now: () => new Date(NOW),
+      sleep: () => { cancelSoon(); return new Promise(() => {}); }, authorizedFetch: async (url, options) => {
+        const parsed = new URL(url), media = parsed.searchParams.get('alt') === 'media';
+        if (mode === 'body' && media) {
+          cancelSoon();
+          return new Response(new ReadableStream({ cancel() { bodyCancelled = true; } }));
+        }
+        if (mode === 'metadata' && parsed.pathname === '/drive/v3/files/cancel_verify' && !media && mediaReads(drive) === 1) {
+          options.signal.addEventListener('abort', () => { fetchAborted = true; }, { once: true });
+          cancelSoon(); return new Promise(() => {});
+        }
+        if (mode === 'http-retry' && parsed.pathname === '/drive/v3/files/cancel_verify/permissions') return json({}, 503);
+        return drive.fetch(url, options);
+      } });
+    const start = performance.now();
+    await assert.rejects(api.verifyArchiveReadOnly({ fileId: 'cancel_verify' }), { code: 'OPERATION_CANCELLED' });
+    assert.ok(performance.now() - start < 500); assert.ok(mediaReads(drive) <= 1);
+    assert.equal(drive.writes.length, 0);
+    if (mode === 'metadata') assert.equal(fetchAborted, true);
+    if (mode === 'body') assert.equal(bodyCancelled, true);
+  }
 });
 test('account or folder sharing mismatch blocks every write', async t => {
   const input = await fixture(t);
@@ -531,4 +562,170 @@ test('retention retry revalidates the lock and preserves older files if it was l
   await assert.rejects(api.retainLatestNights({ currentReceipt: receipt }), { code: 'MUTATION_AUTHORIZATION_FAILED' });
   assert.equal(drive.writes.filter(write => write.kind === 'trash').length, 1);
   assert.equal([...drive.files.values()].some(record => record.meta.trashed), false);
+});
+
+async function downloadFixture(t, bytes = bytesFor('mirror')) {
+  const root = await mkdtemp(join(tmpdir(), 'eco-drive-mirror-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const drive = new FakeDrive(), record = drive.add('mirror_archive', '2026-10-21', bytes);
+  const api = client(drive), currentReceipt = await api.findVerifiedNight({ snapshotAt: NOW });
+  return { root, drive, record, api, currentReceipt, archiveFile: join(root, 'copy.tar.gz.age') };
+}
+test('verified download streams exact ciphertext into a new private file without Drive mutations', async t => {
+  const bytes = Buffer.concat([bytesFor('streaming'), Buffer.alloc(3 * 1024 ** 2, 17)]);
+  const value = await downloadFixture(t, bytes), original = value.drive.fetch.bind(value.drive);
+  let chunks = 0;
+  // Build a client whose media body is generated incrementally, including a
+  // split age header. Response.arrayBuffer/text are never needed.
+  const api = createDriveBackupClient({ config, now: () => new Date(NOW), sleep: async () => {},
+    authorizedFetch: async (url, options) => {
+      if (new URL(url).searchParams.get('alt') !== 'media') return original(url, options);
+      let offset = 0;
+      return new Response(new ReadableStream({ pull(controller) {
+        if (offset === bytes.length) return controller.close();
+        const end = Math.min(bytes.length, offset + (offset === 0 ? 7 : 4096));
+        controller.enqueue(bytes.subarray(offset, end)); offset = end; chunks++;
+      } }));
+    } });
+  const currentReceipt = await api.findVerifiedNight({ snapshotAt: NOW });
+  const downloaded = await api.downloadVerifiedArchive({ currentReceipt, archiveFile: value.archiveFile });
+  assert.equal(currentReceipt.snapshotAt, value.record.meta.appProperties.ecoBackupSnapshotAt);
+  assert.equal(downloaded.snapshotAt, currentReceipt.snapshotAt);
+  assert.equal(downloaded.expectedSha256, hash(bytes)); assert.equal(downloaded.verified, true);
+  assert.equal((await lstat(value.archiveFile)).mode & 0o777, 0o600);
+  assert.deepEqual(await readFile(value.archiveFile), bytes); assert.ok(chunks > 1000);
+  assert.equal(value.drive.calls.every(call => call.method === 'GET'), true); assert.equal(value.drive.writes.length, 0);
+});
+test('download requires this-client receipt and never overwrites an existing path or symlink', async t => {
+  const value = await downloadFixture(t), untouched = Buffer.from('preserve existing content');
+  const calls = value.drive.calls.length;
+  await assert.rejects(value.api.downloadVerifiedArchive({ currentReceipt: { ...value.currentReceipt }, archiveFile: value.archiveFile }), { code: 'CURRENT_VERIFICATION_REQUIRED' });
+  await assert.rejects(client(value.drive).downloadVerifiedArchive(value), { code: 'CURRENT_VERIFICATION_REQUIRED' });
+  assert.equal(value.drive.calls.length, calls);
+  await writeFile(value.archiveFile, untouched, { mode: 0o600 });
+  await assert.rejects(value.api.downloadVerifiedArchive(value), { code: 'DOWNLOAD_FAILED' });
+  assert.deepEqual(await readFile(value.archiveFile), untouched);
+  const link = join(value.root, 'link.age'); await symlink(value.archiveFile, link);
+  await assert.rejects(value.api.downloadVerifiedArchive({ ...value, archiveFile: link }), { code: 'DOWNLOAD_FAILED' });
+  assert.equal((await lstat(link)).isSymbolicLink(), true); assert.deepEqual(await readFile(value.archiveFile), untouched);
+  assert.equal(value.drive.writes.length, 0);
+});
+test('mirror rejects stale receipts and non-age bytes even when provider checksums agree', async t => {
+  for (const mode of ['stale', 'plaintext']) {
+    const bytes = mode === 'plaintext' ? Buffer.from('THIS IS NOT AGE CIPHERTEXT; DO NOT COPY IT') : bytesFor('stale');
+    const value = await downloadFixture(t, bytes);
+    if (mode === 'stale') value.record.meta.version = '999';
+    await assert.rejects(value.api.downloadVerifiedArchive(value), { code: mode === 'stale' ? 'CURRENT_ARCHIVE_CHANGED' : 'AGE_CIPHERTEXT_REQUIRED' });
+    await assert.rejects(lstat(value.archiveFile), { code: 'ENOENT' }); assert.equal(value.drive.writes.length, 0);
+  }
+});
+test('failed mirror download removes only its new partial file and preserves Drive copies', async t => {
+  for (const mode of ['corrupt', 'oversize', 'version', 'acl', 'folder']) {
+    const value = await downloadFixture(t), initialReads = value.drive.metadataReads;
+    if (mode === 'corrupt') value.drive.corruptDownload = value.record.meta.id;
+    if (mode === 'oversize') value.record.bytes = Buffer.concat([value.record.bytes, Buffer.from('extra')]);
+    if (mode === 'version') value.drive.onMetadataRead = (meta, count) => { if (count === initialReads + 2) meta.version = '999'; };
+    if (mode === 'acl') value.drive.onMetadataRead = (meta, count) => { if (count === initialReads + 2) value.drive.permissionExtra = { id: 'reader', type: 'anyone', role: 'reader' }; };
+    if (mode === 'folder') value.drive.onMetadataRead = (meta, count) => { if (count === initialReads + 2) value.drive.folder.shared = true; };
+    await assert.rejects(value.api.downloadVerifiedArchive(value), { code: {
+      corrupt: 'DOWNLOAD_HASH_MISMATCH', oversize: 'RESPONSE_SIZE_LIMIT', version: 'REMOTE_CHANGED_DURING_VERIFICATION',
+      acl: 'NONPRIVATE_PERMISSIONS', folder: 'OWNER_OR_SHARING_MISMATCH',
+    }[mode] });
+    await assert.rejects(lstat(value.archiveFile), { code: 'ENOENT' });
+    assert.equal(value.record.meta.trashed, false); assert.equal(value.drive.writes.length, 0);
+  }
+});
+test('mirror retries reset write position after a partial response and enforce a bounded stalled body', async t => {
+  for (const stall of [false, true]) {
+    const value = await downloadFixture(t); let downloading = false, attempts = 0;
+    const api = createDriveBackupClient({ config: { ...config, requestTimeoutMs: 25 }, now: () => new Date(NOW), sleep: async () => {},
+      authorizedFetch: async (url, options) => {
+        if (downloading && new URL(url).searchParams.get('alt') === 'media') {
+          attempts++;
+          if (stall) return new Response(new ReadableStream({ pull() { return new Promise(() => {}); } }));
+          if (attempts === 1) { let pulled = false; return new Response(new ReadableStream({ pull(controller) {
+            if (pulled) return controller.error(new Error('synthetic private transport failure'));
+            pulled = true; controller.enqueue(value.record.bytes.subarray(0, 9));
+          } })); }
+        }
+        return value.drive.fetch(url, options);
+      } });
+    const currentReceipt = await api.findVerifiedNight({ snapshotAt: NOW }); downloading = true;
+    if (stall) {
+      const started = Date.now();
+      await assert.rejects(api.downloadVerifiedArchive({ ...value, currentReceipt }), { code: 'REQUEST_TIMEOUT' });
+      assert.ok(Date.now() - started < 1000); assert.equal(attempts, 3);
+      await assert.rejects(lstat(value.archiveFile), { code: 'ENOENT' });
+    } else {
+      await api.downloadVerifiedArchive({ ...value, currentReceipt }); assert.equal(attempts, 2);
+      assert.deepEqual(await readFile(value.archiveFile), value.record.bytes);
+    }
+    assert.equal(value.drive.writes.length, 0);
+  }
+});
+test('a replaced local output is preserved when mirror verification fails', async t => {
+  const value = await downloadFixture(t), originalReads = value.drive.metadataReads;
+  const replacement = Buffer.from('unrelated replacement'); let replaced = false;
+  const api = createDriveBackupClient({ config, now: () => new Date(NOW), sleep: async () => {},
+    authorizedFetch: async (url, options) => {
+      if (replaced && new URL(url).searchParams.get('alt') === 'media') {
+        await rename(value.archiveFile, join(value.root, 'owned-partial.age'));
+        await writeFile(value.archiveFile, replacement, { mode: 0o600 }); replaced = false;
+      }
+      return value.drive.fetch(url, options);
+    } });
+  const currentReceipt = await api.findVerifiedNight({ snapshotAt: NOW }); replaced = true;
+  await assert.rejects(api.downloadVerifiedArchive({ ...value, currentReceipt }), { code: 'LOCAL_FILE_CHANGED' });
+  assert.deepEqual(await readFile(value.archiveFile), replacement); assert.ok(value.drive.metadataReads > originalReads);
+  assert.equal(value.drive.writes.length, 0);
+});
+test('an aborted Drive operation never starts or retries requests and exposes only a fixed code', async () => {
+  for (const mode of ['before', 'fetch', 'backoff']) {
+    const controller = new AbortController(); let calls = 0, transportAborted = false;
+    if (mode === 'before') controller.abort(new Error('private cancellation reason'));
+    const api = createDriveBackupClient({ config, signal: controller.signal,
+      sleep: async () => { controller.abort(new Error('private backoff reason')); },
+      authorizedFetch: async (url, options) => {
+        calls++;
+        options.signal.addEventListener('abort', () => { transportAborted = true; }, { once: true });
+        if (mode === 'fetch') {
+          queueMicrotask(() => controller.abort(new Error('private transport reason')));
+          return new Promise(() => {});
+        }
+        return noBody(503);
+      } });
+    await assert.rejects(api.verifyTarget(), error => {
+      assert.equal(classifyDriveBackupError(error), 'OPERATION_CANCELLED');
+      assert.equal(String(error).includes('private'), false); return true;
+    });
+    assert.equal(calls, mode === 'before' ? 0 : 1);
+    assert.equal(transportAborted, mode !== 'before');
+    await assert.rejects(api.verifyTarget(), { code: 'OPERATION_CANCELLED' });
+    assert.equal(calls, mode === 'before' ? 0 : 1);
+  }
+});
+test('external cancellation stops streaming mirror download and removes its partial file without retries', async t => {
+  const value = await downloadFixture(t), controller = new AbortController();
+  let downloading = false, mediaCalls = 0, bodyCancelled = false;
+  const api = createDriveBackupClient({ config, signal: controller.signal, now: () => new Date(NOW), sleep: async () => {},
+    authorizedFetch: async (url, options) => {
+      if (downloading && new URL(url).searchParams.get('alt') === 'media') {
+        mediaCalls++;
+        return new Response(new ReadableStream({ start(stream) { stream.enqueue(value.record.bytes.subarray(0, 7)); },
+          pull() { controller.abort(new Error('private cancellation')); return new Promise(() => {}); },
+          cancel() { bodyCancelled = true; } }));
+      }
+      return value.drive.fetch(url, options);
+    } });
+  const currentReceipt = await api.findVerifiedNight({ snapshotAt: NOW }); downloading = true;
+  await assert.rejects(api.downloadVerifiedArchive({ ...value, currentReceipt }), { code: 'OPERATION_CANCELLED' });
+  assert.equal(mediaCalls, 1); assert.equal(bodyCancelled, true);
+  await assert.rejects(lstat(value.archiveFile), { code: 'ENOENT' }); assert.equal(value.drive.writes.length, 0);
+});
+test('cancellation while checking the lock never starts the pending mutation', async t => {
+  const drive = new FakeDrive(), controller = new AbortController(), input = await fixture(t);
+  const api = createDriveBackupClient({ config, signal: controller.signal, now: () => new Date(NOW), sleep: async () => {},
+    authorizedFetch: drive.fetch.bind(drive), beforeMutation: async () => { controller.abort(); } });
+  await assert.rejects(api.uploadAndVerify(input), { code: 'OPERATION_CANCELLED' });
+  assert.equal(drive.writes.length, 0);
 });

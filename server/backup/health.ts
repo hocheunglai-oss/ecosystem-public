@@ -100,7 +100,9 @@ export function createBackupHealthObserver(options: { fetchImpl?: typeof fetch; 
       check(job.name === 'backup' && job.run_id === run.id && (job.run_attempt === undefined || job.run_attempt === run.run_attempt)
         && job.head_sha === run.head_sha && id(job.id) && job.status === 'completed' && job.conclusion === 'success'
         && Array.isArray(job.steps));
-      const matches = job.steps.map(record).filter(step => step.name === ecoConnections.backup.githubCaptureStepName);
+      const captureNames = new Set<string>([ecoConnections.backup.githubCaptureStepName,
+        ...ecoConnections.backup.githubPreviousCaptureStepNames]);
+      const matches = job.steps.map(record).filter(step => typeof step.name === 'string' && captureNames.has(step.name));
       check(matches.length === 1);
       const step = matches[0];
       if (step.status !== 'completed' || step.conclusion !== 'success')

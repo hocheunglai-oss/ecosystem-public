@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ecoConnections } from '../../config/ecoConnections.ts';
 import { diagnosticReader, publicDiagnostic } from './nightly.mjs';
+import { validateNextcloudConfiguration } from './nextcloud-backups.mjs';
 
 const reject = () => { throw new Error('Invalid backup startup configuration.'); };
 const check = value => { if (!value) reject(); };
@@ -11,7 +12,7 @@ const credentials = ['ECO_BACKUP_DB_PASSWORD', 'ECO_DRIVE_CLIENT_ID', 'ECO_DRIVE
 const context = ['GITHUB_ACTIONS', 'GITHUB_REPOSITORY', 'GITHUB_REPOSITORY_ID', 'GITHUB_REPOSITORY_OWNER_ID',
   'GITHUB_REF', 'GITHUB_REF_PROTECTED', 'GITHUB_EVENT_NAME', 'GITHUB_SHA', 'GITHUB_WORKFLOW_REF',
   'GITHUB_WORKFLOW_SHA', 'GITHUB_RUN_ID', 'RUNNER_ENVIRONMENT', 'RUNNER_OS', 'RUNNER_ARCH', 'RUNNER_TEMP'];
-const allowedEco = new Set([...credentials, 'ECO_BACKUP_CONFIGURATION', 'ECO_NIGHTLY_BACKUP_ENABLED']);
+const allowedEco = new Set([...credentials, 'ECO_BACKUP_CONFIGURATION', 'ECO_NIGHTLY_BACKUP_ENABLED', 'ECO_NEXTCLOUD_APP_PASSWORD']);
 const workflow = `${ecoConnections.githubRepository}/${ecoConnections.backup.githubWorkflowPath}@${ecoConnections.backup.githubRef}`;
 
 /** Pure preparation: no network, subprocess, credential logging or filesystem access. */
@@ -45,8 +46,12 @@ export function prepareGitHubBackup(env) {
   let settings;
   try { settings = JSON.parse(env.ECO_BACKUP_CONFIGURATION); } catch { reject(); }
   const keys = ['databaseHost', 'driveEmail', 'driveFolderId', 'recipient'];
+  const secondary = settings && Object.hasOwn(settings,'nextcloud');
   check(settings && typeof settings === 'object' && !Array.isArray(settings)
-    && Object.keys(settings).length === keys.length && keys.every(key => typeof settings[key] === 'string'));
+    && Object.keys(settings).length === keys.length + (secondary ? 1 : 0) && keys.every(key => typeof settings[key] === 'string'));
+  if (secondary) {
+    try { validateNextcloudConfiguration(settings.nextcloud,env.ECO_NEXTCLOUD_APP_PASSWORD); } catch { reject(); }
+  } else check(!env.ECO_NEXTCLOUD_APP_PASSWORD);
   check(settings.databaseHost === `aws-0-${ecoConnections.supabaseRegion}.pooler.supabase.com`
     && /^[^\s@]{1,64}@[^\s@]{1,189}\.[^\s@]{2,63}$/u.test(settings.driveEmail)
     && /^[A-Za-z0-9_-]{10,200}$/u.test(settings.driveFolderId) && /^age1[0-9a-z]{58}$/u.test(settings.recipient));
@@ -60,10 +65,12 @@ export function prepareGitHubBackup(env) {
     drive: { expectedEmail: settings.driveEmail, folderId: settings.driveFolderId,
       applicationTag: 'eco-nightly-v1', namePrefix: 'ECO-nightly', propertyPrefix: 'ecoBackup',
       keepNights: 5, maxArchiveBytes: 512 * 1024 ** 2 }, timeoutMs: 40 * 60_000,
+    ...(secondary ? {nextcloud:{...settings.nextcloud}} : {}),
   };
   // Do not inherit ambient GitHub tokens, proxy settings, PG* overrides or unrelated secrets.
   const childEnv = { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC', TMPDIR: env.RUNNER_TEMP };
   for (const key of [...context, ...credentials]) childEnv[key] = env[key];
+  if (secondary) childEnv.ECO_NEXTCLOUD_APP_PASSWORD = env.ECO_NEXTCLOUD_APP_PASSWORD;
   childEnv.ECO_BACKUP_STORAGE_JSON = JSON.stringify({
     oidcRequestUrl: oidc.href, oidcRequestToken: env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
   });
@@ -105,7 +112,7 @@ export async function runGitHubBackup(env = process.env, { launch = runChild, lo
     if (directory) try { await rm(directory, { recursive: true, force: true, maxRetries: 3 }); } catch { ok = false; }
     process.umask(previousMask);
   }
-  log(ok ? 'ECO encrypted backup verified; retention completed.'
+  log(ok ? 'ECO configured encrypted backup copies verified.'
     : 'ECO nightly backup did not complete. Check the private connection and reviewed configuration.');
   return ok;
 }

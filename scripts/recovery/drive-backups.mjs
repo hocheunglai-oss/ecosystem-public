@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
-import { lstat, open } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { lstat, open, unlink } from 'node:fs/promises';
+import { dirname, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 
 // Protocol references (Google primary documentation only):
@@ -29,7 +29,7 @@ export class DriveBackupError extends Error {
 export const DRIVE_BACKUP_DIAGNOSTIC_CODES = Object.freeze([
   'ACCOUNT_MISMATCH', 'AGE_CIPHERTEXT_REQUIRED', 'ARCHIVE_NOT_VERIFIED', 'COMPLETION_MISMATCH',
   'CURRENT_ARCHIVE_CHANGED', 'CURRENT_ARCHIVE_MISSING', 'CURRENT_VERIFICATION_REQUIRED',
-  'DOWNLOAD_HASH_MISMATCH', 'DUPLICATE_LIST_ENTRY', 'FILE_ID_MISMATCH', 'FILE_LIST_LIMIT',
+  'DOWNLOAD_HASH_MISMATCH', 'DOWNLOAD_FAILED', 'DUPLICATE_LIST_ENTRY', 'FILE_ID_MISMATCH', 'FILE_LIST_LIMIT',
   'FILE_SCOPE_MISMATCH', 'FIVE_NEWER_NIGHTS_REQUIRED', 'FOLDER_MISMATCH', 'FUTURE_SNAPSHOT',
   'HTTP_400', 'HTTP_401', 'HTTP_403', 'HTTP_404', 'HTTP_408', 'HTTP_409', 'HTTP_410',
   'HTTP_412', 'HTTP_413', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504',
@@ -40,6 +40,7 @@ export const DRIVE_BACKUP_DIAGNOSTIC_CODES = Object.freeze([
   'INVALID_VERIFICATION_METADATA', 'LOCAL_FILE_CHANGED', 'LOCAL_HASH_MISMATCH',
   'MISSING_FILE_VERSION', 'MISSING_RESPONSE_BODY', 'MUTATION_AUTHORIZATION_FAILED',
   'NIGHT_COLLISION', 'NIGHT_NAME_COLLISION', 'NONPRIVATE_PERMISSIONS', 'OWNER_OR_SHARING_MISMATCH',
+  'OPERATION_CANCELLED',
   'PAGINATION_LIMIT', 'PAGINATION_LOOP', 'PENDING_ARCHIVE_CHANGED', 'PERMISSIONS_LIMIT',
   'QUOTA_UNAVAILABLE', 'REDIRECT_REJECTED', 'REMOTE_CHANGED_BEFORE_COMPLETION',
   'REMOTE_CHANGED_DURING_VERIFICATION', 'REMOTE_ARCHIVE_METADATA_CHANGED', 'REMOTE_CHECKSUM_CHANGED',
@@ -80,16 +81,16 @@ function allowedUrl(value, session = false) {
     && url.searchParams.get('uploadType') === 'resumable' && Boolean(url.searchParams.get('upload_id')), 'INVALID_UPLOAD_SESSION');
   return url.href;
 }
-function abortRace(promise, signal) {
-  if (signal.aborted) return Promise.reject(new DriveBackupError('REQUEST_TIMEOUT'));
+function abortRace(promise, signal, code = 'REQUEST_TIMEOUT') {
+  if (signal.aborted) return Promise.reject(new DriveBackupError(code));
   return new Promise((resolve, reject) => {
-    const abort = () => { signal.removeEventListener('abort', abort); reject(new DriveBackupError('REQUEST_TIMEOUT')); };
+    const abort = () => { signal.removeEventListener('abort', abort); reject(new DriveBackupError(code)); };
     signal.addEventListener('abort', abort, { once: true });
     Promise.resolve(promise).then(value => { signal.removeEventListener('abort', abort); resolve(value); },
       error => { signal.removeEventListener('abort', abort); reject(error); });
   });
 }
-async function consume(response, signal, { hash = false, maxBytes = 2 * 1024 ** 2 } = {}) {
+async function consume(response, signal, { hash = false, maxBytes = 2 * 1024 ** 2, writeChunk } = {}) {
   check(response.body && typeof response.body.getReader === 'function', 'MISSING_RESPONSE_BODY');
   const reader = response.body.getReader(), chunks = [], digest = hash ? createHash('sha256') : null;
   let size = 0;
@@ -98,9 +99,12 @@ async function consume(response, signal, { hash = false, maxBytes = 2 * 1024 ** 
       const { done, value } = await abortRace(reader.read(), signal); if (done) break;
       size += value.byteLength; check(size <= maxBytes, 'RESPONSE_SIZE_LIMIT');
       if (hash) digest.update(value); else chunks.push(value);
+      // Complete each local write before retrying or closing its descriptor;
+      // racing a write against cancellation could leave a stale write in flight.
+      if (writeChunk) { await writeChunk(value, size - value.byteLength); check(!signal.aborted, 'REQUEST_TIMEOUT'); }
     }
   } finally {
-    if (signal.aborted) void reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
     try { reader.releaseLock(); } catch {}
   }
   return hash ? { size, sha256: digest.digest('hex') } : Buffer.concat(chunks);
@@ -110,8 +114,9 @@ async function consume(response, signal, { hash = false, maxBytes = 2 * 1024 ** 
  * This module never reads or persists access/refresh tokens or resumable upload URLs.
  * A caller must enforce a cross-process execution lock: Drive filenames are not unique.
  */
-export function createDriveBackupClient({ authorizedFetch, config, beforeMutation = async () => {}, now = () => new Date(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+export function createDriveBackupClient({ authorizedFetch, config, beforeMutation = async () => {}, now = () => new Date(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), signal: operationSignal }) {
   check(typeof authorizedFetch === 'function' && typeof beforeMutation === 'function' && config && typeof config === 'object', 'INVALID_CLIENT');
+  check(operationSignal === undefined || operationSignal instanceof AbortSignal, 'INVALID_CLIENT');
   const cfg = { ...DEFAULTS, ...config };
   check(typeof cfg.expectedEmail === 'string' && /^[^\s@]+@[^\s@]+$/u.test(cfg.expectedEmail)
     && validId(cfg.folderId), 'INVALID_TARGET');
@@ -129,13 +134,27 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
   const get = (file, name) => file.appProperties?.[key(name)];
   const nameFor = night => `${cfg.namePrefix}-${night}.tar.gz.age`;
 
-  async function request(url, options = {}, { allowed = [200], retries = cfg.retryLimit, mode = 'json', maxBytes, resume = false, signal } = {}) {
+  async function request(url, options = {}, { allowed = [200], retries = cfg.retryLimit, mode = 'json', maxBytes, resume = false, writeChunk, signal: deadlineSignal } = {}) {
     url = allowedUrl(url, resume);
+    // The caller may cancel its entire Drive preflight; verifyBytes has a
+    // separate total readback deadline. Neither signal may shadow the other.
+    const scopes = [operationSignal, deadlineSignal].filter(Boolean);
+    const scopeSignal = scopes.length ? AbortSignal.any(scopes) : undefined;
+    const checkActive = () => {
+      check(!operationSignal?.aborted, 'OPERATION_CANCELLED');
+      check(!deadlineSignal?.aborted, 'REQUEST_TIMEOUT');
+    };
+    const waitRetry = async attempt => {
+      checkActive();
+      const waiting = Promise.resolve().then(() => sleep(Math.min(250 * 2 ** attempt, 4000)));
+      try { if (scopeSignal) await abortRace(waiting, scopeSignal); else await waiting; }
+      catch (error) { checkActive(); throw error; }
+    };
     for (let attempt = 0; ; attempt++) {
-      check(!signal?.aborted, 'REQUEST_TIMEOUT');
+      checkActive();
       const controller = new AbortController();
-      const abort = () => controller.abort();
-      signal?.addEventListener('abort', abort, { once: true });
+      const cancel = () => controller.abort();
+      scopeSignal?.addEventListener('abort', cancel, { once: true });
       const timer = setTimeout(() => controller.abort(), cfg.requestTimeoutMs);
       let response;
       try {
@@ -145,6 +164,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
           try { await abortRace(Promise.resolve().then(() => beforeMutation()), controller.signal); }
           catch { fail('MUTATION_AUTHORIZATION_FAILED'); }
         }
+        checkActive();
         response = await abortRace(authorizedFetch(url, { ...options, redirect: 'error', signal: controller.signal }), controller.signal);
         check(!response.redirected && (!response.url || response.url === url), 'REDIRECT_REJECTED');
         if (response.status >= 300 && response.status < 400)
@@ -152,23 +172,26 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
         if (!allowed.includes(response.status)) {
           if ([408, 429, 500, 502, 503, 504].includes(response.status) && attempt < retries) {
             await abortRace(response.body?.cancel().catch(() => {}) || Promise.resolve(), controller.signal);
-            await abortRace(sleep(Math.min(250 * 2 ** attempt, 4000)), controller.signal); continue;
+            await waitRetry(attempt); continue;
           }
           fail(`HTTP_${Number(response.status) || 0}`);
         }
         if (mode === 'headers' || response.status === 308) return { status: response.status, headers: response.headers };
-        const data = await consume(response, controller.signal, { hash: mode === 'hash', maxBytes });
+        const data = await consume(response, controller.signal, { hash: mode === 'hash', maxBytes, writeChunk });
         if (mode === 'hash') return { status: response.status, headers: response.headers, ...data };
         let json; try { json = JSON.parse(data.toString('utf8')); } catch { fail('INVALID_GOOGLE_RESPONSE'); }
         return { status: response.status, headers: response.headers, json };
       } catch (error) {
-        check(!signal?.aborted, 'REQUEST_TIMEOUT');
+        checkActive();
         if ((!(error instanceof DriveBackupError) || error.code === 'REQUEST_TIMEOUT') && attempt < retries) {
-          await abortRace(sleep(Math.min(250 * 2 ** attempt, 4000)), signal || new AbortController().signal); continue;
+          await waitRetry(attempt); continue;
         }
         if (error instanceof DriveBackupError) throw error;
         throw new DriveBackupError('TRANSPORT_FAILED');
-      } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); controller.abort(); }
+      } finally {
+        clearTimeout(timer); scopeSignal?.removeEventListener('abort', cancel); controller.abort();
+        if (response?.body && !response.body.locked) void response.body.cancel().catch(() => {});
+      }
     }
   }
   async function metadata(id, options) {
@@ -257,6 +280,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
       && (file.sha256Checksum === undefined || file.sha256Checksum === value.sha256), 'REMOTE_SIZE_OR_HASH_MISMATCH');
     let lastVersion = BigInt(file.version), checksumSeen = false;
     const controller = new AbortController(), options = { signal: controller.signal };
+    const verificationSignal = operationSignal ? AbortSignal.any([controller.signal, operationSignal]) : controller.signal;
     const timer = setTimeout(() => controller.abort(), cfg.verificationTimeoutMs);
     function observe(candidate) {
       descriptor(candidate, { pending });
@@ -274,6 +298,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     try {
       observe(file);
       for (let attempt = 0; attempt < 3; attempt++) {
+        check(!operationSignal?.aborted, 'OPERATION_CANCELLED');
         check(!controller.signal.aborted, 'REQUEST_TIMEOUT');
         if (attempt) { file = await metadata(value.fileId, options); observe(file); }
         await verifyPrivate(file, options);
@@ -293,13 +318,16 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
           fail(versionChanged && checksumChanged ? 'REMOTE_METADATA_UNSTABLE'
             : versionChanged ? 'REMOTE_VERSION_UNSTABLE' : 'REMOTE_CHECKSUM_UNSTABLE');
         }
-        await abortRace(sleep(250 * (attempt + 1)), controller.signal);
+        await abortRace(sleep(250 * (attempt + 1)), verificationSignal);
       }
+    } catch (error) {
+      check(!operationSignal?.aborted, 'OPERATION_CANCELLED');
+      throw error;
     } finally { clearTimeout(timer); controller.abort(); }
   }
   function mint(file) {
     const value = descriptor(file);
-    const receipt = Object.freeze({ ...value, verified: true, verifiedAt: get(file, 'VerifiedAt'), readbackVerifiedAt: new Date(now()).toISOString(), folderId: cfg.folderId, email, version: file.version });
+    const receipt = Object.freeze({ ...value, snapshotAt: get(file, 'SnapshotAt'), verified: true, verifiedAt: get(file, 'VerifiedAt'), readbackVerifiedAt: new Date(now()).toISOString(), folderId: cfg.folderId, email, version: file.version });
     minted.add(receipt); return receipt;
   }
   async function complete(file) {
@@ -439,6 +467,65 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     const checked = await verifyBytes(await metadata(fileId), true);
     return Object.freeze({ ...checked.value, readbackVerifiedAt: new Date(now()).toISOString() });
   }
+  /** Export a freshly verified ciphertext for a second destination; never mutate Drive. */
+  async function downloadVerifiedArchive({ currentReceipt, archiveFile }) {
+    check(currentReceipt && minted.has(currentReceipt) && currentReceipt.verified === true, 'CURRENT_VERIFICATION_REQUIRED');
+    check(typeof archiveFile === 'string' && isAbsolute(archiveFile) && archiveFile.endsWith('.age'), 'INVALID_LOCAL_ARCHIVE');
+    let handle, created, complete = false;
+    try {
+      // A private parent prevents another account replacing our path during
+      // cleanup. Exclusive creation protects any existing file or symlink.
+      const parent = await lstat(dirname(archiveFile));
+      check(parent.isDirectory() && !parent.isSymbolicLink() && parent.uid === process.getuid()
+        && !(parent.mode & 0o077), 'UNSAFE_LOCAL_ARCHIVE');
+      handle = await open(archiveFile, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      created = await handle.stat();
+      check(created.isFile() && created.nlink === 1 && created.uid === process.getuid() && !(created.mode & 0o077), 'UNSAFE_LOCAL_ARCHIVE');
+      await verifyTarget();
+      const before = await metadata(currentReceipt.fileId), value = descriptor(before);
+      check(value.sha256 === currentReceipt.sha256 && value.size === currentReceipt.size
+        && value.night === currentReceipt.night && before.version === currentReceipt.version
+        && get(before, 'SnapshotAt') === currentReceipt.snapshotAt, 'CURRENT_ARCHIVE_CHANGED');
+      await verifyPrivate(before);
+      check(String(before.size) === String(value.size) && (!before.sha256Checksum || before.sha256Checksum === value.sha256), 'REMOTE_SIZE_OR_HASH_MISMATCH');
+      let header = Buffer.alloc(0);
+      const actual = await request(urlFor(`/drive/v3/files/${before.id}`, { alt: 'media' }), {}, {
+        mode: 'hash', maxBytes: value.size,
+        writeChunk: async (bytes, position) => {
+          if (position === 0) header = Buffer.alloc(0);
+          if (header.length < AGE_HEADER.length) header = Buffer.concat([header, bytes.subarray(0, AGE_HEADER.length - header.length)]);
+          let offset = 0;
+          while (offset < bytes.length) {
+            const written = await handle.write(bytes, offset, bytes.length - offset, position + offset);
+            check(written.bytesWritten > 0, 'DOWNLOAD_FAILED'); offset += written.bytesWritten;
+          }
+        },
+      });
+      check(actual.size === value.size && actual.sha256 === value.sha256, 'DOWNLOAD_HASH_MISMATCH');
+      check(header.toString() === AGE_HEADER, 'AGE_CIPHERTEXT_REQUIRED');
+      const after = await metadata(before.id); descriptor(after); await verifyPrivate(after);
+      check(fingerprint(after) === fingerprint(before), 'REMOTE_CHANGED_DURING_VERIFICATION');
+      await verifyTarget();
+      await handle.sync();
+      const local = await handle.stat(), named = await lstat(archiveFile);
+      check(local.size === value.size && local.nlink === 1 && !(local.mode & 0o077)
+        && named.dev === created.dev && named.ino === created.ino && !named.isSymbolicLink(), 'LOCAL_FILE_CHANGED');
+      await handle.close(); handle = undefined; complete = true;
+      return Object.freeze({ archiveFile, expectedSha256: value.sha256, snapshotAt: currentReceipt.snapshotAt,
+        size: value.size, fileId: before.id, verified: true });
+    } catch (error) {
+      if (error instanceof DriveBackupError) throw error;
+      throw new DriveBackupError('DOWNLOAD_FAILED');
+    } finally {
+      await handle?.close().catch(() => {});
+      if (!complete && created) {
+        try {
+          const current = await lstat(archiveFile);
+          if (current.dev === created.dev && current.ino === created.ino && !current.isSymbolicLink()) await unlink(archiveFile);
+        } catch { /* Never remove an unrelated path or expose a local filesystem error. */ }
+      }
+    }
+  }
   async function retainLatestNights({ currentReceipt }) {
     check(currentReceipt && minted.has(currentReceipt) && currentReceipt.verified === true, 'CURRENT_VERIFICATION_REQUIRED');
     await verifyTarget();
@@ -475,5 +562,5 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     }
     return { keepNights: cfg.keepNights, retainedNights: nights.slice(0, cfg.keepNights), trashed, permanentDeletionUsed: false };
   }
-  return Object.freeze({ verifyTarget, findVerifiedNight, uploadAndVerify, retainLatestNights, listManagedBackups, verifyArchiveReadOnly });
+  return Object.freeze({ verifyTarget, findVerifiedNight, uploadAndVerify, retainLatestNights, listManagedBackups, verifyArchiveReadOnly, downloadVerifiedArchive });
 }

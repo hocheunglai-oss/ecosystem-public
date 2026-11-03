@@ -1,4 +1,4 @@
-# ECO nightly Drive runner
+# ECO nightly encrypted backup runner
 
 This is prepared operator code. Creating the files and passing offline tests does **not** activate a schedule, provision database credentials, authorize Google Drive or deploy the ECO signed-download endpoint. Activation needs a verified complete first unattended run and its private receipt.
 
@@ -12,7 +12,7 @@ The trusted wrapper imports the canonical `config/ecoConnections.ts` and passes 
 node /trusted/backup/nightly.mjs --canonical /trusted/config/ecoConnections.ts --config /private/runtime.json
 ```
 
-The configuration has exactly these fields:
+The legacy Drive-only configuration has exactly these fields:
 
 ```text
 schemaVersion: 1
@@ -39,6 +39,16 @@ drive:
 timeoutMs: integer from 60000 through 2700000 (45 minutes)
 ```
 
+An optional `nextcloud` field enables a second encrypted destination. Omit this
+field entirely to retain the legacy Drive-only path. Its exact keys are `origin`
+(the privately verified HTTPS Storage Share origin), `expectedUser` (a dedicated
+nonadmin `eco-backup` or `eco-backup-<suffix>` account), `folder` (one ASCII path
+segment in that account's personal files), and `maxArchiveBytes` (reviewed positive
+integer, at most 8 GiB). No hostname, account, password or actual folder identity
+is committed to source. The private GitHub `ECO_BACKUP_CONFIGURATION` object accepts
+this same optional field alongside its existing four fields; it does not accept
+extra database credentials or an alternate source project.
+
 The canonical supplier report bucket is passed to capture explicitly. Do not substitute FCUNO/FCOS settings or credentials.
 
 ## Credentials
@@ -48,6 +58,7 @@ Each input below must be supplied by exactly one environment variable or an owne
 - `ECO_BACKUP_DB_PASSWORD`: dedicated ECO backup reader password.
 - `ECO_DRIVE_CLIENT_ID`, `ECO_DRIVE_CLIENT_SECRET`, `ECO_DRIVE_REFRESH_TOKEN`: the dedicated Google OAuth app's approved unattended credential. The returned access-token scope must be exactly `https://www.googleapis.com/auth/drive.file`; missing or broader scopes fail closed. Google consent must be in a mode suitable for long-lived unattended use. OAuth app testing-mode expiry, revocation and account policy can stop future runs.
 - `ECO_BACKUP_STORAGE_JSON`: **ephemeral job data**, not a long-lived application secret. The reviewed adapter accepts `oidcRequestUrl` and `oidcRequestToken`, assembled from this job's `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN`. The adapter obtains a short-lived token and sends it only to the canonical ECO backup endpoint. Use the exact GitHub-provided variable `ACTIONS_ID_TOKEN_REQUEST_TOKEN`; do not print it. The provider module validates the canonical backup audience and endpoint pins.
+- `ECO_NEXTCLOUD_APP_PASSWORD`: required only with the optional `nextcloud` destination, from its separate protected secret. Never reuse an administrator, contacts/phonebook writer or another application's credential. The trusted GitHub wrapper accepts the environment secret only; the lower-level CLI also supports its private `_FILE` counterpart. Supplying the credential without the matching destination configuration fails closed.
 
 The process rejects recovery-identity environment variables and the age private-key marker. Keep the decryption identity outside GitHub, Vercel, Drive and the runner. Encryption only needs the public recipient. Runtime data moves from supervisor to worker through stdin, never a command-line argument or plaintext GitHub artifact. Spawned PostgreSQL/age tools inherit only their necessary environment, not the full job environment.
 
@@ -76,6 +87,56 @@ Capture holds its own repeatable-read, read-only exported PostgreSQL snapshot, c
 
 The date comes from the database snapshot. Crossing midnight during capture fails instead of silently relabelling a backup. A failed capture, encryption or verification does not authorize retention. Retention can complete partially if a later operation fails, but each removal already requires five newer verified nights.
 
+### Optional second destination
+
+With `nextcloud` configured, the runner captures and seals once and attempts the
+two destinations independently. Upload/readback operations start concurrently,
+with the shared PostgreSQL lock checks serialized. A failed configured destination
+makes the entire run fail; the successful remote copy is preserved. Neither
+destination is pruned in this mode, even after both succeed. Enabling retention
+later needs a separate reviewed policy and quota/restore evidence.
+
+A same-night Drive archive, including a pending upload recovered by full readback,
+is downloaded into a new private ciphertext file and mirrored exactly. It does
+not silently bypass the second copy. Drive's preliminary lookup/recovery has a
+five-minute cancellation budget so an unavailable provider cannot consume the
+whole job before a fresh capture is attempted. If that recovery fails, a fresh
+sealed snapshot is attempted at both destinations; Drive's existing collision
+protection may reject a different same-night ciphertext while the second
+destination still preserves its new copy. That partial outcome remains a failure.
+
+The secondary adapter verifies its exact authenticated account with no group or
+subadmin memberships, no outgoing or local incoming shares, a private owned local
+personal root/folder, and private owned non-mounted archive metadata. Incoming
+federated shares are not all enumerated by the local share endpoint; explicit
+ownership and mount checks on the destination itself remain mandatory. These
+are point-in-time checks, not immutable access controls. Configure a real finite
+account quota; unknown/unlimited quota reporting is rejected.
+
+Only already sealed age bytes are accepted. HTTPS credentials go only to the
+configured exact origin and finite OCS/WebDAV paths; redirects are rejected.
+The filename contains its Hong Kong snapshot date and full ciphertext hash.
+Conditional `If-None-Match: *` PUT creates without overwriting. Existing names and
+uncertain upload outcomes are accepted only after full independent readback.
+The adapter streams every byte through SHA-256, enforces size, pins ETag during
+readback, then rechecks unchanged metadata and privacy. Corrupt or partial remote
+objects are preserved for operator review. No DELETE, MOVE, public link or
+Nextcloud server-side checksum is used as a substitute for readback.
+
+Requests use at most three attempts with a two-minute timeout per attempt;
+authentication, privacy and checksum failures are not blindly retried. The outer
+worker deadline still bounds the complete run. XML metadata is capped at 64 KiB,
+parsed by isolated system Python using its standard library, and rejects DTDs,
+entities, alternate encodings, duplicate properties and ambiguous resources.
+There is no npm install or third-party XML parser in the credentialed job.
+
+The private result contains separate verified receipts for each destination with
+snapshot time, ciphertext hash, size and readback time. A private temporary
+`destination-receipts.json` also records partial outcomes, but the supervisor
+deliberately removes it during cleanup; it is not a durable receipt store. Public
+logs contain only fixed destination phase/completion/error codes. Actual archive
+existence is never reported as a completed verification or restore.
+
 ## Cleanup, limits and recovery
 
 The supervisor creates a private temporary run directory, starts a detached worker process group, limits output and execution duration, and handles SIGINT/SIGTERM by killing the whole group before removing its owned files. It also removes plaintext after worker failure and output overflow. The workflow runs a separate `always()` cleanup step with a two-minute limit and no source secrets or OIDC variables. It removes only this runner's owned, private directories matching the exact generated configuration/run names under `RUNNER_TEMP`, rejects foreign or unsafe directories and never follows symlinks. Credentials are passed through the job environment and stdin, not written into credential files. SIGKILL, runner destruction and power loss cannot execute cleanup handlers; use fresh ephemeral GitHub-hosted runners, avoid swap/core dumps where the environment permits, never cache or upload the work directory, and do not use persistent self-hosted machines.
@@ -99,3 +160,15 @@ The runner suite covers workflow gates, target/TLS/role pins, secret-file permis
 An authorized operator can dispatch one manual run from protected main while `ECO_NIGHTLY_BACKUP_ENABLED` is absent or false. This does not enable scheduled runs and retains every repository, workflow, environment and credential restriction. Set the variable to `true` only after that first run is verified; clearing it pauses future scheduled runs while preserving explicit manual recovery checks.
 
 Provision and verify the dedicated role using the reviewed migration and separate protected credential activation. Verify the exact Google account, private app-accessible folder, OAuth grant, deployed OIDC endpoint, protected main branch, environment secrets and concurrency configuration. Keep the schedule disabled until a first unattended encrypted upload and full readback succeeds. Verify the administrator health result against that first run, review GitHub failure-notification settings, record the missing-run push-alert limitation and arrange independent recovery-key custody. Retain a private activation receipt. Source files and synthetic tests alone are not evidence that any live integration or schedule is active.
+
+The optional secondary destination is **inactive until separately provisioned and
+verified**. Before adding its private configuration/secret, establish a dedicated
+nonadmin ECO account and app password, finite quota, the intended local private
+folder, and no outgoing shares. Verify the hosted server's actual API and
+conditional-create behavior in that account. Then require a complete protected
+run with full readback from both destinations, followed by an isolated restore
+from the downloaded encrypted copy using the independently held recovery identity.
+Record evidence privately and verify that the failure/missed-run alert reaches
+the approved recipient. Keep the recovery identity outside both destinations and
+all unattended runners. This supplementary Storage Share copy does not replace
+the live database, the existing Drive copy, or whole-application recovery planning.

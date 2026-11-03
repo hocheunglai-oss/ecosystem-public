@@ -76,6 +76,25 @@ test('workflow success without a completed successful capture step never counts 
   }
 });
 
+test('capture-step rename accepts either exact historical name but rejects aliases and ambiguous matches', async () => {
+  const names = [ecoConnections.backup.githubCaptureStepName, ...ecoConnections.backup.githubPreviousCaptureStepNames];
+  assert.equal(names.length, 2); assert.equal(new Set(names).size, 2);
+  assert.equal(Object.isFrozen(ecoConnections.backup.githubPreviousCaptureStepNames), true);
+  for (const name of names) {
+    const f = fixture(); f.step.name = name;
+    assert.deepEqual(states(await observe(f)), ['healthy','healthy']);
+    f.step.conclusion = 'skipped';
+    assert.deepEqual(states(await observe(f)), ['unavailable','unavailable']);
+    for (const alias of [name.toLowerCase(), ` ${name}`, `${name} `, `${name} (retry)`]) {
+      const other = fixture(); other.step.name = alias;
+      assert.deepEqual(states(await observe(other)), ['unknown','unknown']);
+    }
+  }
+  const ambiguous = fixture();
+  ambiguous.job.steps = names.map(name => ({ ...ambiguous.step, name }));
+  assert.deepEqual(states(await observe(ambiguous)), ['unknown','unknown']);
+});
+
 test('missing, disabled, failed and unfinished schedules remain visible', async () => {
   const noRuns=fixture(); noRuns.runs.workflow_runs=[];noRuns.runs.total_count=0;
   assert.deepEqual(states(await observe(noRuns)),['unknown','unknown']);

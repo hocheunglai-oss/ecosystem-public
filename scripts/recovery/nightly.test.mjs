@@ -104,6 +104,103 @@ test('same-night retry uses newly readback-verified receipt without new randomiz
     assert.deepEqual(f.events,['lock','target','find','alive','retain','close']);
   }finally{await rm(f.directory,{recursive:true,force:true});}
 });
+const secondaryConfig={origin:'https://nx123456.your-storageshare.de',expectedUser:'eco-backup',folder:'ECO',maxArchiveBytes:1024*1024};
+async function dualFixture(options={}) {
+  const f=await fixture(options);
+  f.payload.config.nextcloud={...secondaryConfig};f.payload.secrets.nextcloudAppPassword='synthetic-secondary-password';
+  let snapshot;
+  const existingFind=f.deps.drive.findVerifiedNight;
+  f.deps.drive.findVerifiedNight=async input=>{const found=await existingFind(input);if(found)found.snapshotAt=now;return found;};
+  f.deps.drive.downloadVerifiedArchive=async({currentReceipt,archiveFile})=>{
+    f.events.push('recover');await writeFile(archiveFile,'age-encryption.org/v1\nSYNTHETIC_CIPHERTEXT',{mode:0o600});
+    return{archiveFile,expectedSha256:currentReceipt.sha256,snapshotAt:now,size:currentReceipt.size,verified:true};
+  };
+  f.deps.nextcloud={uploadAndVerify:async input=>{
+    f.events.push('secondary');snapshot=input;
+    assert.equal(await exists(join(f.directory,'capture')),false);assert.equal(await exists(input.archiveFile),true);
+    return{verified:true,sha256:input.expectedSha256,size:123,night:'2026-10-22',snapshotAt:input.snapshotAt};
+  }};
+  return{...f,getSecondary:()=>snapshot};
+}
+test('optional destination is disabled by omission and requires an independent exact credential/config pair',()=>{
+  const r=runtime();assert.doesNotThrow(()=>validateRuntime(r));
+  r.config.nextcloud={...secondaryConfig};assert.throws(()=>validateRuntime(r));
+  r.secrets.nextcloudAppPassword='synthetic-secondary-password';assert.doesNotThrow(()=>validateRuntime(r));
+  for(const bad of [null,{...secondaryConfig,expectedUser:'phonebook'},{...secondaryConfig,folder:'../'},
+    {...secondaryConfig,serviceRole:'forbidden'}])assert.throws(()=>validateRuntime({...r,config:{...r.config,nextcloud:bad}}));
+  delete r.config.nextcloud;assert.throws(()=>validateRuntime(r));
+});
+test('two configured copies share one sealed snapshot, keep separate receipts and never prune',async()=>{
+  const f=await dualFixture();try{
+    const result=await runNightly(f.payload,f.deps);
+    assert.equal(result.verified,true);assert.equal(result.destinations.drive.verified,true);assert.equal(result.destinations.nextcloud.verified,true);
+    assert.equal(result.destinations.drive.receipt.sha256,result.destinations.nextcloud.receipt.sha256);
+    assert.equal(result.retention.skipped,true);assert.equal(result.restorationVerified,false);
+    assert.equal(f.events.filter(x=>x==='capture').length,1);assert.equal(f.events.filter(x=>x==='seal').length,1);
+    assert.equal(f.events.filter(x=>x==='upload').length,1);assert.equal(f.events.filter(x=>x==='secondary').length,1);
+    assert.equal(f.events.includes('retain'),false);
+    const saved=JSON.parse(await readFile(join(f.directory,'destination-receipts.json'),'utf8'));
+    assert.equal(saved.destinations.drive.verified,true);assert.equal(saved.destinations.nextcloud.verified,true);
+    assert.equal(saved.snapshotAt,now);assert.equal(f.getSecondary().snapshotAt,now);
+  }finally{await rm(f.directory,{recursive:true,force:true});}
+});
+test('Drive target/upload failure does not prevent an independently verified secondary copy',async()=>{
+  for(const failAt of ['target','upload']){
+    const f=await dualFixture({failAt});
+    if(failAt==='target')f.deps.drive.uploadAndVerify=async()=>{f.events.push('upload');throw new DriveBackupError('HTTP_503');};
+    try{
+      await assert.rejects(runNightly(f.payload,f.deps),error=>error.code==='RUN_FAILED');
+      assert.equal(f.events.includes('capture'),true);assert.equal(f.events.includes('secondary'),true);assert.equal(f.events.includes('retain'),false);
+      const saved=JSON.parse(await readFile(join(f.directory,'destination-receipts.json'),'utf8'));
+      assert.equal(saved.destinations.drive.verified,false);assert.equal(saved.destinations.nextcloud.verified,true);
+    }finally{await rm(f.directory,{recursive:true,force:true});}
+  }
+});
+test('secondary upload starts while Drive is still pending and source lock checks never overlap', {timeout:3000}, async()=>{
+  const f=await dualFixture();let active=0,maxActive=0,release;
+  const secondaryStarted=new Promise(resolve=>{release=resolve;});
+  const originalDrive=f.deps.drive.uploadAndVerify,originalSecondary=f.deps.nextcloud.uploadAndVerify;
+  f.deps.drive.uploadAndVerify=async options=>{await secondaryStarted;return originalDrive(options);};
+  f.deps.nextcloud.uploadAndVerify=async options=>{release();return originalSecondary(options);};
+  f.deps.lock=async()=>({assertAlive:async()=>{active++;maxActive=Math.max(maxActive,active);await new Promise(resolve=>setTimeout(resolve,5));active--;},close:async()=>{}});
+  try{assert.equal((await runNightly(f.payload,f.deps)).verified,true);assert.equal(maxActive,1);}
+  finally{await rm(f.directory,{recursive:true,force:true});}
+});
+test('secondary failure keeps verified Drive copy but fails overall and does not prune',async()=>{
+  const f=await dualFixture();f.deps.nextcloud.uploadAndVerify=async()=>{f.events.push('secondary');throw new Error(password);};
+  try{
+    await assert.rejects(runNightly(f.payload,f.deps));assert.equal(f.events.includes('upload'),true);assert.equal(f.events.includes('retain'),false);
+    const saved=JSON.parse(await readFile(join(f.directory,'destination-receipts.json'),'utf8'));
+    assert.equal(saved.destinations.drive.verified,true);assert.equal(saved.destinations.nextcloud.verified,false);
+    assert.ok(!JSON.stringify(saved).includes(password));
+  }finally{await rm(f.directory,{recursive:true,force:true});}
+});
+test('same-night and recovered pending Drive copies are mirrored using exactly the existing ciphertext',async()=>{
+  const f=await dualFixture({existing:true});try{
+    const result=await runNightly(f.payload,f.deps);assert.equal(result.reused,true);assert.equal(result.verified,true);
+    for(const event of ['capture','seal','upload','retain'])assert.equal(f.events.includes(event),false);
+    assert.equal(f.events.includes('recover'),true);assert.equal(f.events.includes('secondary'),true);
+    assert.equal(f.getSecondary().archiveFile,join(f.directory,'recovered.tar.gz.age'));
+  }finally{await rm(f.directory,{recursive:true,force:true});}
+});
+test('failed Drive recovery never silently skips secondary; failed capture/encryption never uploads',async()=>{
+  const f=await dualFixture({existing:true});f.deps.drive.downloadVerifiedArchive=async()=>{throw new DriveBackupError('DOWNLOAD_HASH_MISMATCH');};
+  try{await runNightly(f.payload,f.deps);assert.equal(f.events.includes('capture'),true);assert.equal(f.events.includes('secondary'),true);}
+  finally{await rm(f.directory,{recursive:true,force:true});}
+  for(const failAt of ['capture','seal']){
+    const failed=await dualFixture({failAt});try{await assert.rejects(runNightly(failed.payload,failed.deps));
+      assert.equal(failed.events.includes('upload'),false);assert.equal(failed.events.includes('secondary'),false);assert.equal(failed.events.includes('retain'),false);
+    }finally{await rm(failed.directory,{recursive:true,force:true});}
+  }
+});
+test('dual mode rejects mismatched destination receipts and checks lock before each destination',async()=>{
+  const f=await dualFixture();f.deps.nextcloud.uploadAndVerify=async()=>({verified:true,sha256:'c'.repeat(64),size:123,night:'2026-10-22',snapshotAt:now});
+  try{await assert.rejects(runNightly(f.payload,f.deps));assert.equal(f.events.includes('retain'),false);}
+  finally{await rm(f.directory,{recursive:true,force:true});}
+  const lock=await dualFixture({failAt:'alive'});try{await assert.rejects(runNightly(lock.payload,lock.deps));
+    assert.equal(lock.events.includes('upload'),false);assert.equal(lock.events.includes('secondary'),false);
+  }finally{await rm(lock.directory,{recursive:true,force:true});}
+});
 test('real client factory receives a lock check for every Drive mutation',async()=>{
   const f=await fixture({existing:true});let beforeMutation;
   f.deps.createDrive=options=>{beforeMutation=options.beforeMutation;return f.deps.drive;};

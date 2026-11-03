@@ -16,7 +16,9 @@ export const ecoConnections = Object.freeze({
     githubEnvironment: 'eco-backup',
     githubRef: 'refs/heads/main',
     githubWorkflowPath: '.github/workflows/nightly-backup.yml',
-    githubCaptureStepName: 'Capture, encrypt, verify Drive copy and retain five nights',
+    githubCaptureStepName: 'Capture, encrypt and verify configured backup copies',
+    // Retain exact historical names while public run history spans releases.
+    githubPreviousCaptureStepNames: Object.freeze(['Capture, encrypt, verify Drive copy and retain five nights']),
   }),
   // Verified ECO-only Microsoft metadata. Unverified app/source pins keep intake closed.
   emailReceiver: Object.freeze({

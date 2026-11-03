@@ -109,6 +109,24 @@ test('worker receives only intended credentials, never ambient GitHub tokens/pro
     oidcRequestUrl: env.ACTIONS_ID_TOKEN_REQUEST_URL, oidcRequestToken: env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
   });
 });
+test('optional private destination requires matching config and independent app password without expanding source authority',()=>{
+  const nextcloud={origin:'https://nx123456.your-storageshare.de',expectedUser:'eco-backup',folder:'ECO',maxArchiveBytes:1024*1024};
+  const env={...environment(),ECO_BACKUP_CONFIGURATION:JSON.stringify({...settings,nextcloud}),ECO_NEXTCLOUD_APP_PASSWORD:'synthetic-secondary-password'};
+  const result=prepareGitHubBackup(env);
+  assert.deepEqual(result.config.nextcloud,nextcloud);
+  assert.equal(result.childEnv.ECO_NEXTCLOUD_APP_PASSWORD,env.ECO_NEXTCLOUD_APP_PASSWORD);
+  assert.equal(result.config.database.PGUSER,`eco_backup_reader.${target.supabaseProjectRef}`);
+  assert.ok(!JSON.stringify(result.config).includes('synthetic-secondary-password'));
+  assert.equal(prepareGitHubBackup({...environment(),ECO_NEXTCLOUD_APP_PASSWORD:''}).config.nextcloud,undefined);
+  for(const changed of [
+    {...env,ECO_NEXTCLOUD_APP_PASSWORD:''},
+    {...env,ECO_BACKUP_CONFIGURATION:JSON.stringify(settings)},
+    {...env,ECO_NEXTCLOUD_APP_PASSWORD:'AGE-SECRET-KEY-1FORBIDDEN'},
+    {...env,ECO_NEXTCLOUD_APP_PASSWORD_FILE:'/tmp/secret'},
+    {...env,ECO_BACKUP_CONFIGURATION:JSON.stringify({...settings,nextcloud:{...nextcloud,expectedUser:'phonebook'}})},
+    {...env,ECO_BACKUP_CONFIGURATION:JSON.stringify({...settings,nextcloud:{...nextcloud,origin:'https://evil.example'}})},
+  ])assert.throws(()=>prepareGitHubBackup(changed));
+});
 
 test('private runtime config is cleaned after success, child failure or an exception; logs remain generic', async () => {
   await withDirectory(async directory => {
@@ -212,6 +230,7 @@ test('installer rejects source/OIDC credentials before any download or package c
   assert.equal(installerFunction('verify_install_context', { env }).status, 0);
   for (const [key, value] of Object.entries({ GITHUB_ACTIONS: 'false', RUNNER_ENVIRONMENT: 'self-hosted',
     RUNNER_ARCH: 'ARM64', RUNNER_TEMP: 'relative', ECO_BACKUP_DB_PASSWORD: 'synthetic-password',
+    ECO_NEXTCLOUD_APP_PASSWORD: 'synthetic-secondary-password',
     ECO_DRIVE_REFRESH_TOKEN: 'synthetic-token', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'synthetic-token',
     ACTIONS_ID_TOKEN_REQUEST_URL: 'https://example.invalid', PGPASSWORD: 'synthetic-password', AGE_SECRET_KEY: 'synthetic-key' })) {
     const result = installerFunction('verify_install_context', { env: { ...env, [key]: value } });

@@ -45,6 +45,7 @@ export const DRIVE_BACKUP_DIAGNOSTIC_CODES = Object.freeze([
   'QUOTA_UNAVAILABLE', 'REDIRECT_REJECTED', 'REMOTE_CHANGED_BEFORE_COMPLETION',
   'REMOTE_CHANGED_DURING_VERIFICATION', 'REMOTE_ARCHIVE_METADATA_CHANGED', 'REMOTE_CHECKSUM_CHANGED',
   'REMOTE_CHECKSUM_UNSTABLE', 'REMOTE_METADATA_UNSTABLE', 'REMOTE_VERSION_REGRESSED', 'REMOTE_VERSION_UNSTABLE',
+  'REMOTE_COMPLETION_CHECKSUM_UNSTABLE', 'REMOTE_COMPLETION_METADATA_UNSTABLE', 'REMOTE_COMPLETION_VERSION_UNSTABLE',
   'REMOTE_SIZE_OR_HASH_MISMATCH', 'REQUEST_TIMEOUT',
   'RESPONSE_SIZE_LIMIT', 'RETAINED_ARCHIVE_CHANGED', 'RETENTION_FILE_CHANGED',
   'RETENTION_NIGHT_COLLISION', 'TRANSPORT_FAILED', 'TRASH_READBACK_FAILED', 'UNMANAGED_FILE',
@@ -223,22 +224,22 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     check(grants.length === 1 && grants[0].type === 'user' && grants[0].role === 'owner'
       && grants[0].emailAddress?.toLowerCase() === email && !grants[0].deleted && !grants[0].pendingOwner, 'NONPRIVATE_PERMISSIONS');
   }
-  async function verifyTarget() {
-    const { json: about } = await request(urlFor('/drive/v3/about', { fields: 'user(emailAddress),storageQuota(limit,usage)' }));
+  async function verifyTarget(options) {
+    const { json: about } = await request(urlFor('/drive/v3/about', { fields: 'user(emailAddress),storageQuota(limit,usage)' }), {}, options);
     check(about.user?.emailAddress?.toLowerCase() === email, 'ACCOUNT_MISMATCH');
-    const folder = await metadata(cfg.folderId); check(folder.id === cfg.folderId
+    const folder = await metadata(cfg.folderId, options); check(folder.id === cfg.folderId
       && folder.mimeType === 'application/vnd.google-apps.folder' && folder.capabilities?.canAddChildren === true
       && folder.capabilities?.canListChildren === true, 'FOLDER_MISMATCH');
-    await verifyPrivate(folder);
+    await verifyPrivate(folder, options);
     const quota = about.storageQuota;
     check(quota && /^\d+$/u.test(String(quota.usage)) && (quota.limit === undefined || /^\d+$/u.test(String(quota.limit))), 'QUOTA_UNAVAILABLE');
     return { email, folderId: folder.id, quota: { usage: BigInt(quota.usage), limit: quota.limit === undefined ? null : BigInt(quota.limit) } };
   }
-  async function listFolder() {
+  async function listFolder(options) {
     const files = [], tokens = new Set(), ids = new Set(); let pageToken;
     for (let page = 0; page < cfg.maxPages; page++) {
       const { json } = await request(urlFor('/drive/v3/files', { q: `'${cfg.folderId}' in parents and trashed = false`,
-        spaces: 'drive', pageSize: 1000, fields: `nextPageToken,incompleteSearch,files(${FILE_FIELDS})`, pageToken }));
+        spaces: 'drive', pageSize: 1000, fields: `nextPageToken,incompleteSearch,files(${FILE_FIELDS})`, pageToken }), {}, options);
       check(json.incompleteSearch !== true && Array.isArray(json.files), 'INCOMPLETE_FOLDER_LIST');
       for (const file of json.files) {
         check(validId(file.id) && !ids.has(file.id), 'DUPLICATE_LIST_ENTRY'); ids.add(file.id); files.push(file);
@@ -274,7 +275,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
   function fingerprint(file) {
     return JSON.stringify([archiveFingerprint(file), file.version, file.sha256Checksum]);
   }
-  async function verifyBytes(file, pending = false) {
+  async function verifyBytes(file, pending = false, { completePending = false, checkUnique = false } = {}) {
     const value = descriptor(file, { pending }), pinned = archiveFingerprint(file);
     check(String(file.size) === String(value.size)
       && (file.sha256Checksum === undefined || file.sha256Checksum === value.sha256), 'REMOTE_SIZE_OR_HASH_MISMATCH');
@@ -305,9 +306,24 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
         const actual = await request(urlFor(`/drive/v3/files/${value.fileId}`, { alt: 'media' }), {},
           { ...options, mode: 'hash', maxBytes: value.size, retries: 0 });
         check(actual.size === value.size && actual.sha256 === value.sha256, 'DOWNLOAD_HASH_MISMATCH');
-        const after = await metadata(value.fileId, options); observe(after);
+        let after = await metadata(value.fileId, options); observe(after);
         await verifyPrivate(after, options);
-        if (fingerprint(after) === fingerprint(file)) return { file: after, value };
+        let beforeCompletion = false;
+        if (fingerprint(after) === fingerprint(file)) {
+          if (checkUnique) {
+            const unique = matchesNight(await listFolder(options), value.night);
+            check(unique?.id === value.fileId, 'NIGHT_COLLISION');
+          }
+          if (!completePending || value.status !== 'pending') return { file: after, value };
+          // Keep the final pre-completion comparison inside this same budget and
+          // pin set. A late version/checksum change must restart a whole hash
+          // read, never merely accept fresh metadata or start another retry loop.
+          await verifyTarget(options);
+          const latest = await metadata(value.fileId, options); observe(latest);
+          await verifyPrivate(latest, options);
+          if (fingerprint(latest) === fingerprint(after)) return { file: await complete(latest, options), value };
+          after = latest; beforeCompletion = true;
+        }
         // Google documents that version includes invisible server changes and
         // SHA256 is optional. It does not guarantee a settling interval. Only
         // an increasing version / newly available correct checksum may retry;
@@ -315,6 +331,8 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
         if (attempt === 2) {
           const versionChanged = after.version !== file.version;
           const checksumChanged = after.sha256Checksum !== file.sha256Checksum;
+          if (beforeCompletion) fail(versionChanged && checksumChanged ? 'REMOTE_COMPLETION_METADATA_UNSTABLE'
+            : versionChanged ? 'REMOTE_COMPLETION_VERSION_UNSTABLE' : 'REMOTE_COMPLETION_CHECKSUM_UNSTABLE');
           fail(versionChanged && checksumChanged ? 'REMOTE_METADATA_UNSTABLE'
             : versionChanged ? 'REMOTE_VERSION_UNSTABLE' : 'REMOTE_CHECKSUM_UNSTABLE');
         }
@@ -330,15 +348,15 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     const receipt = Object.freeze({ ...value, snapshotAt: get(file, 'SnapshotAt'), verified: true, verifiedAt: get(file, 'VerifiedAt'), readbackVerifiedAt: new Date(now()).toISOString(), folderId: cfg.folderId, email, version: file.version });
     minted.add(receipt); return receipt;
   }
-  async function complete(file) {
-    await verifyTarget(); const latest = await metadata(file.id);
-    check(fingerprint(latest) === fingerprint(file), 'REMOTE_CHANGED_BEFORE_COMPLETION'); await verifyPrivate(latest);
-    const appProperties = { ...latest.appProperties, [key('Status')]: 'verified', [key('Method')]: 'sha256-download-v1', [key('VerifiedAt')]: new Date(now()).toISOString() };
+  // Called only inside verifyBytes after the final exact fingerprint/ACL check.
+  async function complete(file, options) {
+    const appProperties = { ...file.appProperties, [key('Status')]: 'verified', [key('Method')]: 'sha256-download-v1', [key('VerifiedAt')]: new Date(now()).toISOString() };
     await request(urlFor(`/drive/v3/files/${file.id}`, { fields: FILE_FIELDS }), {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties }),
-    });
-    const saved = await metadata(file.id); descriptor(saved); await verifyPrivate(saved);
-    check(saved.size === latest.size && saved.sha256Checksum === latest.sha256Checksum && get(saved, 'Sha256') === get(latest, 'Sha256'), 'COMPLETION_MISMATCH');
+    }, options);
+    const saved = await metadata(file.id, options); descriptor(saved); await verifyPrivate(saved, options);
+    check(archiveFingerprint(saved) === archiveFingerprint({ ...file, appProperties })
+      && saved.sha256Checksum === file.sha256Checksum && BigInt(saved.version) >= BigInt(file.version), 'COMPLETION_MISMATCH');
     return saved;
   }
   function matchesNight(files, night) {
@@ -352,8 +370,8 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     const match = matchesNight(await listFolder(), night); if (!match) return null;
     const file = await metadata(match.id); const value = descriptor(file, { pending: true });
     try {
-      const checked = await verifyBytes(file, true);
-      return mint(value.status === 'pending' ? await complete(checked.file) : checked.file);
+      const checked = await verifyBytes(file, true, { completePending: true });
+      return mint(checked.file);
     } catch (error) {
       if (value.status === 'pending' && ['REMOTE_SIZE_OR_HASH_MISMATCH', 'DOWNLOAD_HASH_MISMATCH', 'HTTP_404'].includes(error.code)) return null;
       throw error;
@@ -380,7 +398,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
           check(old.sha256 === expectedSha256 && old.size === info.size, 'NIGHT_COLLISION');
           return mint((await verifyBytes(existing)).file);
         }
-        try { return mint(await complete((await verifyBytes(existing, true)).file)); }
+        try { return mint((await verifyBytes(existing, true, { completePending: true })).file); }
         catch (error) { if (!['REMOTE_SIZE_OR_HASH_MISMATCH', 'DOWNLOAD_HASH_MISMATCH', 'HTTP_404'].includes(error.code)) throw error; }
         fileId = existing.id;
       }
@@ -450,9 +468,8 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
       const after = await handle.stat(); check(after.size === info.size && after.mtimeMs === info.mtimeMs && after.ctimeMs === info.ctimeMs, 'LOCAL_FILE_CHANGED');
       const file = await metadata(fileId), value = descriptor(file, { pending: true });
       check(value.sha256 === expectedSha256 && value.size === info.size && value.night === night, 'UPLOADED_METADATA_MISMATCH');
-      const checked = await verifyBytes(file, true);
-      const unique = matchesNight(await listFolder(), night); check(unique?.id === fileId, 'NIGHT_COLLISION');
-      return mint(value.status === 'verified' ? checked.file : await complete(checked.file));
+      const checked = await verifyBytes(file, true, { completePending: true, checkUnique: true });
+      return mint(checked.file);
     } catch (error) {
       if (error instanceof DriveBackupError) throw error; throw new DriveBackupError('UPLOAD_FAILED');
     } finally { await handle.close(); }

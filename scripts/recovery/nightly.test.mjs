@@ -246,6 +246,7 @@ test('nested storage authorization failure retains its stage and only an approve
 });
 test('Drive failures retain their exact safe check while preventing retention',async()=>{
   for(const code of ['REMOTE_CHANGED_DURING_VERIFICATION','REMOTE_VERSION_UNSTABLE','REMOTE_CHECKSUM_UNSTABLE',
+    'REMOTE_COMPLETION_VERSION_UNSTABLE','REMOTE_COMPLETION_CHECKSUM_UNSTABLE','REMOTE_COMPLETION_METADATA_UNSTABLE',
     'REMOTE_METADATA_UNSTABLE','REMOTE_ARCHIVE_METADATA_CHANGED','REMOTE_CHECKSUM_CHANGED','REMOTE_VERSION_REGRESSED',
     'NONPRIVATE_PERMISSIONS','DOWNLOAD_HASH_MISMATCH','HTTP_503']){
     const f=await fixture(), diagnostics=[];

@@ -214,6 +214,15 @@ A ciphertext readback proves that Drive retained the encrypted bytes; it is **no
 
 ## Visibility and failure notifications
 
+The owner's 4 November 2026 notification policy is failure-only. The ECO
+notification panel shows only current authenticated `unavailable` backup checks.
+Capacity/retention advisories, pending runs, unknown or stale evidence and
+successful checks do not produce panel notices. All of these states remain
+visible, unchanged, in administrator System Health; suppressing a notice does
+not assert recovery. Independent email and follow-up monitors must likewise
+notify only actual failed or missed backups, without success, recovery or
+storage-advisory messages. Deployment and delivery evidence remain separate.
+
 When `ECO_BACKUP_STORAGE_ENABLED` is exactly `true` in ECO, the existing administrator DATABASE BACKUP and DOCUMENT BACKUP checks read public GitHub Actions metadata independently of source/Drive credentials. The adapter is disabled by default. It pins the repository and owner IDs, main branch, workflow path, run attempt and exact successful capture step. Missing evidence, skipped steps/jobs, disabled workflows, provider errors, failed runs and incomplete runs never appear healthy. The metadata requests have a 3.5-second total deadline and a ten-minute cache; backup age is checked against the current time even while metadata is cached. A same-night retry may verify an earlier archive, so step time is not presented as snapshot time. Freshness is conservatively bounded from the start of that Hong Kong backup date and becomes unavailable after 36 hours, even when a late retry has a newer copy-verification time. No logs, encrypted archives or GitHub credentials are fetched by this check. The separate restore-test check remains unchanged.
 
 This check runs when an administrator opens or refreshes System Health. It does not independently send a push notification when a scheduled run is missed or the scheduler is disabled. GitHub's built-in workflow failure notifications can provide standard failure alerts, subject to the account's notification settings; a disabled scheduler may create no failed run and therefore no notification. Public GitHub schedules can be delayed and may be disabled after repository inactivity, so they are not an exact-time or continuous-availability guarantee. Revisit unattended cadence, account quotas, OAuth validity, notification settings and recovery-key custody during platform upgrades.

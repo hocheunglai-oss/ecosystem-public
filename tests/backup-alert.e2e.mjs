@@ -20,10 +20,11 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: 'reduce' });
       await installStagingCookies(context, base);
       const page = await context.newPage();
-      const state = { user: { ...admin }, preview: null, status: 'unavailable', http: 200, requests: 0, writes: [], clock: Date.now(), hold: false, held: null };
-      const health = () => ({ schemaVersion: 1, status: state.status, observedAt: new Date(state.clock).toISOString(), expiresAt: new Date(state.clock + 30_000).toISOString(), cacheTtlSeconds: 30,
+      const state = { user: { ...admin }, preview: null, status: 'unavailable', detail: 'THE LATEST BACKUP RUN DID NOT COMPLETE SUCCESSFULLY.', expired: false,
+        http: 200, requests: 0, writes: [], clock: Date.now(), hold: false, held: null };
+      const health = () => ({ schemaVersion: 1, status: state.status, observedAt: new Date(state.clock).toISOString(), expiresAt: new Date(state.clock + (state.expired ? 0 : 30_000)).toISOString(), cacheTtlSeconds: 30,
         checks: ['database-backup', 'document-backup'].map(id => ({ id, label: id, status: state.status, checkedAt: new Date(state.clock).toISOString(),
-          detail: state.status === 'unknown' ? 'BACKUP STATUS COULD NOT BE VERIFIED.' : 'THE LATEST BACKUP RUN DID NOT COMPLETE SUCCESSFULLY.' })) });
+          detail: state.detail })) });
       await context.route('**/api/**', async route => {
         const request = route.request(), path = new URL(request.url()).pathname;
         if (request.method() !== 'GET') state.writes.push(path);
@@ -64,12 +65,45 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
         assert.ok(button && button.height >= (width <= 760 ? 44 : 36), 'Refresh touch target');
         state.status = 'healthy'; await notice().getByRole('button', { name: 'REFRESH', exact: true }).click();
         await expect(notice()).toHaveCount(0);
-        state.status = 'unknown'; await reopen(); await expect(notice()).toContainText('BACKUP STATUS UNVERIFIED');
-        assert.doesNotMatch(await notice().innerText(), /DID NOT COMPLETE|FAILED/);
-        if (width === 390 && theme === 'light') {
+        for (const [status, detail] of [
+          ['degraded', 'ENCRYPTED BACKUP COPIES VERIFIED. CAPACITY OR RETENTION NEEDS ATTENTION.'],
+          ['degraded', 'THE LATEST BACKUP RUN HAS NOT COMPLETED.'],
+          ['unknown', 'BACKUP STATUS COULD NOT BE VERIFIED.'],
+        ]) {
+          state.status = status; state.detail = detail;
+          const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/admin/system-health');
+          await reopen(); await (await response).finished(); await expect(notice()).toHaveCount(0);
+        }
+        state.status = 'unavailable'; state.expired = true;
+        const expiredResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/admin/system-health');
+        await reopen(); await (await expiredResponse).finished(); await expect(notice()).toHaveCount(0); state.expired = false;
+        state.status = 'degraded'; state.detail = 'ENCRYPTED BACKUP COPIES VERIFIED. CAPACITY OR RETENTION NEEDS ATTENTION.';
+        const capacityResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/admin/system-health');
+        await reopen(); await (await capacityResponse).finished(); await expect(notice()).toHaveCount(0);
+        await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-quiet.png`, fullPage: true });
+        await close();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByRole('button', { name: 'Administration', exact: true }).click();
+        state.status = 'degraded'; state.detail = 'ENCRYPTED BACKUP COPIES VERIFIED. CAPACITY OR RETENTION NEEDS ATTENTION.';
+        await page.getByRole('navigation', { name: 'Administration' }).getByRole('button', { name: 'System Health', exact: true }).click();
+        const database = page.locator('.admin-panel').filter({ has: page.getByRole('heading', { name: 'database-backup', exact: true }) });
+        await expect(database.locator('.admin-status')).toHaveText('degraded');
+        await expect(database).toContainText(state.detail);
+        await database.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-passive-health.png`, fullPage: true });
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Passive health has no horizontal overflow');
+        for (const status of ['unknown', 'unavailable']) {
+          state.status = status; state.detail = status === 'unknown' ? 'BACKUP STATUS COULD NOT BE VERIFIED.' : 'THE LATEST BACKUP RUN DID NOT COMPLETE SUCCESSFULLY.';
+          await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+          await expect(database.locator('.admin-status')).toHaveText(status);
+          await expect(database).toContainText(state.detail);
+        }
+        if (width === 390) {
+          await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+          await bell().click(); await expect(notice()).toBeVisible();
           state.http = 503; await notice().getByRole('button', { name: 'REFRESH', exact: true }).click();
-          await expect(notice()).toContainText('BACKUP STATUS UNVERIFIED');
-          state.http = 403; await notice().getByRole('button', { name: 'REFRESH', exact: true }).click();
+          await expect(notice()).toHaveCount(0);
+          state.http = 403; await reopen();
           await expect(notice()).toHaveCount(0);
           const deniedRequests = state.requests;
           state.clock += 60_000; await page.clock.fastForward(60_000);
@@ -102,7 +136,11 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
           assert.equal(state.requests, memberRequests, 'Signed-out view does not request backup status');
         }
         assert.deepEqual(state.writes, []); assert.deepEqual(errors, []);
-        reports.push({ engine, width, theme, passed: true }); console.log(`PASS ${engine} ${width} ${theme}`);
+        reports.push({ engine, width, theme, passed: true, writes: state.writes.length,
+          notificationFailure: 'unavailable', quietScreenshot: 'capacity-advisory',
+          quietStates: ['healthy', 'capacity-advisory', 'pending', 'unknown', 'expired'],
+          passiveHealthStates: ['degraded', 'unknown', 'unavailable'], accessChecks: width === 390 });
+        console.log(`PASS ${engine} ${width} ${theme}`);
       } catch (error) { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-failure.png`, fullPage: true }); throw error; }
       finally { await context.close(); }
     }

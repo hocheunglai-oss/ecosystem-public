@@ -239,10 +239,13 @@ export function createNextcloudBackupClient({ config, appPassword, fetchImpl = f
       && (root ? ['true','1','false','0'].includes(props.isMountRoot) : ['false','0'].includes(props.isMountRoot)), 'NEXTCLOUD_FOLDER_NOT_PRIVATE');
   }
   async function metadata(path, allowMissing = false) {
-    const result = await request(path, { method: 'HEAD', mode: 'headers', allowed: allowMissing ? [200,404] : [200] });
+    // HEAD and conditional GET must describe the same uncompressed representation.
+    const result = await request(path, { method: 'HEAD', mode: 'headers', allowed: allowMissing ? [200,404] : [200],
+      headers: { 'Accept-Encoding': 'identity' } });
     if (result.status === 404) return null;
-    const etag = result.headers.get('etag'), size = result.headers.get('content-length');
-    check(typeof etag === 'string' && /^"[^"\r\n]+"$/u.test(etag) && /^\d+$/u.test(size ?? '')
+    const etag = result.headers.get('etag'), size = result.headers.get('content-length'), encoding = result.headers.get('content-encoding');
+    check((!encoding || encoding.toLowerCase() === 'identity')
+      && typeof etag === 'string' && /^"[^"\r\n]+"$/u.test(etag) && /^\d+$/u.test(size ?? '')
       && Number.isSafeInteger(Number(size)), 'NEXTCLOUD_METADATA_INVALID');
     return { etag, size: Number(size) };
   }

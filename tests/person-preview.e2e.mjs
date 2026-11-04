@@ -1,6 +1,7 @@
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -16,7 +17,36 @@ const person={...owner,id:'10000000-0000-4000-8000-000000000002',email:'Vincent@
 const key=`ecosystem.live.v1:${owner.id}:state:v2`,foreignKey=`ecosystem.live.v1:${person.id}:state`;
 const btn=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const results=[];
+const seedProofs=[];
 await mkdir(out,{recursive:true});
+async function seedOnNextDocument(page,entries){
+ const marker=`eco.test.person-preview.seed:${randomUUID()}`,origin=new URL(page.url()).origin;
+ // Install only for the next top-level document, before application hydration.
+ // Keep the consumed marker across later reloads: reseeding could conceal a
+ // persistence or read-only regression that the rest of this test must detect.
+ await page.addInitScript(({marker,origin,entries})=>{
+  if(window.top!==window||location.origin!==origin||sessionStorage.getItem(marker)!==null)return;
+  for(const [key,value] of entries)localStorage.setItem(key,value);
+  sessionStorage.setItem(marker,'consumed');
+ },{marker,origin,entries});
+}
+async function verifyOneTimeSeed(browser,engine){
+ const context=await browser.newContext();
+ try{
+  await context.route('**/*',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><script>window.observedSeed=localStorage.getItem("eco.test.seed.probe");</script>'}));
+  const page=await context.newPage();await page.goto(`${base}/__fixture_seed_probe__`);
+  await seedOnNextDocument(page,[['eco.test.seed.probe','seeded-before-hydration']]);
+  // Reproduce a late write by the old document after seed installation.
+  await page.evaluate(()=>localStorage.setItem('eco.test.seed.probe','clobbered-before-reload'));
+  await page.reload();assert.equal(await page.evaluate(()=>window.observedSeed),'seeded-before-hydration');
+  await page.evaluate(()=>localStorage.setItem('eco.test.seed.probe','later-persisted-value'));
+  await page.reload();assert.equal(await page.evaluate(()=>window.observedSeed),'later-persisted-value');
+  await page.evaluate(()=>localStorage.removeItem('eco.test.seed.probe'));
+  await page.reload();assert.equal(await page.evaluate(()=>window.observedSeed),null,'Later deletion must not be masked by reseeding');
+  seedProofs.push({engine,clobberBeforeReload:true,beforeHydration:true,laterWritePreserved:true,laterDeletionPreserved:true});
+  console.log(`PASS ${engine} one-time seed ordering and later persistence`);
+ }finally{await context.close();}
+}
 async function fixture(context){
  const session={user:structuredClone(owner),preview:null},writes=[],reads=[];
  await context.route('**/api/**',route=>{if(route.request().method()!=='GET')writes.push(route.request().url());return route.fulfill({status:404,json:{message:'Isolated fixture only.'}});});
@@ -44,7 +74,7 @@ async function fixture(context){
 }
 async function seed(page){
  await expect.poll(()=>page.evaluate(key=>Boolean(localStorage.getItem(key)),key)).toBe(true);
- const seeded=await page.evaluate(({key,foreignKey,owner,person})=>{
+ const seeded=await page.evaluate(({key,owner,person})=>{
   const state=JSON.parse(localStorage.getItem(key));
   state.profiles[person.id]={email:person.email,phone:''};
   const award=(id,recipientId)=>({id,targetKey:id,readerId:'luca',recipientId,awardedAt:'2026-10-20T01:00:00Z',target:{kind:'key-info',portId:'port-chiba',field:'sampleLocation'},update:{updatedBy:recipientId,updatedAt:'2026-10-19T01:00:00Z'}});
@@ -52,10 +82,12 @@ async function seed(page){
   state.knowledgeRecords['port:port-chiba']={version:1,layoutVersion:2,sections:[{id:'preview-notes',title:'PREVIEW NOTES',blocks:[
    {id:'selected-note',type:'text',title:'SELECTED PERSON NOTE',text:'THIS IS A SHARED NOTE.',update:{updatedBy:person.id,updatedAt:'2026-10-20T01:00:00Z'}},
    {id:'owner-note',type:'text',title:'ADMIN NOTE',text:'ANOTHER SHARED NOTE.',update:{updatedBy:owner.id,updatedAt:'2026-10-20T01:00:00Z'}}]}]};
-  localStorage.setItem(key,JSON.stringify(state));localStorage.setItem(foreignKey,'PRIVATE FOREIGN WORKSPACE MUST NOT BE READ');return state;
- },{key,foreignKey,owner,person});
+  return state;
+ },{key,owner,person});
  sharedLocations(page).seedState(seeded);
+ await seedOnNextDocument(page,[[key,JSON.stringify(seeded)],[foreignKey,'PRIVATE FOREIGN WORKSPACE MUST NOT BE READ']]);
  await page.reload({waitUntil:'networkidle'});
+ await expect.poll(()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)).hats.length,key)).toBe(seeded.hats.length);
 }
 async function selectPerson(page,id,shot){
  await btn(page,'View as').click();await btn(page,'USER').click();
@@ -72,7 +104,7 @@ async function selectPerson(page,id,shot){
 for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
  if(process.env.ECO_TEST_ENGINE&&process.env.ECO_TEST_ENGINE!==engine)continue;
  const browser=await type.launch({headless:true});
- try{for(const width of [1440,320,390])for(const theme of ['light','dark']){
+ try{await verifyOneTimeSeed(browser,engine);for(const width of [1440,320,390])for(const theme of ['light','dark']){
   if(process.env.ECO_TEST_WIDTH&&+process.env.ECO_TEST_WIDTH!==width||process.env.ECO_TEST_THEME&&process.env.ECO_TEST_THEME!==theme)continue;
   const context=await browser.newContext({viewport:{width,height:width<760?844:1000},isMobile:width<760,hasTouch:width<760,reducedMotion:'reduce'});
   await installStagingCookies(context,base);const f=await fixture(context),page=await context.newPage(),errors=[],shots=[];
@@ -100,4 +132,4 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
   }catch(error){await shot('failure');throw error;}finally{await context.close();}
  }}finally{await browser.close();}
 }
-await writeFile(resolve(out,'results.json'),JSON.stringify({base,results,scope:'Synthetic APIs only; real admin identity and private namespace retained; ephemeral person projection affects Hats display/self exclusion only. Native Safari and physical devices untested.'},null,2));
+await writeFile(resolve(out,'results.json'),JSON.stringify({base,results,seedProofs,scope:'Synthetic APIs only; real admin identity and private namespace retained; ephemeral person projection affects Hats display/self exclusion only. Native Safari and physical devices untested.'},null,2));

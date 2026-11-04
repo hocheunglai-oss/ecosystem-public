@@ -269,6 +269,44 @@ test('ledger readback rejects changed metadata, oversized content and misleading
   }
 });
 
+test('ledger metadata uses the same identity representation as conditional JSON readback',async()=>{
+  const f=await fixture({intercept:async(url,request,{files,state})=>{
+    const path=new URL(url).pathname;
+    if(path.startsWith(ledgerBase)&&files.has(path)&&request.method==='HEAD'
+      &&request.headers['Accept-Encoding']!=='identity')
+      return new Response(null,{headers:{etag:'W/'+state.etag,'content-encoding':'gzip'}});
+  }});
+  const ledger=pairName(sha256),value={snapshotAt,kind:'synthetic-existing-pair'};
+  seedLedger(f,ledger,value);
+  try{
+    assert.deepEqual((await f.client.readLedger(ledger)).value,value);
+    assert.equal(f.calls.some(call=>['PUT','DELETE','MOVE','MKCOL'].includes(call.method)),false);
+    assert.deepEqual((await f.client.listPairReceipts()).map(item=>item.value),[value]);
+    const event=maintenanceName('d'.repeat(64)),plan={kind:'synthetic-plan'};
+    assert.deepEqual(await f.client.writeLedger(event,plan),plan);
+    assert.deepEqual((await f.client.readLedger(event)).value,plan);
+    const heads=f.calls.filter(call=>call.method==='HEAD'&&new URL(call.url).pathname.startsWith(ledgerBase));
+    assert.ok(heads.length>=6);assert.ok(heads.every(call=>call.headers['Accept-Encoding']==='identity'));
+    assert.equal(f.calls.some(call=>['DELETE','MOVE'].includes(call.method)),false);
+  }finally{await f.close();}
+});
+
+test('identity metadata still rejects weak validators, missing sizes and encoded responses',async()=>{
+  const ledger=pairName(sha256);
+  for(const variant of ['weak','missing-length','encoded']){
+    const f=await fixture({intercept:async(url,request)=>{
+      if(url.endsWith(ledger)&&request.method==='HEAD'){
+        assert.equal(request.headers['Accept-Encoding'],'identity');
+        return new Response(null,{headers:{etag:variant==='weak'?'W/"v1"':'"v1"',
+          ...(variant==='missing-length'?{}:{'content-length':'2'}),...(variant==='encoded'?{'content-encoding':'gzip'}:{})}});
+      }
+    }});seedLedger(f,ledger,{});
+    try{await rejectsCode(f.client.readLedger(ledger),'NEXTCLOUD_METADATA_INVALID');
+      assert.equal(f.calls.some(call=>['GET','PUT','DELETE','MOVE'].includes(call.method)&&call.url.endsWith(ledger)),false);
+    }finally{await f.close();}
+  }
+});
+
 test('depth-one ledger inventory rejects incomplete, foreign, mounted and duplicate entries',async()=>{
   const ledger=pairName(sha256);
   for(const variant of ['owner','mount','duplicate','foreign','status','entity']){

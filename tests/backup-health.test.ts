@@ -103,13 +103,44 @@ test('missing, disabled, failed and unfinished schedules remain visible', async 
   }
   for(const conclusion of ['failure','cancelled','timed_out','skipped','neutral','action_required','startup_failure']) {
     const f=fixture();f.run.conclusion=conclusion;
+    f.job.conclusion=conclusion;
     f.runs.workflow_runs.push({...f.run,id:119,conclusion:'success',updated_at:date(NOW-2*HOUR),created_at:date(NOW-3*HOUR)});
     f.runs.total_count=2;
     assert.deepEqual(states(await observe(f)),['unavailable','unavailable'],conclusion);
-    assert.equal(f.paths.length,3,'An older success must not mask the latest failure');
+    assert.equal(f.paths.length,conclusion==='failure'?4:3,'An older success must not mask the latest failure');
   }
   const queued=fixture(); queued.run.status='queued';
   assert.deepEqual(states(await observe(queued)),['degraded','degraded']);
+});
+
+test('only capacity failure after successful copy verification gives a truthful maintenance warning',async()=>{
+  const f=fixture();f.run.conclusion='failure';f.job.conclusion='failure';
+  f.job.steps.push({...f.step,name:ecoConnections.backup.githubCapacityStepName,conclusion:'failure',started_at:f.step.completed_at},
+    {...f.step,name:"Remove this runner's temporary backup files"});
+  const result=await observe(f);
+  assert.deepEqual(states(result),['degraded','degraded']);
+  assert.match(result[0].detail,/COPIES VERIFIED.*CAPACITY OR RETENTION/);
+  assert.equal(result[0].metrics?.copyVerifiedAt,f.step.completed_at);
+  f.job.steps[2].conclusion='failure';
+  assert.deepEqual(states(await observe(f)),['unavailable','unavailable']);
+  f.job.steps[2].conclusion='success';f.step.conclusion='failure';
+  assert.deepEqual(states(await observe(f)),['unavailable','unavailable']);
+});
+
+test('capacity aliases, duplicate checks, inconsistent success and stale maintenance evidence never look healthy',async()=>{
+  for(const mode of ['alias','duplicate','skipped','inconsistent']){
+    const f=fixture();
+    f.run.conclusion='failure';f.job.conclusion='failure';
+    f.job.steps.push({...f.step,name:ecoConnections.backup.githubCapacityStepName,conclusion:'failure',started_at:f.step.completed_at});
+    if(mode==='alias')f.job.steps[1].name+=' ';
+    if(mode==='duplicate')f.job.steps.push({...f.job.steps[1]});
+    if(mode==='skipped')f.job.steps[1].conclusion='skipped';
+    if(mode==='inconsistent'){f.run.conclusion='success';f.job.conclusion='success';}
+    assert.ok(states(await observe(f)).every(status=>status!=='healthy'&&status!=='degraded'),mode);
+  }
+  const f=fixture(NOW-40*HOUR);f.run.conclusion='failure';f.job.conclusion='failure';
+  f.job.steps.push({...f.step,name:ecoConnections.backup.githubCapacityStepName,conclusion:'failure',started_at:f.step.completed_at});
+  assert.deepEqual(states(await observe(f)),['unavailable','unavailable']);
 });
 
 test('forks, changed identity, non-main runs and untrusted jobs are rejected', async () => {

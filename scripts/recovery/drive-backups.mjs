@@ -51,6 +51,7 @@ export const DRIVE_BACKUP_DIAGNOSTIC_CODES = Object.freeze([
   'RETENTION_NIGHT_COLLISION', 'TRANSPORT_FAILED', 'TRASH_READBACK_FAILED', 'UNMANAGED_FILE',
   'UNSAFE_GOOGLE_ENDPOINT', 'UNSAFE_LOCAL_ARCHIVE', 'UPLOADED_METADATA_MISMATCH',
   'UPLOAD_FAILED', 'UPLOAD_NO_PROGRESS', 'UPLOAD_RETRY_LIMIT',
+  'RETENTION_BASIS_INVALID',
 ]);
 const diagnosticCodes = new Set(DRIVE_BACKUP_DIAGNOSTIC_CODES);
 export function classifyDriveBackupError(error) {
@@ -130,7 +131,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
   for (const key of ['requestTimeoutMs', 'maxPages', 'maxFiles', 'retryLimit']) check(Number.isSafeInteger(cfg[key]) && cfg[key] > 0, 'INVALID_LIMITS');
   check(Number.isSafeInteger(cfg.verificationTimeoutMs) && cfg.verificationTimeoutMs > 0
     && cfg.verificationTimeoutMs <= 300_000, 'INVALID_LIMITS');
-  const email = cfg.expectedEmail.toLowerCase(), minted = new WeakSet();
+  const email = cfg.expectedEmail.toLowerCase(), minted = new WeakSet(), mintedFiles = new WeakMap();
   const key = name => `${cfg.propertyPrefix}${name}`;
   const get = (file, name) => file.appProperties?.[key(name)];
   const nameFor = night => `${cfg.namePrefix}-${night}.tar.gz.age`;
@@ -346,7 +347,7 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
   function mint(file) {
     const value = descriptor(file);
     const receipt = Object.freeze({ ...value, snapshotAt: get(file, 'SnapshotAt'), verified: true, verifiedAt: get(file, 'VerifiedAt'), readbackVerifiedAt: new Date(now()).toISOString(), folderId: cfg.folderId, email, version: file.version });
-    minted.add(receipt); return receipt;
+    minted.add(receipt); mintedFiles.set(receipt,{fingerprint:fingerprint(file),at:new Date(now()).getTime()}); return receipt;
   }
   // Called only inside verifyBytes after the final exact fingerprint/ACL check.
   async function complete(file, options) {
@@ -484,6 +485,44 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     const checked = await verifyBytes(await metadata(fileId), true);
     return Object.freeze({ ...checked.value, readbackVerifiedAt: new Date(now()).toISOString() });
   }
+  /** Retention authority is minted only by a fresh full ciphertext readback. */
+  async function verifyForRetention({fileId,sha256,size,snapshotAt}) {
+    await verifyTarget();const checked=await verifyBytes(await metadata(fileId));
+    check(checked.value.sha256===sha256&&checked.value.size===size&&get(checked.file,'SnapshotAt')===snapshotAt,'RETENTION_FILE_CHANGED');
+    return mint(checked.file);
+  }
+  async function assertRetentionReceipt(receipt) {
+    const expected=mintedFiles.get(receipt);
+    check(expected&&new Date(now()).getTime()-expected.at<=600_000&&new Date(now()).getTime()>=expected.at,'CURRENT_VERIFICATION_REQUIRED');
+    await verifyTarget();const file=await metadata(receipt.fileId);descriptor(file);await verifyPrivate(file);
+    check(fingerprint(file)===expected.fingerprint,'RETENTION_FILE_CHANGED');return file;
+  }
+  /** Dual-copy maintenance uses the fourteen-day policy; legacy five-day
+   * retention remains separate. Never expose a permanent-delete operation.
+   */
+  async function trashVerified({candidateReceipt,retainedReceipts,protectedHashes,beforeDelete}) {
+    check(Array.isArray(retainedReceipts)&&retainedReceipts.length>=14&&retainedReceipts.length<=100
+      &&Array.isArray(protectedHashes)&&protectedHashes.every(value=>HASH_PATTERN.test(value))
+      &&typeof beforeDelete==='function'&&!protectedHashes.includes(candidateReceipt?.sha256),'RETENTION_BASIS_INVALID');
+    check(new Set(retainedReceipts.filter(value=>value.night>candidateReceipt.night).map(value=>value.night)).size>=14
+      &&!retainedReceipts.some(value=>value.fileId===candidateReceipt.fileId),'RETENTION_BASIS_INVALID');
+    for(const receipt of retainedReceipts)await assertRetentionReceipt(receipt);
+    const candidate=await assertRetentionReceipt(candidateReceipt);
+    check(candidate.capabilities?.canTrash===true,'RETENTION_FILE_CHANGED');
+    // The coordinator verifies the second copy and writes a durable intent
+    // immediately before this recoverable operation. Failed intent = no trash.
+    await beforeDelete();
+    for(const receipt of retainedReceipts)await assertRetentionReceipt(receipt);
+    await assertRetentionReceipt(candidateReceipt);
+    await request(urlFor(`/drive/v3/files/${candidate.id}`,{fields:'id,trashed'}),{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({trashed:true}),
+    },{retries:0});
+    const after=await metadata(candidate.id);
+    check(after.id===candidate.id&&after.trashed===true&&archiveFingerprint(after)===archiveFingerprint(candidate)
+      &&(!after.sha256Checksum||after.sha256Checksum===candidateReceipt.sha256),'TRASH_READBACK_FAILED');
+    return {fileId:candidate.id,night:candidateReceipt.night,sha256:candidateReceipt.sha256,
+      size:candidateReceipt.size,recoverable:true,permanentDeletionUsed:false};
+  }
   /** Export a freshly verified ciphertext for a second destination; never mutate Drive. */
   async function downloadVerifiedArchive({ currentReceipt, archiveFile }) {
     check(currentReceipt && minted.has(currentReceipt) && currentReceipt.verified === true, 'CURRENT_VERIFICATION_REQUIRED');
@@ -579,5 +618,6 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
     }
     return { keepNights: cfg.keepNights, retainedNights: nights.slice(0, cfg.keepNights), trashed, permanentDeletionUsed: false };
   }
-  return Object.freeze({ verifyTarget, findVerifiedNight, uploadAndVerify, retainLatestNights, listManagedBackups, verifyArchiveReadOnly, downloadVerifiedArchive });
+  return Object.freeze({ verifyTarget, findVerifiedNight, uploadAndVerify, retainLatestNights, listManagedBackups, verifyArchiveReadOnly, downloadVerifiedArchive,
+    verifyForRetention,assertRetentionReceipt,trashVerified });
 }

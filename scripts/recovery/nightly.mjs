@@ -12,6 +12,7 @@ import { createDriveBackupClient, hongKongNight, DRIVE_BACKUP_DIAGNOSTIC_CODES, 
 import { AUTHORIZATION_DIAGNOSTIC_CODES } from './storage-credentials.mjs';
 import { createNextcloudBackupClient, validateNextcloudConfiguration, NEXTCLOUD_DIAGNOSTIC_CODES,
   classifyNextcloudBackupError } from './nextcloud-backups.mjs';
+import { maintainVerifiedPair, validateMaintenanceConfiguration,validCapacityStatus,withDurationWarning } from './maintenance.mjs';
 
 const fail = code => { throw new NightlyError(code); };
 const check = (value, code) => { if (!value) fail(code); };
@@ -83,7 +84,7 @@ export class NightlyError extends Error {
 
 /** No provider exception, URL, business count, source path or secret enters public logs. */
 export function publicStatus(ok) {
-  return ok ? 'ECO configured encrypted backup copies verified.' : 'ECO backup did not complete. Previous verified copies were preserved unless retention had already verified five newer nights.';
+  return ok ? 'ECO configured encrypted backup copies verified.' : 'ECO backup did not complete. Previous copies remain protected except for reviewed recoverable retention actions.';
 }
 export function validateExecutionContext(env, target) {
   check(env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted', 'TRUSTED_RUNNER_REQUIRED');
@@ -99,8 +100,10 @@ export function validateRuntime({ target, config, secrets }) {
     && target.identityMode === 'independent-password' && /^https:\/\/[^/]+$/u.test(target.productionOrigin || '')
     && /^[a-z0-9][a-z0-9._-]{0,99}$/u.test(target.supplierReportsBucket || ''), 'INVALID_CANONICAL_TARGET');
   const secondary = plain(config) && Object.hasOwn(config, 'nextcloud');
-  check(exact(config, ['schemaVersion','expectedProjectRef','expectedSourceRole','database','pgBin','ageBin','recipient','drive','timeoutMs', ...(secondary ? ['nextcloud'] : [])])
+  const maintenance = plain(config) && Object.hasOwn(config,'maintenance');
+  check(exact(config, ['schemaVersion','expectedProjectRef','expectedSourceRole','database','pgBin','ageBin','recipient','drive','timeoutMs', ...(secondary ? ['nextcloud'] : []),...(maintenance?['maintenance']:[])])
     && config.schemaVersion === 1 && config.expectedProjectRef === target.supabaseProjectRef, 'TARGET_CONFIGURATION_MISMATCH');
+  if(maintenance){check(secondary,'SECONDARY_CLIENT_REQUIRED');validateMaintenanceConfiguration(config.maintenance);}
   check(config.expectedSourceRole === 'eco_backup_reader', 'DEDICATED_READ_ROLE_REQUIRED');
   check(exact(config.database, ['PGHOST','PGPORT','PGUSER','PGDATABASE','PGSSLMODE','PGSSLROOTCERT']), 'UNEXPECTED_CONNECTION_OPTION');
   check(exact(secrets, ['dbPassword','driveClientId','driveClientSecret','driveRefreshToken','storage', ...(secondary ? ['nextcloudAppPassword'] : [])]), 'INVALID_CREDENTIAL_FIELDS');
@@ -271,7 +274,7 @@ export async function runNightly({ target, config, secrets, runDirectory, proven
   finally { try { await lock?.close(); } catch { emit('CLEANUP','CLEANUP_FAILED'); fail('RUN_FAILED'); } }
 }
 
-/** Optional second copy: one sealed snapshot, independent outcomes, and no pruning.
+/** Optional second copy: one sealed snapshot, independent outcomes, and opt-in maintenance.
  * Legacy Drive-only recovery/retention above remains unchanged when not configured.
  */
 async function runDualDestination({ target, config, runDirectory, provenance, connection, deps,
@@ -286,7 +289,7 @@ async function runDualDestination({ target, config, runDirectory, provenance, co
     try { const value = await operation(); emit(phase,'COMPLETED'); return value; }
     catch (error) { results[destination] = { verified:false, code:diagnosticCode(error) }; emit(phase,diagnosticCode(error)); return null; }
   };
-  let drive, receipt, encrypted, snapshotAt, reused = false;
+  let drive, nextcloud, receipt, encrypted, snapshotAt, reused = false;
   // Reserve time for a new capture and both destinations if Drive is unavailable.
   const preflight = new AbortController(), preflightTimer = setTimeout(() => preflight.abort(), 5 * 60_000);
   try {
@@ -329,7 +332,8 @@ async function runDualDestination({ target, config, runDirectory, provenance, co
     await deps.manifest(sourceDir,{ runId, sourceProjectRef:target.supabaseProjectRef, snapshotTime:snapshotAt,
       databaseServer:inventory.source.server_version, toolVersion:'eco-nightly-v1', unattended:true, restorationVerified:false, provenance });
     encrypted = await deps.seal({ sourceDir, outputFile:join(runDirectory,'backup.tar.gz.age'), recipient:config.recipient, ageBin:config.ageBin });
-    check(/^[a-f0-9]{64}$/u.test(encrypted?.sha256 || '') && Number.isSafeInteger(encrypted.size) && encrypted.size > 0, 'ENCRYPTION_RECEIPT_INVALID');
+    check(/^[a-f0-9]{64}$/u.test(encrypted?.sha256 || '') && Number.isSafeInteger(encrypted.size)
+      && encrypted.size > 0 && encrypted.size<=512*1024**2, 'ENCRYPTION_RECEIPT_INVALID');
     enter('CLEANUP'); await rm(sourceDir,{recursive:true,force:true});
   }
   const verifyReceipt = value => {
@@ -345,9 +349,9 @@ async function runDualDestination({ target, config, runDirectory, provenance, co
   });
   const uploadSecondary = () => attempt('nextcloud','NEXTCLOUD_UPLOAD',async () => {
     await assertAlive();
-    const client = deps.createNextcloud ? deps.createNextcloud({ beforeMutation:assertAlive }) : deps.nextcloud;
-    check(client && typeof client.uploadAndVerify === 'function', 'SECONDARY_CLIENT_REQUIRED');
-    const value = verifyReceipt(await client.uploadAndVerify({ archiveFile:encrypted.archiveFile, snapshotAt, expectedSha256:encrypted.sha256 }));
+    nextcloud = deps.createNextcloud ? deps.createNextcloud({ beforeMutation:assertAlive }) : deps.nextcloud;
+    check(nextcloud && typeof nextcloud.uploadAndVerify === 'function', 'SECONDARY_CLIENT_REQUIRED');
+    const value = verifyReceipt(await nextcloud.uploadAndVerify({ archiveFile:encrypted.archiveFile, snapshotAt, expectedSha256:encrypted.sha256 }));
     check(value.snapshotAt === new Date(snapshotAt).toISOString(), 'UPLOAD_RECEIPT_MISMATCH');
     return value;
   });
@@ -362,9 +366,25 @@ async function runDualDestination({ target, config, runDirectory, provenance, co
     sha256:encrypted.sha256,destinations:results}),{flag:'wx',mode:0o600});
   check(results.drive.verified && results.nextcloud.verified,'DESTINATION_INCOMPLETE');
   enter('RUN_LOCK'); await assertAlive();
+  let capacityStatus={schemaVersion:1,status:'attention',codes:['CAPACITY_UNKNOWN']};
+  let retention={skipped:true,reason:'DUAL_DESTINATION_POLICY_PENDING',permanentDeletionUsed:false};
+  if(config.maintenance){
+    const completedAt=deps.now().toISOString();
+    // Reused pre-ledger ciphertext has unknown source provenance. Never attribute
+    // its sealed capture to this later runner's source revision.
+    const current={schemaVersion:1,kind:'verified-pair',snapshotAt:new Date(snapshotAt).toISOString(),night:receipt.night,
+      sha256:encrypted.sha256,size:encrypted.size,captureProvenance:reused?null:provenance,
+      drive:{fileId:receipt.fileId},nextcloud:{archiveName:secondary.archiveName},firstPairVerifiedAt:completedAt};
+    const result=await (deps.maintainVerifiedPair||maintainVerifiedPair)({config:config.maintenance,drive,nextcloud,current,
+      runnerProvenance:provenance,durationMs:Math.max(0,Date.parse(completedAt)-Date.parse(startedAt)),now:completedAt});
+    check(validCapacityStatus(result.publicStatus),'MAINTENANCE_STATUS_INVALID');
+    capacityStatus=withDurationWarning(result.publicStatus,Math.max(0,Date.parse(deps.now().toISOString())-Date.parse(startedAt)));
+    retention={skipped:config.maintenance.mode!=='enabled',policy:'daily14-weekly8-monthly12-v1',
+      actions:result.actions.length,permanentDeletionUsed:false};
+  }
   return {schemaVersion:1,runId,completedAt:deps.now().toISOString(),verified:true,reused,
     encryptedCopy:{fileId:receipt.fileId,night:receipt.night,sha256:receipt.sha256,size:receipt.size},
-    destinations:results,retention:{skipped:true,reason:'DUAL_DESTINATION_POLICY_PENDING',permanentDeletionUsed:false},
+    destinations:results,retention,capacityStatus,
     restorationVerified:false,provenance};
 }
 
@@ -495,8 +515,14 @@ async function cliMain() {
   const controller = new AbortController(), abort = () => controller.abort();
   process.once('SIGINT', abort); process.once('SIGTERM', abort);
   try {
-    await superviseWorker({ payload:{ target, config, secrets, provenance }, timeoutMs:config.timeoutMs, signal:controller.signal,
+    const result=await superviseWorker({ payload:{ target, config, secrets, provenance }, timeoutMs:config.timeoutMs, signal:controller.signal,
       onDiagnostic:value => process.stderr.write(diagnosticLine(value)) });
+    if(process.env.ECO_BACKUP_STATUS_FILE){
+      check(process.env.ECO_BACKUP_STATUS_FILE===join(process.env.RUNNER_TEMP,`eco-backup-status-${provenance.runId}.json`),'STATUS_DESTINATION_INVALID');
+      const status=result.capacityStatus??{schemaVersion:1,status:'attention',codes:['CAPACITY_UNKNOWN']};
+      check(validCapacityStatus(status),'MAINTENANCE_STATUS_INVALID');
+      await writeFile(process.env.ECO_BACKUP_STATUS_FILE,JSON.stringify(status),{flag:'wx',mode:0o600});
+    }
     process.stdout.write(publicStatus(true) + '\n');
   } finally { process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort); }
 }

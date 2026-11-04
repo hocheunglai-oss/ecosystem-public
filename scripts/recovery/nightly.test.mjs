@@ -105,6 +105,8 @@ test('same-night retry uses newly readback-verified receipt without new randomiz
   }finally{await rm(f.directory,{recursive:true,force:true});}
 });
 const secondaryConfig={origin:'https://nx123456.your-storageshare.de',expectedUser:'eco-backup',folder:'ECO',maxArchiveBytes:1024*1024};
+const maintenanceConfig={mode:'plan',restore:{sha256:'d'.repeat(64),verifiedAt:'2026-10-21T00:00:00.000Z'},
+  trashCanary:{sha256:'e'.repeat(64),verifiedAt:'2026-10-21T00:00:00.000Z'},protectedHashes:[]};
 async function dualFixture(options={}) {
   const f=await fixture(options);
   f.payload.config.nextcloud={...secondaryConfig};f.payload.secrets.nextcloudAppPassword='synthetic-secondary-password';
@@ -122,6 +124,31 @@ async function dualFixture(options={}) {
   }};
   return{...f,getSecondary:()=>snapshot};
 }
+
+test('maintenance runs only after a complete pair and preserves recovered capture provenance',async()=>{
+  for(const existing of [false,true]){
+    const f=await dualFixture({existing});try{
+      f.payload.config.maintenance=maintenanceConfig;
+      f.payload.provenance={repository:target.githubRepository,commit:'a'.repeat(40),runId:'123'};
+      let called=0;
+      f.deps.maintainVerifiedPair=async input=>{called++;
+        assert.ok(f.events.includes('secondary'));
+        assert.ok(existing?f.events.includes('recover'):f.events.includes('upload'));
+        assert.deepEqual(input.current.captureProvenance,existing?null:f.payload.provenance);
+        assert.equal(input.current.snapshotAt,now);assert.equal(input.current.sha256,'b'.repeat(64));
+        return{publicStatus:{schemaVersion:1,status:'attention',codes:['RETENTION_REVIEW_REQUIRED']},actions:[]};};
+      const result=await runNightly(f.payload,f.deps);
+      assert.equal(result.verified,true);assert.equal(called,1);
+      assert.equal(result.capacityStatus.status,'attention');assert.equal(result.retention.actions,0);
+    }finally{await rm(f.directory,{recursive:true,force:true});}
+  }
+  const f=await dualFixture();try{
+    f.payload.config.maintenance=maintenanceConfig;let called=false;
+    f.deps.nextcloud.uploadAndVerify=async()=>{throw Error('unavailable');};
+    f.deps.maintainVerifiedPair=async()=>{called=true;};
+    await assert.rejects(runNightly(f.payload,f.deps));assert.equal(called,false);
+  }finally{await rm(f.directory,{recursive:true,force:true});}
+});
 test('optional destination is disabled by omission and requires an independent exact credential/config pair',()=>{
   const r=runtime();assert.doesNotThrow(()=>validateRuntime(r));
   r.config.nextcloud={...secondaryConfig};assert.throws(()=>validateRuntime(r));
@@ -133,6 +160,8 @@ test('optional destination is disabled by omission and requires an independent e
 test('two configured copies share one sealed snapshot, keep separate receipts and never prune',async()=>{
   const f=await dualFixture();try{
     const result=await runNightly(f.payload,f.deps);
+    assert.deepEqual(result.capacityStatus,{schemaVersion:1,status:'attention',codes:['CAPACITY_UNKNOWN']},
+      'unconfigured maintenance cannot falsely resolve a capacity incident');
     assert.equal(result.verified,true);assert.equal(result.destinations.drive.verified,true);assert.equal(result.destinations.nextcloud.verified,true);
     assert.equal(result.destinations.drive.receipt.sha256,result.destinations.nextcloud.receipt.sha256);
     assert.equal(result.retention.skipped,true);assert.equal(result.restorationVerified,false);

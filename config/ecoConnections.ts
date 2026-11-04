@@ -17,6 +17,7 @@ export const ecoConnections = Object.freeze({
     githubRef: 'refs/heads/main',
     githubWorkflowPath: '.github/workflows/nightly-backup.yml',
     githubCaptureStepName: 'Capture, encrypt and verify configured backup copies',
+    githubCapacityStepName: 'Check verified backup capacity',
     // Retain exact historical names while public run history spans releases.
     githubPreviousCaptureStepNames: Object.freeze(['Capture, encrypt, verify Drive copy and retain five nights']),
   }),

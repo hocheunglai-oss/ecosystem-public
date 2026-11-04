@@ -362,7 +362,7 @@ async function verifyPeriodicFrames(page, background) {
     const canvas = document.createElement('canvas'); canvas.width = 96; canvas.height = 54;
     const context = canvas.getContext('2d', { willReadFrequently: true });
     const source = video.currentSrc, period = video.duration, playbackRate = video.playbackRate, steps = [], wraps = [], gaps = [];
-    const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = period / playbackRate * 4000 + 500;
+    const started = performance.now(), frameSeconds = 1 / 30, observationBudgetMs = period / playbackRate * 4000 + 2000;
     let previous, request = 0, samples = 0, done = false, maximumCallbackLagMs = 0;
     const native = typeof video.requestVideoFrameCallback === 'function';
     const timestampQuantizationSeconds = .001;

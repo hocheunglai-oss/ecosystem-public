@@ -16,12 +16,35 @@ test('one archive incident combines database and document checks without inventi
   assert.equal(backupNotice(health('healthy'), now), null);
   assert.equal(backupNotice(health('healthy', 'unavailable'), now)?.status, 'unavailable');
 });
-test('missing, expired or invalid evidence stays unverified rather than claiming backup failure', () => {
-  for (const value of [null, { ...health('healthy'), checks: [] }, { ...health('healthy'), checks: [health('healthy').checks[0], health('healthy').checks[0]] },
-    { ...health('healthy'), expiresAt: new Date(now).toISOString() }, { ...health('healthy'), observedAt: new Date(now + 120_000).toISOString() }, health('unknown')]) {
-    const notice = backupNotice(value, now);
-    assert.equal(notice?.status, 'unknown');
-    assert.equal(notice?.title, 'BACKUP STATUS UNVERIFIED');
-    assert.doesNotMatch(notice!.detail, /FAILED|DID NOT COMPLETE/);
+test('advisories, pending runs, uncertain status and successful checks do not notify or alter health', () => {
+  for (const [status, detail] of [
+    ['degraded', 'ENCRYPTED BACKUP COPIES VERIFIED. CAPACITY OR RETENTION NEEDS ATTENTION.'],
+    ['degraded', 'THE LATEST BACKUP RUN HAS NOT COMPLETED.'],
+    ['unknown', 'BACKUP STATUS COULD NOT BE VERIFIED.'],
+    ['healthy', 'ENCRYPTED BACKUP COPY VERIFIED. RECOVERY TEST IS SEPARATE.'],
+  ] as const) {
+    const value = health(status);
+    value.checks.forEach(check => { check.detail = detail; });
+    const before = structuredClone(value);
+    assert.equal(backupNotice(value, now), null);
+    assert.deepEqual(value, before, 'Passive System Health evidence remains unchanged');
   }
+});
+test('only confirmed failure details appear when another check has an advisory or unknown status', () => {
+  for (const status of ['healthy', 'degraded', 'unknown'] as const) {
+    const value = health('unavailable', status);
+    value.checks[1].detail = 'ADVISORY ONLY';
+    if (status === 'unknown') value.checks[1].checkedAt = null;
+    assert.equal(backupNotice(value, now)?.detail, value.checks[0].detail);
+  }
+});
+test('missing, expired or invalid evidence cannot produce a failure notification', () => {
+  const failure = health('unavailable');
+  for (const value of [null, { ...failure, checks: [] }, { ...failure, checks: [failure.checks[0], failure.checks[0]] },
+    { ...failure, expiresAt: new Date(now).toISOString() }, { ...failure, observedAt: new Date(now + 120_000).toISOString() },
+    { ...failure, expiresAt: new Date(now + 121_000).toISOString() },
+    ...[null, 'invalid', new Date(now + 120_000).toISOString()].map(checkedAt => ({ ...failure,
+      checks: failure.checks.map(check => ({ ...check, checkedAt })) })),
+    { ...failure, checks: failure.checks.map(check => ({ ...check, status: 'invalid' as HealthStatus })) },
+  ]) assert.equal(backupNotice(value, now), null);
 });

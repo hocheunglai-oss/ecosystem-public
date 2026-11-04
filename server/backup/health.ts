@@ -23,7 +23,8 @@ function healthChecks(value: Observation, now: number): HealthCheck[] {
   let status = value.status, detail = value.detail;
   if (value.observedAt > now + 60_000 || now - value.observedAt > CACHE_MS + 5000) {
     status = 'unknown'; detail = 'BACKUP MONITOR EVIDENCE IS STALE.';
-  } else if (status === 'healthy' && (value.earliestSnapshotAt === undefined || now - value.earliestSnapshotAt > MAX_AGE)) {
+  } else if ((status === 'healthy' || (status === 'degraded' && value.completedAt !== undefined))
+    && (value.earliestSnapshotAt === undefined || now - value.earliestSnapshotAt > MAX_AGE)) {
     status = 'unavailable'; detail = 'BACKUP FRESHNESS CANNOT BE VERIFIED WITHIN 36 HOURS.';
   }
   return [['database-backup','DATABASE BACKUP'], ['document-backup','DOCUMENT BACKUP']].map(([key, label]) => ({
@@ -89,7 +90,7 @@ export function createBackupHealthObserver(options: { fetchImpl?: typeof fetch; 
         check(['queued','in_progress','requested','waiting','pending'].includes(String(run.status)));
         return { ...common, status:'degraded', detail:'THE LATEST BACKUP RUN HAS NOT COMPLETED.' };
       }
-      if (run.conclusion !== 'success') {
+      if (run.conclusion !== 'success' && run.conclusion !== 'failure') {
         check(['failure','cancelled','timed_out','action_required','skipped','neutral','stale','startup_failure'].includes(String(run.conclusion)));
         return { ...common, status:'unavailable', detail:'THE LATEST BACKUP RUN DID NOT COMPLETE SUCCESSFULLY.' };
       }
@@ -98,7 +99,7 @@ export function createBackupHealthObserver(options: { fetchImpl?: typeof fetch; 
       const job = record(jobs.jobs[0]);
       // run_attempt is optional in GitHub's job schema; the endpoint itself pins it.
       check(job.name === 'backup' && job.run_id === run.id && (job.run_attempt === undefined || job.run_attempt === run.run_attempt)
-        && job.head_sha === run.head_sha && id(job.id) && job.status === 'completed' && job.conclusion === 'success'
+        && job.head_sha === run.head_sha && id(job.id) && job.status === 'completed' && job.conclusion === run.conclusion
         && Array.isArray(job.steps));
       const captureNames = new Set<string>([ecoConnections.backup.githubCaptureStepName,
         ...ecoConnections.backup.githubPreviousCaptureStepNames]);
@@ -107,14 +108,28 @@ export function createBackupHealthObserver(options: { fetchImpl?: typeof fetch; 
       const step = matches[0];
       if (step.status !== 'completed' || step.conclusion !== 'success')
         return { ...common, status:'unavailable', detail:'BACKUP COPY VERIFICATION DID NOT COMPLETE.' };
+      const capacity = job.steps.map(record).filter(item => item.name === ecoConnections.backup.githubCapacityStepName);
+      check(capacity.length <= 1);
+      const capacityAttention = capacity.length === 1 && capacity[0].status === 'completed' && capacity[0].conclusion === 'failure'
+        && job.steps.map(record).every(item => item === capacity[0] || item.name === ecoConnections.backup.githubCapacityStepName
+          || (item.status === 'completed' && ['success','skipped'].includes(String(item.conclusion))));
+      if (run.conclusion === 'failure' && !capacityAttention)
+        return { ...common, status:'unavailable', detail:'THE LATEST BACKUP RUN DID NOT COMPLETE SUCCESSFULLY.' };
+      if (run.conclusion === 'success' && capacity.length)
+        check(capacity[0].status === 'completed' && capacity[0].conclusion === 'success');
       const captured = stamp(step.started_at, now()), completed = stamp(step.completed_at, now());
       const jobStart = stamp(job.started_at, now()), jobEnd = stamp(job.completed_at, now());
       check(completed >= captured && captured >= jobStart && jobStart >= stamp(run.created_at, now()) && completed <= jobEnd && jobEnd <= stamp(run.updated_at, now()) + 60_000
         && completed - captured <= 45 * 60_000 && captured >= startedAt - 30 * 24 * HOUR);
+      if(capacity.length){
+        const capacityStart=stamp(capacity[0].started_at,now()),capacityEnd=stamp(capacity[0].completed_at,now());
+        check(capacityStart>=completed&&capacityEnd>=capacityStart&&capacityEnd<=jobEnd);
+      }
       // A same-night retry can verify an existing archive. Step time is not snapshot time.
       // The runner pins the HK backup date, so its day start is a conservative lower bound.
       const earliestSnapshotAt = Math.floor((captured + HK_OFFSET) / DAY) * DAY - HK_OFFSET;
-      return { ...common, status:'healthy', detail:'ENCRYPTED BACKUP COPY VERIFIED. RECOVERY TEST IS SEPARATE.',
+      return { ...common, status:capacityAttention?'degraded':'healthy',
+        detail:capacityAttention?'ENCRYPTED BACKUP COPIES VERIFIED. CAPACITY OR RETENTION NEEDS ATTENTION.':'ENCRYPTED BACKUP COPY VERIFIED. RECOVERY TEST IS SEPARATE.',
         earliestSnapshotAt, backupDate:new Date(captured + HK_OFFSET).toISOString().slice(0,10), completedAt:completed };
     };
     try {

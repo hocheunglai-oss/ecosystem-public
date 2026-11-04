@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { prepareGitHubBackup, runGitHubBackup, cleanupGitHubBackup } from '../scripts/recovery/run-github.mjs';
+import { prepareGitHubBackup, runGitHubBackup, cleanupGitHubBackup,checkGitHubBackupCapacity } from '../scripts/recovery/run-github.mjs';
 import { ecoConnections as target } from '../config/ecoConnections.ts';
 
 const source = fileURLToPath(new URL('../scripts/recovery/install-tools.sh', import.meta.url));
@@ -147,6 +147,37 @@ test('private runtime config is cleaned after success, child failure or an excep
       assert.equal(logs.length, 1);
       assert.ok(!logs[0].includes('synthetic-'));
     }
+  });
+});
+
+test('optional maintenance pins restore/canary proof and cannot activate with only one destination',()=>{
+  const nextcloud={origin:'https://nx123456.your-storageshare.de',expectedUser:'eco-backup',folder:'ECO',maxArchiveBytes:1024*1024};
+  const proof={sha256:'c'.repeat(64),verifiedAt:'2026-11-04T00:00:00.000Z'};
+  const maintenance={mode:'plan',restore:proof,trashCanary:proof,protectedHashes:[]};
+  const env={...environment(),ECO_NEXTCLOUD_APP_PASSWORD:'synthetic',ECO_BACKUP_CONFIGURATION:JSON.stringify({...settings,nextcloud,maintenance})};
+  assert.deepEqual(prepareGitHubBackup(env).config.maintenance,maintenance);
+  for(const value of [{...maintenance,mode:'delete'},{...maintenance,restore:null},{...maintenance,trashCanary:{}},
+    {...maintenance,protectedHashes:['unknown']},{...maintenance,permanentDeletion:true}])
+    assert.throws(()=>prepareGitHubBackup({...env,ECO_BACKUP_CONFIGURATION:JSON.stringify({...settings,nextcloud,maintenance:value})}));
+  assert.throws(()=>prepareGitHubBackup({...environment(),ECO_BACKUP_CONFIGURATION:JSON.stringify({...settings,maintenance})}));
+});
+
+test('capacity step accepts only private sanitized status, distinguishing verified copies from maintenance attention',async()=>{
+  await withDirectory(async directory=>{
+    const env=environment(directory),path=join(directory,'eco-backup-status-12345.json'),logs=[];
+    const check=()=>checkGitHubBackupCapacity(env,{log:value=>logs.push(value)});
+    assert.equal(await check(),false);
+    await writeFile(path,JSON.stringify({schemaVersion:1,status:'attention',codes:['DRIVE_CAPACITY_WARNING']}),{mode:0o600});
+    assert.equal(await check(),false);assert.match(logs.at(-1),/copies verified.*attention/);
+    await writeFile(path,JSON.stringify({schemaVersion:1,status:'healthy',codes:[]}));
+    assert.equal(await check(),true);
+    for(const value of [{schemaVersion:1,status:'healthy',codes:['CAPACITY_UNKNOWN']},
+      {schemaVersion:1,status:'attention',codes:['PRIVATE_TOKEN']},{schemaVersion:1,status:'healthy',codes:[],private:'SYNTHETIC_SECRET'}]){
+      await writeFile(path,JSON.stringify(value));assert.equal(await check(),false);
+    }
+    assert.ok(!logs.join().includes('PRIVATE_TOKEN')&&!logs.join().includes('SYNTHETIC_SECRET'));
+    await rm(path);await writeFile(join(directory,'other'),'{}',{mode:0o600});await symlink(join(directory,'other'),path);
+    assert.equal(await check(),false);
   });
 });
 

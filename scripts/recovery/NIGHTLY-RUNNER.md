@@ -78,6 +78,10 @@ Capture holds its own repeatable-read, read-only exported PostgreSQL snapshot, c
 
 ## Nightly order and retention
 
+### Legacy single-destination behavior
+
+The following five-date policy applies when only Drive is configured.
+
 1. Validate the pinned target and runtime inputs, acquire the full-run lock and verify the Drive account/folder.
 2. Look for this Hong Kong date's existing managed archive. A retry reuses it only after a fresh full ciphertext readback. This avoids conflicting randomized age ciphertext on the same night.
 3. Otherwise capture the database and documents, build the integrity manifest and encrypt with official age. Remove the plaintext source directory before upload begins.
@@ -92,9 +96,10 @@ The date comes from the database snapshot. Crossing midnight during capture fail
 With `nextcloud` configured, the runner captures and seals once and attempts the
 two destinations independently. Upload/readback operations start concurrently,
 with the shared PostgreSQL lock checks serialized. A failed configured destination
-makes the entire run fail; the successful remote copy is preserved. Neither
-destination is pruned in this mode, even after both succeed. Enabling retention
-later needs a separate reviewed policy and quota/restore evidence.
+makes the entire run fail; the successful remote copy is preserved. When
+`maintenance` is omitted, neither destination is pruned, even after both succeed.
+The optional reviewed maintenance policy below adds retention only with its
+private activation, quota, restore and recoverable-trash evidence gates.
 
 A same-night Drive archive, including a pending upload recovered by full readback,
 is downloaded into a new private ciphertext file and mirrored exactly. It does
@@ -120,8 +125,9 @@ Conditional `If-None-Match: *` PUT creates without overwriting. Existing names a
 uncertain upload outcomes are accepted only after full independent readback.
 The adapter streams every byte through SHA-256, enforces size, pins ETag during
 readback, then rechecks unchanged metadata and privacy. Corrupt or partial remote
-objects are preserved for operator review. No DELETE, MOVE, public link or
-Nextcloud server-side checksum is used as a substitute for readback.
+objects are preserved for operator review. Upload never deletes or moves another
+object. No public link or server-side checksum substitutes for readback. The
+separately gated maintenance operations below use only ordinary recoverable trash.
 
 Requests use at most three attempts with a two-minute timeout per attempt;
 authentication, privacy and checksum failures are not blindly retried. The outer
@@ -136,6 +142,69 @@ snapshot time, ciphertext hash, size and readback time. A private temporary
 deliberately removes it during cleanup; it is not a durable receipt store. Public
 logs contain only fixed destination phase/completion/error codes. Actual archive
 existence is never reported as a completed verification or restore.
+
+## Optional retention and capacity maintenance
+
+Omitting private `maintenance` configuration preserves existing behavior. Its exact
+fields are `mode` (`plan` or `enabled`), `restore` and `trashCanary` (each with
+`sha256` and ISO `verifiedAt`), and `protectedHashes`. Only dual-destination runs
+may opt in. First run in `plan` mode, review the exact private plan and quota
+forecast, and complete the explicit synthetic Nextcloud trash/restore canary.
+An operator must pin that real canary proof and an isolated restoration proof
+before enabling cleanup. Neither source tests nor a successful upload establish
+those prerequisites. Both proofs must be no more than thirty days old.
+
+After both current full ciphertext readbacks, the runner persists create-only
+pair receipts and maintenance plans in the verified private secondary folder.
+Receipt identity binds snapshot time, hash, size and both objects. A same-night
+retry preserves the first receipt and original source provenance. Pre-ledger
+ciphertext with unknown capture provenance remains explicitly protected. Legacy,
+manual, source-bundle, unknown and partial objects never become managed merely
+because their filenames resemble a backup. The restored hash is always protected.
+
+Drive keeps fourteen distinct Hong Kong backup dates. The secondary keeps their
+union with the latest complete point in each of the previous eight completed
+calendar weeks and twelve completed calendar months. Missing periods and
+conflicting same-night captures remain explicit; missing history is not invented.
+Long-term secondary points intentionally outlive the active Drive tier. Once such
+a point expires from the union it may enter ordinary recoverable trash, provided
+the current pair and retained basis are freshly verified and the restored point
+remains protected. It need not retain an active Drive twin forever.
+
+Cleanup mints authority from new full readbacks, rechecks private scope and stable
+identity immediately before each operation, and writes a durable intent first.
+Drive is retired first while its secondary twin is still active. The Nextcloud
+trash endpoint, assigned quota and headroom are checked before each ordinary file
+DELETE; the exact resulting trash entry is streamed and hashed. Permanent-delete
+and trash-empty endpoints are unavailable. Provider automatic trash expiry remains
+possible. An uncertain operation leaves its intent for operator review and is not
+blindly replayed. Completion receipts make subsequent runs idempotent. At most
+eight points per provider are retired per run; excess copies remain until a later
+run. Pair receipts are partitioned by Hong Kong calendar year, with event records
+in separate year/month folders. Each run reads only the current and previous two
+years, at most 512 pair receipts per year, with four bounded concurrent readbacks.
+This window covers ordinary twelve-month tier expiration without a lifetime file
+limit. Older interrupted, unknown or protected holdings remain untouched and still
+consume measured quota; no space reclamation is inferred from excluding them.
+The restored hash stays separately protected. An over-limit or incomplete partition
+stops for review, never silent truncation or shortened retention.
+
+Capacity uses actual quota observations, the larger of the latest archive and
+the last thirty distinct captures' p95, two further uploads, provider-trash costs
+and reserved secondary headroom. It warns at projected 70% and urgently at 85%,
+insufficient headroom, unknown quota, archive size approaching the unchanged
+512 MiB cap, or a run approaching its deadline. Physical host-wide trash/version
+overhead is not inferred from a user quota. Warnings do not prevent a possible
+good copy; they are evaluated after successful readback.
+
+`Check verified backup capacity` is a separate exact workflow step. It reads only
+a private, bounded, finite-code status file. A maintenance or quota warning fails
+that step while the copy-verification step remains successful. Absent maintenance
+configuration remains unknown rather than producing a false healthy signal. Public health then
+reports verified copies requiring capacity/retention attention, rather than
+misreporting a capture failure or claiming healthy maintenance. Missing/invalid
+status is unknown. The independent alert service must recognize the same exact
+step name; deployed source alone is not proof of external email delivery.
 
 ## Cleanup, limits and recovery
 
@@ -172,3 +241,23 @@ Record evidence privately and verify that the failure/missed-run alert reaches
 the approved recipient. Keep the recovery identity outside both destinations and
 all unattended runners. This supplementary Storage Share copy does not replace
 the live database, the existing Drive copy, or whole-application recovery planning.
+
+Nextcloud trash metadata does not provide the strong ETag
+used for ordinary archives. Trash verification binds the exact file identity,
+original location, deletion time and size to a complete SHA-256 readback and
+stable before/after metadata. HEAD may expose an empty underlying tag while GET
+and the listing expose a deletion-time preview tag. The bounded opaque HEAD
+tag and exact listing are checked independently and never treated as content
+validators. Trash GET/restore use `If-Match: *` only as an
+existence check. Restore refuses an existing original and verifies its complete
+bytes afterward; a lost or conflicting restore is never retried automatically.
+The provider does not expose a strong content validator for an atomic trash
+restore. Ordinary archive deletion retains its original strong `If-Match`.
+
+Nextcloud's virtual restore endpoint requires `Overwrite: T` because its
+pseudochild does not raise a missing-node exception; `F` is rejected before
+restoration. This flag is permitted only on the exact trash-to-restore route,
+never on archive uploads or other moves. The provider normally selects a unique
+restored filename for a collision. ECO checks the actual original is absent
+beforehand and requires its exact private bytes afterward; renamed/conflicting
+results fail without replay. This is not an atomic no-replace guarantee.

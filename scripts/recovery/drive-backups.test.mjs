@@ -110,6 +110,50 @@ async function fixture(t, bytes = bytesFor('new')) {
 }
 function client(drive, overrides = {}) { return createDriveBackupClient({ authorizedFetch: drive.fetch.bind(drive), config: { ...config, ...overrides }, now: () => new Date(NOW), sleep: async () => {} }); }
 
+async function retentionFixture(){
+  const drive=new FakeDrive(),api=client(drive),receipts=[];
+  for(let index=0;index<16;index++){
+    const night=new Date(Date.parse(NOW)-index*86400000).toISOString().slice(0,10),record=drive.add('retention_'+index,night);
+    receipts.push(await api.verifyForRetention({fileId:record.meta.id,sha256:hash(record.bytes),size:record.bytes.length,
+      snapshotAt:record.meta.appProperties.ecoBackupSnapshotAt}));
+  }
+  return{drive,api,receipts,input:{candidateReceipt:receipts[15],retainedReceipts:receipts.slice(0,14),protectedHashes:[],beforeDelete:async()=>{}}};
+}
+test('dual retention requires fourteen distinct newer full readbacks and uses recoverable trash only',async()=>{
+  const f=await retentionFixture();let intent=false;
+  const result=await f.api.trashVerified({...f.input,beforeDelete:async()=>{intent=true;assert.equal(f.drive.writes.length,0);}});
+  assert.equal(intent,true);assert.equal(result.recoverable,true);assert.equal(result.permanentDeletionUsed,false);
+  assert.deepEqual(f.drive.writes.map(value=>value.kind),['trash']);
+  assert.equal(f.drive.calls.some(value=>value.method==='DELETE'),false);
+  assert.equal(f.drive.files.get('retention_14').meta.trashed,false);
+});
+test('forged, duplicate-night or protected retention receipts cannot authorize removal',async()=>{
+  const f=await retentionFixture();
+  for(const change of [{candidateReceipt:{...f.input.candidateReceipt}},
+    {retainedReceipts:f.input.retainedReceipts.map(value=>({...value}))},
+    {retainedReceipts:Array(14).fill(f.receipts[0])},
+    {protectedHashes:[f.input.candidateReceipt.sha256]}, {beforeDelete:undefined}])
+    await assert.rejects(f.api.trashVerified({...f.input,...change}));
+  assert.equal(f.drive.writes.length,0);
+});
+test('changed retained basis during durable intent prevents removal; uncertain trash is never replayed',async()=>{
+  const f=await retentionFixture();
+  await assert.rejects(f.api.trashVerified({...f.input,beforeDelete:async()=>{f.drive.files.get('retention_0').meta.version='2';}}),
+    error=>error.code==='RETENTION_FILE_CHANGED');assert.equal(f.drive.writes.length,0);
+  const other=await retentionFixture();other.drive.failTrash=true;
+  await assert.rejects(other.api.trashVerified(other.input));
+  assert.equal(other.drive.writes.filter(value=>value.kind==='trash').length,1);
+});
+test('scope, private permissions and content changes stop newly minted retention authority',async()=>{
+  const f=await retentionFixture();
+  for(const [mutation,undo] of [
+    [()=>{f.drive.files.get('retention_15').meta.shared=true;},()=>{f.drive.files.get('retention_15').meta.shared=false;}],
+    [()=>{f.drive.permissionExtra={id:'other',type:'anyone',role:'reader'};},()=>{f.drive.permissionExtra=null;}],
+    [()=>{f.drive.files.get('retention_15').meta.sha256Checksum='0'.repeat(64);},()=>{f.drive.files.get('retention_15').meta.sha256Checksum=f.receipts[15].sha256;}],
+  ]){mutation();await assert.rejects(f.api.trashVerified(f.input));undo();}
+  assert.equal(f.drive.writes.length,0);
+});
+
 test('Hong Kong dates are deterministic across UTC midnight boundaries', () => {
   assert.equal(hongKongNight('2026-10-20T15:59:59Z'), '2026-10-20');
   assert.equal(hongKongNight('2026-10-20T16:00:00Z'), '2026-10-21');

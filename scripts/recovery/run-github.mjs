@@ -3,8 +3,9 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ecoConnections } from '../../config/ecoConnections.ts';
-import { diagnosticReader, publicDiagnostic } from './nightly.mjs';
+import { diagnosticReader, publicDiagnostic,readPrivateFile } from './nightly.mjs';
 import { validateNextcloudConfiguration } from './nextcloud-backups.mjs';
+import { validateMaintenanceConfiguration,validCapacityStatus } from './maintenance.mjs';
 
 const reject = () => { throw new Error('Invalid backup startup configuration.'); };
 const check = value => { if (!value) reject(); };
@@ -47,8 +48,10 @@ export function prepareGitHubBackup(env) {
   try { settings = JSON.parse(env.ECO_BACKUP_CONFIGURATION); } catch { reject(); }
   const keys = ['databaseHost', 'driveEmail', 'driveFolderId', 'recipient'];
   const secondary = settings && Object.hasOwn(settings,'nextcloud');
+  const maintenance=settings&&Object.hasOwn(settings,'maintenance');
   check(settings && typeof settings === 'object' && !Array.isArray(settings)
-    && Object.keys(settings).length === keys.length + (secondary ? 1 : 0) && keys.every(key => typeof settings[key] === 'string'));
+    && Object.keys(settings).length === keys.length + (secondary ? 1 : 0)+(maintenance?1:0) && keys.every(key => typeof settings[key] === 'string'));
+  if(maintenance){check(secondary);try{validateMaintenanceConfiguration(settings.maintenance);}catch{reject();}}
   if (secondary) {
     try { validateNextcloudConfiguration(settings.nextcloud,env.ECO_NEXTCLOUD_APP_PASSWORD); } catch { reject(); }
   } else check(!env.ECO_NEXTCLOUD_APP_PASSWORD);
@@ -66,6 +69,7 @@ export function prepareGitHubBackup(env) {
       applicationTag: 'eco-nightly-v1', namePrefix: 'ECO-nightly', propertyPrefix: 'ecoBackup',
       keepNights: 5, maxArchiveBytes: 512 * 1024 ** 2 }, timeoutMs: 40 * 60_000,
     ...(secondary ? {nextcloud:{...settings.nextcloud}} : {}),
+    ...(maintenance?{maintenance:structuredClone(settings.maintenance)}:{}),
   };
   // Do not inherit ambient GitHub tokens, proxy settings, PG* overrides or unrelated secrets.
   const childEnv = { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC', TMPDIR: env.RUNNER_TEMP };
@@ -104,6 +108,7 @@ export async function runGitHubBackup(env = process.env, { launch = runChild, lo
     directory = await mkdtemp(join(env.RUNNER_TEMP, 'eco-backup-config-'));
     const configPath = join(directory, 'config.json');
     await writeFile(configPath, JSON.stringify(config), { flag: 'wx', mode: 0o600 });
+    childEnv.ECO_BACKUP_STATUS_FILE=join(env.RUNNER_TEMP,`eco-backup-status-${env.GITHUB_RUN_ID}.json`);
     ok = await launch({ configPath, env: childEnv, onDiagnostic:value => {
       const line = publicDiagnostic(value); if (line) log(line);
     } }) === 0;
@@ -138,14 +143,33 @@ export async function cleanupGitHubBackup(env = process.env, { log = console.log
       check(info.isDirectory() && !info.isSymbolicLink() && info.uid === process.getuid() && !(info.mode & 0o077));
     }
     for (const name of names) await rm(join(env.RUNNER_TEMP, name), { recursive: true, force: true, maxRetries: 3 });
+    if(/^[1-9][0-9]*$/u.test(env.GITHUB_RUN_ID||'')){
+      const statusPath=join(env.RUNNER_TEMP,`eco-backup-status-${env.GITHUB_RUN_ID}.json`);
+      try{await readPrivateFile(statusPath,4096);await rm(statusPath);}catch(error){if(error?.code!=='PRIVATE_FILE_UNAVAILABLE')throw error;}
+    }
     ok = true;
   } catch { ok = false; }
   log(ok ? 'ECO temporary backup files cleaned.' : 'ECO temporary backup cleanup did not complete.');
   return ok;
 }
 
+/** Separate successful-copy maintenance status from capture failure. */
+export async function checkGitHubBackupCapacity(env=process.env,{log=console.log}={}) {
+  try{
+    check(env.GITHUB_ACTIONS==='true'&&env.RUNNER_ENVIRONMENT==='github-hosted'
+      &&env.GITHUB_REPOSITORY===ecoConnections.githubRepository&&env.GITHUB_REPOSITORY_ID===ecoConnections.backup.githubRepositoryId
+      &&env.GITHUB_REPOSITORY_OWNER_ID===ecoConnections.backup.githubOwnerId&&/^[1-9][0-9]*$/u.test(env.GITHUB_RUN_ID||'')
+      &&typeof env.RUNNER_TEMP==='string'&&isAbsolute(env.RUNNER_TEMP)&&await realpath(env.RUNNER_TEMP)===env.RUNNER_TEMP);
+    const status=JSON.parse(await readPrivateFile(join(env.RUNNER_TEMP,`eco-backup-status-${env.GITHUB_RUN_ID}.json`),4096));
+    check(validCapacityStatus(status));
+    if(status.status==='healthy'){log('ECO verified backup capacity checks passed.');return true;}
+    log('ECO backup copies verified; capacity or retention needs attention. Codes: '+status.codes.join(', ')+'.');return false;
+  }catch{log('ECO verified backup capacity status is unknown.');return false;}
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   process.exitCode = args.length === 1 && args[0] === '--cleanup' ? (await cleanupGitHubBackup() ? 0 : 1)
+    : args.length===1&&args[0]==='--capacity'?(await checkGitHubBackupCapacity()?0:1)
     : args.length === 0 ? (await runGitHubBackup() ? 0 : 1) : 1;
 }

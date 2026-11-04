@@ -52,6 +52,10 @@ jobs:
           # Empty unless the optional dedicated destination is privately configured.
           ECO_NEXTCLOUD_APP_PASSWORD: ${{ secrets.ECO_NEXTCLOUD_APP_PASSWORD }}
         run: node scripts/recovery/run-github.mjs
+      - name: Check verified backup capacity
+        run: >-
+          env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          node scripts/recovery/run-github.mjs --capacity
       - name: Remove this runner's temporary backup files
         if: always()
         timeout-minutes: 2

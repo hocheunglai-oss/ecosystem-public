@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { fixtureHistoryPageSize, fixtureHistoryYears, type FixtureHistoryItem, type FixtureHistoryPage } from '../shared/fixtureHistory';
 import { useAccess } from './auth';
 import { useTestWorkspace } from './TestWorkspace';
+import { canTrade } from './lib/model';
 import RecordsPage from './RecordsPage';
 import { useDemo } from './store';
 import type { OpenModal } from './types';
@@ -112,7 +113,7 @@ export default function FixtureHistory({ open, onOpen }: { open: OpenModal; onOp
   const { state, actor } = useDemo();
   if (dataMode === 'test' || preview) return <RecordsPage open={open} kind="fixture" />;
   if (!user) return null;
-  const hasLegacy = state.outcomes.some(outcome => outcome.kind === 'fixture' && outcome.owner === actor.id);
+  const hasLegacy = state.outcomes.some(outcome => outcome.kind === 'fixture' && (!canTrade(actor) || outcome.owner === actor.id));
   return <div className="fixture-history-layout">
     <HistoryTable key={namespace} onOpen={onOpen} />
     {hasLegacy && <details className="fixture-history__legacy">

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, expect, webkit } from '@playwright/test';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
@@ -20,6 +20,7 @@ const records = Array.from({ length: 51 }, (_, index) => ({
   price: 'USD 455/MT', barging: null,
 }));
 
+const results = [];
 await mkdir(output, { recursive: true });
 for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
   if (process.env.ECO_TEST_ENGINE && process.env.ECO_TEST_ENGINE !== engine) continue;
@@ -115,6 +116,7 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         assert.equal((await detail).status(), 200);
         await expect(page.getByRole('dialog', { name: 'Supplier Profiles', exact: true })).toContainText('SYNTHETIC SUPPLIER');
         assert.deepEqual(errors, []);
+        results.push({ engine, width, theme, ok: true });
         console.log(`PASS ${engine} ${width} ${theme}: sign-in, SPC columns, filters, pages, retry, supplier link`);
       } catch (error) {
         await shot('failure').catch(() => {});
@@ -123,3 +125,6 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
     }
   } finally { await browser.close(); }
 }
+await writeFile(resolve(output, 'results.json'), JSON.stringify({
+  results, scope: 'Isolated browsers with synthetic sign-in, fixture and supplier API responses.',
+}, null, 2));

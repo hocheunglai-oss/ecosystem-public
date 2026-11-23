@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleAuth } from '../server/auth/handler';
+import fixtureHistoryEntrypoint from '../api/access/fixture-history';
+import { serveAccess } from '../server/auth/node';
 import { ApiError, password } from '../server/auth/validation';
 import { authConfig } from '../server/auth/config';
 import type { AuthConfig } from '../server/auth/config';
@@ -41,6 +43,7 @@ function request(path: string, body?: unknown, extra: Record<string,string> = {}
 }
 
 test('fixture history is authenticated, private and bounded to live filters', async () => {
+  assert.equal(fixtureHistoryEntrypoint, serveAccess);
   const live = { 'x-eco-data-mode': 'live' };
   const f = fixture();
   const table = 'fixture-history';
@@ -58,7 +61,12 @@ test('fixture history is authenticated, private and bounded to live filters', as
     assert.equal((await handleAuth(request(table, undefined, headers), config, f.gateway)).status, 403);
   }
   assert.equal((await handleAuth(request(table, {}, live), config, f.gateway)).status, 405);
-  assert.equal((await handleAuth(request(table, undefined, live), config, fixture(null).gateway)).status, 401);
+  const guest = fixture(null);
+  assert.equal((await handleAuth(request(`${table}?year=2026&month=0&page=0&search=`, undefined, live), config, guest.gateway)).status, 401);
+  const invalid = await handleAuth(request(`${table}?route=fixture-history`, undefined, live), config, guest.gateway);
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(await invalid.json(), { message: 'Invalid fixture filters.' });
+  assert.deepEqual(guest.calls, []);
   f.gateway.getPreview = async () => ({ role: 'admin', officeId: 'hk', officeName: 'Hong Kong', readOnly: true });
   assert.equal((await handleAuth(request(table, undefined, live), config, f.gateway)).status, 403);
   assert.deepEqual(f.calls, []);

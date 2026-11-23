@@ -14,7 +14,8 @@ export async function handleAuth(request: Request, config: AuthConfig, gateway: 
     return new Response(JSON.stringify(data), { status, headers });
   }
   try {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     if (!['GET', 'POST'].includes(request.method)) return response({ message: 'Method not allowed.' }, 405);
     let body: Record<string, unknown> = {};
     if (request.method === 'POST') {
@@ -27,6 +28,7 @@ export async function handleAuth(request: Request, config: AuthConfig, gateway: 
       try { body = JSON.parse(raw); } catch { throw new ApiError(400, 'Invalid request.'); }
       if (!body || Array.isArray(body) || typeof body !== 'object') throw new ApiError(400, 'Invalid request.');
     }
+    const historyQuery = path === '/api/access/fixture-history' && request.method === 'GET' ? fixtureHistoryQuery(url) : null;
     // Read incoming identity/preview before any route can replace its cookie.
     const replacingSession = path === '/api/access/login' || path === '/api/access/activate';
     const incoming = replacingSession && !request.headers.get('cookie') ? null : await gateway.currentUser();
@@ -58,11 +60,11 @@ export async function handleAuth(request: Request, config: AuthConfig, gateway: 
     }
     if (!user) throw new ApiError(401, 'Sign in required.');
     if (path === '/api/access/fixture-history') {
-      if (request.method !== 'GET') throw new ApiError(405, 'Method not allowed.');
+      if (!historyQuery) throw new ApiError(405, 'Method not allowed.');
       if (preview || request.headers.get('x-eco-data-mode') !== 'live' || request.headers.get('sec-fetch-site') === 'cross-site') {
         throw new ApiError(403, 'Access denied.');
       }
-      return response(await gateway.listFixtureHistory(fixtureHistoryQuery(new URL(request.url))));
+      return response(await gateway.listFixtureHistory(historyQuery));
     }
     if (path === '/api/access/privacy' && request.method === 'GET') return response(accountPrivacyNotice);
     if (path === '/api/access/preview/end' && request.method === 'POST') {

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import EnquiryPage from "./EnquiryPage";
 import RecordsPage from "./RecordsPage";
+import FixtureHistory from "./FixtureHistory";
 import { BuyerProfileDirectory } from "./BuyerProfile";
 import LostReasonSettings from "./LostReasonSettings";
 import UsersAccess from './UsersAccess';
@@ -65,7 +66,7 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
       content = <EnquiryPage open={open} onOpen={onOpen} context={context} />;
       break;
     case "fixtures":
-      content = <RecordsPage open={open} kind="fixture" />;
+      content = <FixtureHistory open={open} onOpen={onOpen} />;
       break;
     case "lost":
       content = <RecordsPage open={open} kind="lost" />;

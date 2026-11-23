@@ -182,6 +182,7 @@ jobs:
               tests/shared-inbox.e2e.mjs
               tests/whatsapp-intake.e2e.mjs
               tests/commercial-enquiries.e2e.mjs
+              tests/fixture-history.e2e.mjs
               tests/privacy-page.e2e.mjs
             artifacts: |
               output/test-workspace-ui
@@ -191,6 +192,7 @@ jobs:
               output/shared-inbox-ui
               output/whatsapp-intake-ui
               output/commercial-enquiries-ui
+              output/fixture-history-ui
               output/privacy-ui
           - group: knowledge
             label: Knowledge and private profiles

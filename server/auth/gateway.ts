@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
 import { createClient, isAuthSessionMissingError } from '@supabase/supabase-js';
 import type { AccessOffice, AccessUser, UserAccessUpdate, UserAccessCreate, UserPasswordReset, UserAccessDelete, RolePreview, PreviewInput, PhoneChangeRequest, PhoneChangeInput, PhoneChangeReview } from '../../shared/access.ts';
+import type { FixtureHistoryPage, FixtureHistoryQuery } from '../../shared/fixtureHistory.ts';
 import type { AuthConfig } from './config.ts';
 import { ApiError, password } from './validation.ts';
 
@@ -18,6 +19,7 @@ export interface AuthGateway {
   consumeLoginAttempt(email: string): Promise<void>;
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
+  listFixtureHistory(query: FixtureHistoryQuery): Promise<FixtureHistoryPage>;
   listUsers(): Promise<{ users: AccessUser[]; offices: AccessOffice[] }>;
   updateUser(input: UserAccessUpdate): Promise<AccessUser>;
   createUser(actor: AccessUser, input: UserAccessCreate): Promise<AccessUser>;
@@ -233,6 +235,9 @@ export function createAuthGateway(request: Request, config: AuthConfig): AuthGat
       const { error } = await client.auth.signOut({ scope: 'local' });
       if (error) throw new ApiError(503, 'Sign-out could not be confirmed. Try again.');
     },
+    listFixtureHistory: ({ year, month, search, page }) => rpc('eco_list_fixture_history', {
+      p_year: year, p_month: month, p_search: search, p_page: page,
+    }),
     listUsers: () => rpc('eco_list_users'),
     listPhoneRequests: () => rpc('eco_list_phone_requests'),
     requestPhoneChange: input => rpc('eco_request_phone_change', {p_request_id: input.requestId, p_phone: input.phone}),

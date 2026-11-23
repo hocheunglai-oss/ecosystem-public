@@ -105,5 +105,49 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    for(const table of ['commercial_enquiry_queue','commercial_enquiry_history','commercial_enquiry_mutations']){assert.equal(await query(`select count(*) from eco_private.${table} where enquiry_id=${lit(first.item.id)}`),'0');assert.equal(await query(`select count(*) from eco_private.${table} where enquiry_id=${lit(second.item.id)}`),'1');}
    assert.equal((await get(1)).items.length,1);
   });
+  await t.test('fixture history links canonical records and limits reads to authorised live members', async () => {
+   await seed();
+   const supplier = randomUUID();
+   const table = 'eco_private.fixture_history';
+   const workbook = 'fixture_test_workbook';
+   const insert = (row, seller, buyer, date = '2025-09-08', supplierId = supplier, digest = String(row).padStart(64, '0')) =>
+    `insert into ${table} (fixture_date,supplier_trader_id,buyer_trader_id,supplier_id,vessel,vlsfo,
+      source_workbook,source_tab,source_row,source_digest,source_labels)
+     values (${lit(date)},${lit(seller)},${lit(buyer)},${lit(supplierId)},'SYNTHETIC SHIP','100–200',
+      ${lit(workbook)},1,${row},${lit(digest)},'{"supplier":"OLD PROVIDER LABEL","supplierOffice":"SINGAPORE","buyerOffice":"GENOA"}')`;
+   const list = (i, args = "0,0,'',0") => as(i, `select public.eco_list_fixture_history(${args})`).then(JSON.parse);
+   await query(`insert into eco_private.suppliers (id,source_key,record) values (${lit(supplier)},'fixture-supplier',
+    '{"countryCode":"SG","legalName":"Synthetic Supplier Limited","shortName":"SYNTHETIC SUPPLIER"}')`);
+   await query(`${insert(2, users[1], users[2])};${insert(3, users[2], users[1], '2026-06-09')};${insert(4, users[2], users[0])}`);
+   await assert.rejects(query(insert(2, users[1], users[2])), /duplicate key/);
+   await assert.rejects(query(insert(5, users[1], users[2], '2024-12-31')), /check constraint/);
+   await assert.rejects(query(insert(5, users[1], users[2], '2025-09-08', randomUUID())), /foreign key/);
+   await assert.rejects(query(insert(5, users[1], randomUUID())), /foreign key/);
+   for (const role of ['anon', 'authenticated', 'service_role'])
+    await assert.rejects(query(`set role ${role}; select * from ${table}`), /permission denied/);
+   for (const role of ['anon', 'service_role'])
+    await assert.rejects(query(`set role ${role}; select public.eco_list_fixture_history(0,0,'',0)`), /permission denied/);
+   const page = await list(1);
+   assert.equal(page.total, 2);
+   assert.deepEqual(page.items.map(item => item.date), ['2026-06-09', '2025-09-08']);
+   assert.equal(page.items[0].supplier, 'SYNTHETIC SUPPLIER');
+   assert.equal(page.items[0].supplierId, supplier);
+   assert.equal(page.items[0].buyerOffice, 'GENOA');
+   assert.equal(page.items[0].vlsfo, '100–200');
+   assert.equal(page.items[0].imo, null);
+   assert.doesNotMatch(JSON.stringify(page), /OLD PROVIDER LABEL|fixture_test_workbook|sourceDigest|sourceRow/);
+   for (const i of [0, 2]) assert.equal((await list(i)).total, 3);
+   assert.deepEqual(await list(3), { total: 0, items: [] });
+   assert.equal((await list(1, "2025,9,'ship old provider',0")).total, 1);
+   assert.equal((await list(1, "2025,9,'%',0")).total, 0);
+   assert.deepEqual(await list(1, "0,0,'',1"), { total: 2, items: [] });
+   await assert.rejects(list(1, "2027,0,'',0"), /Invalid fixture filters/);
+   await as(0, "select public.eco_set_preview('admin','hk')");
+   await assert.rejects(list(0), /unavailable in preview/);
+   await query(`update eco_private.suppliers set archived_at=now() where id=${lit(supplier)}`);
+   assert.equal((await list(1)).items[0].supplierAvailable, false);
+   await query(`insert into eco_private.revoked_sessions(session_id,user_id) values(${lit(sessions[1])},${lit(users[1])})`);
+   await assert.rejects(list(1), /Unauthorized/);
+  });
  }finally{if(started)await exec(join(bin,'pg_ctl'),['-D',data,'-m','immediate','-w','stop'],{env}).catch(()=>{});await rm(root,{recursive:true,force:true});}
 });

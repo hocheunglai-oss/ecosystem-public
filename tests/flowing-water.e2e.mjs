@@ -72,6 +72,11 @@ async function mocks(context) {
       state.signedIn = true; return route.fulfill({ json: { user: state.user, preview: null } });
     }
     if (path === '/api/access/logout') { state.signedIn = false; return route.fulfill({ json: { user: null } }); }
+    if (path === '/api/access/fixture-history' && request.method() === 'GET') {
+      assert.ok(state.signedIn);
+      assert.equal(request.headers()['x-eco-data-mode'], 'live');
+      return route.fulfill({ json: { items: [], total: 0 } });
+    }
     if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
     if (path === '/api/access/users') return route.fulfill({ json: { users: [state.user], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
     if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });

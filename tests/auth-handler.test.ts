@@ -19,6 +19,7 @@ function fixture(current: AccessUser | null = user) {
     setPreview: async input => input ? {...input,officeName:input.officeId,readOnly:true} : null,
     consumeLoginAttempt: async () => { calls.push('limit'); },
     signIn: async () => { calls.push('login'); }, signOut: async () => { calls.push('logout'); },
+    listFixtureHistory: async query => { calls.push('fixtures:' + JSON.stringify(query)); return { items: [], total: 0 }; },
     listUsers: async () => { calls.push('list'); return { users: [user], offices: [{ id: 'hk', name: 'Hong Kong' }] }; },
     updateUser: async input => { calls.push('update'); return { ...user, ...input, revision: 2 }; },
     activate: async () => { calls.push('activate'); },
@@ -34,10 +35,34 @@ function fixture(current: AccessUser | null = user) {
   return { gateway, calls };
 }
 function request(path: string, body?: unknown, extra: Record<string,string> = {}) {
-  return new Request(config.origin + '/api/access/' + path, body === undefined ? {} : {
+  return new Request(config.origin + '/api/access/' + path, body === undefined ? { headers: extra } : {
     method: 'POST', headers: { origin: config.origin, 'content-type': 'application/json', 'x-eco-request': '1', ...extra }, body: JSON.stringify(body),
   });
 }
+
+test('fixture history is authenticated, private and bounded to live filters', async () => {
+  const live = { 'x-eco-data-mode': 'live' };
+  const f = fixture();
+  const table = 'fixture-history';
+  const result = await handleAuth(request(table + '?year=2025&month=9&search=+SYNTHETIC+&page=2', undefined, live), config, f.gateway);
+  assert.equal(result.status, 200);
+  assert.match(result.headers.get('cache-control')!, /private, no-store/);
+  assert.deepEqual(await result.json(), { items: [], total: 0 });
+  assert.deepEqual(f.calls, ['fixtures:{"year":2025,"month":9,"page":2,"search":"SYNTHETIC"}']);
+  f.calls.length = 0;
+  for (const filter of ['year=2024', 'year=2025&year=2026', 'month=13', 'page=-1', 'page=201', 'supplierId=x', 'search=%00']) {
+    assert.equal((await handleAuth(request(`${table}?${filter}`, undefined, live), config, f.gateway)).status, 400, filter);
+  }
+  const forbiddenHeaders: Record<string, string>[] = [{}, { 'x-eco-data-mode': 'test' }, { ...live, 'sec-fetch-site': 'cross-site' }];
+  for (const headers of forbiddenHeaders) {
+    assert.equal((await handleAuth(request(table, undefined, headers), config, f.gateway)).status, 403);
+  }
+  assert.equal((await handleAuth(request(table, {}, live), config, f.gateway)).status, 405);
+  assert.equal((await handleAuth(request(table, undefined, live), config, fixture(null).gateway)).status, 401);
+  f.gateway.getPreview = async () => ({ role: 'admin', officeId: 'hk', officeName: 'Hong Kong', readOnly: true });
+  assert.equal((await handleAuth(request(table, undefined, live), config, f.gateway)).status, 403);
+  assert.deepEqual(f.calls, []);
+});
 
 test('account privacy guidance requires a live member and is readable by traders and read-only previews', async () => {
   const anonymous = await handleAuth(request('privacy'), config, fixture(null).gateway);

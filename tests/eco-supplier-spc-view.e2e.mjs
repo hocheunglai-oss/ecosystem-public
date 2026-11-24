@@ -38,6 +38,7 @@ async function mock(context, mode = 'admin') {
     if (path==='pic-options') return route.fulfill({json:{options:['FIXTURE TRADER']}});
     if (path==='list') {
       const items=state.items.filter(item => (!url.searchParams.get('country')||url.searchParams.get('country')===item.countryCode)
+        && (url.searchParams.get('includeClosed')==='true'||!item.isClosed)
         && (!url.searchParams.get('trader')||item.info.supplierTrader.toLowerCase().includes(url.searchParams.get('trader').toLowerCase()))
         && (!url.searchParams.get('grade')||item.info.availableGrade.includes(url.searchParams.get('grade')))
         && (!url.searchParams.get('search')||`${item.legalName} ${item.shortName}`.toLowerCase().includes(url.searchParams.get('search').toLowerCase())));
@@ -51,7 +52,8 @@ async function mock(context, mode = 'admin') {
       if(state.receipts.has(body.requestId)) return route.fulfill({json:state.receipts.get(body.requestId)});
       const index=state.items.findIndex(item=>item.id===body.id);
       assert.equal(body.revision,state.items[index].revision);
-      state.items[index]={...state.items[index],info:body.info,contacts:body.contacts,barges:body.barges,revision:body.revision+1};
+      state.items[index]={...state.items[index],info:body.info,contacts:body.contacts,barges:body.barges,revision:body.revision+1,
+        ...(body.isClosed===undefined?{}:{isClosed:body.isClosed})};
       state.updates++;
       const response={item:state.items[index]};state.receipts.set(body.requestId,response);
       if(state.dropResponse){state.dropResponse=false;return route.abort('failed');}
@@ -200,6 +202,22 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
         assert.equal(state.updates,1,'One successful PIC change adds one contribution');
         assert.equal(state.items[0].contacts.length,1,'PIC updates preserve contacts');
         assert.equal(state.items[0].barges.length,1,'PIC updates preserve barges');
+        await empty.getByRole('button',{name:'EMPTY SUPPLIER',exact:true}).click();
+        await workspace.getByRole('button',{name:'EDIT',exact:true}).click();
+        const supplierStatus=workspace.getByRole('combobox',{name:'STATUS',exact:true});
+        await expect(supplierStatus).toHaveValue('active');
+        await supplierStatus.selectOption('closed');
+        await workspace.getByRole('button',{name:'SAVE',exact:true}).click();
+        await expect(workspace.getByText('CLOSED',{exact:true})).toBeVisible();
+        assert.equal(state.requests.filter(request=>request.path==='update').at(-1).body.isClosed,true);
+        await screenshot(page,`${prefix}-closed-profile`,width);
+        await workspace.getByRole('button',{name:'Supplier results',exact:true}).click();
+        await expect(table.locator('tbody tr')).toHaveCount(2);
+        await expect(table).not.toContainText('EMPTY SUPPLIER');
+        await workspace.getByRole('button',{name:'SPC VIEW',exact:true}).click();
+        await expect(table.locator('tbody tr')).toHaveCount(4);
+        await expect(table.getByRole('row',{name:/EMPTY SUPPLIER/})).toContainText('CLOSED');
+        await screenshot(page,`${prefix}-closed-directory`,width);
         assert.deepEqual(errors,[]);
         results.push({engine,width,theme,mode:'admin',status:'passed'});
         console.log(`PASS ${prefix} admin`);

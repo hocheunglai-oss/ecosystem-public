@@ -1,12 +1,12 @@
 import { assertLiveDataWritable } from './testWorkspaceGuard';
 import { useCallback, useEffect, useState } from 'react';
-import type { SupplierRecord, SupplierUpdate, SupplierCreate, SupplierArchive } from '../../shared/suppliers';
+import type { SupplierRecord, SupplierUpdate, SupplierCreate, SupplierArchive, SupplierListQuery } from '../../shared/suppliers';
 import { useAccess } from '../auth';
 import { completeSupplierCatalog, type SupplierPage } from './supplierCatalog';
 export type { SupplierPage } from './supplierCatalog';
 import { assertPreviewWritable } from './previewGuard';
 
-export interface SupplierQuery { search?: string; country?: string; portId?: string; grade?: string; trader?: string; page?: number; limit?: number }
+export type SupplierQuery = Partial<SupplierListQuery>;
 export function supplierQuery(query: SupplierQuery): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') params.set(key, String(value));

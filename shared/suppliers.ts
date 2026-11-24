@@ -11,16 +11,16 @@ export interface SupplierImportRecord {
  countryCode:string; countryName:string; portName:string; nameStatus:'verified'|'needs-review'; legalNameSourceId:string|null;
  info:SupplierInfo; contacts:SupplierContact[]; barges:SupplierBarge[]; facts:SupplierFact[]; sources:SupplierSource[];
 }
-export interface SupplierRecord extends SupplierImportRecord { revision:number; updatedAt:string; background?:string }
+export interface SupplierRecord extends SupplierImportRecord { revision:number; updatedAt:string; background?:string; isClosed?:boolean }
 export type SupplierSummary = Omit<SupplierRecord,'contacts'|'barges'|'facts'|'sources'> & {contactCount:number;bargeCount:number};
-export interface SupplierListQuery {search:string;country:string;grade:string;trader:string;page:number;limit:number;portId?:string}
+export interface SupplierListQuery {search:string;country:string;grade:string;trader:string;page:number;limit:number;portId?:string;includeClosed?:boolean}
 export interface SupplierPage {items:SupplierSummary[];page:number;pageSize:number;total:number}
-export interface SupplierUpdate {requestId:string;id:string;revision:number;info:SupplierInfo;contacts:SupplierContact[];barges:SupplierBarge[];legalName?:string;shortName?:string;background?:string}
+export interface SupplierUpdate {requestId:string;id:string;revision:number;info:SupplierInfo;contacts:SupplierContact[];barges:SupplierBarge[];legalName?:string;shortName?:string;background?:string;isClosed?:boolean}
 /** Operator import is service-role-only; it has no HTTP/browser route. Existing records are preserved. */
 export interface SupplierImport {requestId:string;operatorId:string;sourceHash:string;records:SupplierImportRecord[]}
 export interface SupplierImportResult {batchId:string;inserted:number;preserved:number;items:{id:string;sourceKey:string;status:'inserted'|'preserved'}[]}
 export interface SupplierEnrichment {requestId:string;operatorId:string;id:string;revision:number;legalName:string;nameStatus:SupplierRecord['nameStatus'];legalNameSourceId:string|null;facts:SupplierFact[];sources:SupplierSource[]}
 
-export interface SupplierCreate {requestId:string;legalName:string;shortName:string;portId?:string;countryCode:string;countryName:string;portName:string;background:string;info:SupplierInfo;contacts:SupplierContact[];barges:SupplierBarge[]}
+export interface SupplierCreate {requestId:string;legalName:string;shortName:string;portId?:string;countryCode:string;countryName:string;portName:string;background:string;info:SupplierInfo;contacts:SupplierContact[];barges:SupplierBarge[];isClosed?:boolean}
 export interface SupplierArchive {requestId:string;id:string;revision:number}
 export interface SupplierArchiveResult {id:string;revision:number;archivedAt:string}

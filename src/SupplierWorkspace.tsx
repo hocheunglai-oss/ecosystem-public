@@ -43,7 +43,7 @@ export default function SupplierWorkspace({ onOpen, context, singapore = false, 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [selected, setSelected] = useState<{ id: string; tab: SupplierTab } | null>(context?.supplierId ? { id: context.supplierId, tab: 'information' } : null);
-  const rows = useSupplierList({ search, portId: scope?.id, country: scoped ? undefined : spcView || singaporeOnly ? 'SG' : undefined, trader: spcView ? traderFilter : undefined, grade: spcView ? gradeFilter : undefined, page, limit }, !selected && (!scoped || Boolean(scope)));
+  const rows = useSupplierList({ search, portId: scope?.id, country: scoped ? undefined : spcView || singaporeOnly ? 'SG' : undefined, trader: spcView ? traderFilter : undefined, grade: spcView ? gradeFilter : undefined, includeClosed: !spcView || undefined, page, limit }, !selected && (!scoped || Boolean(scope)));
   const table = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const scroll = useRef(0);
@@ -86,7 +86,11 @@ export default function SupplierWorkspace({ onOpen, context, singapore = false, 
       <table className="shared-supplier-table" aria-label="Supplier results">
         <thead><tr><th scope="col">SUPPLIER</th>{spcView && <><th scope="col">PAYMENT<br />TERMS</th><th scope="col">QUALITY CLAIM<br />BAR</th><th scope="col" className="shared-supplier-filter-heading"><select aria-label="Supplier PIC filter" value={traderFilter} onChange={event => { setTraderFilter(event.target.value); reset(); }}><option value="">ALL TRADERS</option>{[...new Set([...picOptions.options, ...items.map(item => item.info.supplierTrader), traderFilter].filter(Boolean))].sort().map(value => <option key={value} value={value}>{value}</option>)}</select></th><th scope="col" className="shared-supplier-filter-heading"><select aria-label="Grade filter" value={gradeFilter} onChange={event => { setGradeFilter(event.target.value); reset(); }}><option value="">ALL GRADES</option>{['HSFO', 'VLSFO', 'LSMGO'].map(value => <option key={value}>{value}</option>)}</select></th><th scope="col">INFORMATION</th></>}</tr></thead>
         <tbody>{items.map(item => <tr key={item.id}>
-          <th scope="row"><button className="shared-supplier-name" data-supplier-id={item.id} onClick={() => choose(item.id)}><span>{spcView ? supplierShortName(item) : supplierName(item)}{!spcView && item.countryCode === 'SG' && item.shortName && supplierShortName(item) !== supplierName(item) && <small>(SPC: {supplierShortName(item)})</small>}</span><ArrowUpRight size={14} aria-hidden="true" /></button>{!spcView && item.nameStatus === 'needs-review' && <span className="shared-supplier-review">NAME TO VERIFY</span>}</th>
+          <th scope="row">
+            <button className="shared-supplier-name" data-supplier-id={item.id} onClick={() => choose(item.id)}><span>{spcView ? supplierShortName(item) : supplierName(item)}{!spcView && item.countryCode === 'SG' && item.shortName && supplierShortName(item) !== supplierName(item) && <small>(SPC: {supplierShortName(item)})</small>}</span><ArrowUpRight size={14} aria-hidden="true" /></button>
+            {!spcView && item.isClosed && <span className="shared-supplier-review">CLOSED</span>}
+            {!spcView && item.nameStatus === 'needs-review' && <span className="shared-supplier-review">NAME TO VERIFY</span>}
+          </th>
           {spcView && <><td data-label="PAYMENT TERMS" className="shared-supplier-terms"><TermValue value={item.info.paymentTerms} /></td>
           <td data-label="QUALITY CLAIM BAR" className="shared-supplier-terms"><TermValue value={item.info.qualityClaimBar} /></td>
           <td data-label="SUPPLIER PIC"><SupplierPicEditor supplier={item} onEdit={() => setSelectedPic(item)} /></td>
@@ -118,6 +122,7 @@ function TermValue({ value }: { value: string }) {
 function CreateSupplier({ port, onClose, onSaved }: { port?: SupplierPort; onClose: () => void; onSaved: (item: SupplierRecord) => void }) {
   const { realUser, preview } = useAccess();
   const [legalName, setLegalName] = useState(''), [shortName, setShortName] = useState(''), [saving, setSaving] = useState(false), [error, setError] = useState('');
+  const [isClosed, setIsClosed] = useState(false);
   const attempt = useRef<{ body: string; id: string } | null>(null);
   const { dataMode, namespace } = useTestWorkspace();
   const authority = Boolean(realUser?.isAdmin || realUser?.isSpcTrader);
@@ -128,15 +133,26 @@ function CreateSupplier({ port, onClose, onSaved }: { port?: SupplierPort; onClo
   current.current = { owner: realUser?.id, namespace, allowed };
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const stillCurrent = (started: typeof current.current) => alive.current && current.current.owner === started.owner && current.current.namespace === started.namespace && current.current.allowed && isCurrentWorkspace(started.namespace);
-  const close = () => { if (!saving && ((!legalName && !shortName) || window.confirm('Discard unsaved supplier changes?'))) onClose(); };
+  const close = () => { if (!saving && ((!legalName && !shortName && !isClosed) || window.confirm('Discard unsaved supplier changes?'))) onClose(); };
   async function save() {
     const started = current.current;
     if (!stillCurrent(started) || !allowed || !selectedPort || saving || !legalName.trim() || !shortName.trim()) return;
-    const payload: Omit<SupplierCreate, 'requestId'> = { legalName: legalName.trim(), shortName: shortName.trim(), portId: selectedPort.id, countryCode: selectedPort.countryCode, countryName: selectedPort.countryName, portName: selectedPort.portName, background: '', info: { paymentTerms: '', qualityClaimBar: '', supplierTrader: '', availableGrade: '', foBdn: '', goBdn: '' }, contacts: [], barges: [] };
+    const payload: Omit<SupplierCreate, 'requestId'> = { legalName: legalName.trim(), shortName: shortName.trim(), portId: selectedPort.id, countryCode: selectedPort.countryCode, countryName: selectedPort.countryName, portName: selectedPort.portName, background: '', info: { paymentTerms: '', qualityClaimBar: '', supplierTrader: '', availableGrade: '', foBdn: '', goBdn: '' }, contacts: [], barges: [], ...(isClosed ? { isClosed } : {}) };
     const body = JSON.stringify(payload); if (attempt.current?.body !== body) attempt.current = { body, id: crypto.randomUUID() };
     setSaving(true); setError('');
     try { const result = await supplierApi.create({ ...payload, requestId: attempt.current.id }); if (stillCurrent(started)) onSaved(result.item); }
     catch (failure) { if (stillCurrent(started)) { setError((failure as Error).message); setSaving(false); } }
   }
-  return <Modal title="Add supplier" onClose={close}><form className="shared-supplier-create" onSubmit={event => { event.preventDefault(); void save(); }}>{error && <p role="alert" className="shared-supplier-message">{error}</p>}<label>Port<select aria-label="Supplier port" value={selectedPort?.id ?? ''} disabled={saving || Boolean(port)} onChange={event => setPortId(event.target.value)}>{supplierPorts.filter(item => authority || item.countryCode !== 'SG').map(item => <option key={item.id} value={item.id}>{item.portName} · {item.countryName}</option>)}</select></label><label>Official name<input required maxLength={300} value={legalName} disabled={saving} onChange={event => setLegalName(event.target.value)} /></label><label>{selectedPort?.countryCode === 'SG' ? 'SPC short name' : 'Short name'}<input required maxLength={100} value={shortName} disabled={saving} onChange={event => setShortName(event.target.value)} /></label><footer><button type="button" className="button secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={!allowed || saving || !legalName.trim() || !shortName.trim()}>{saving ? 'Saving…' : 'Add supplier'}</button></footer></form></Modal>;
+  return <Modal title="Add supplier" onClose={close}>
+    <form className="shared-supplier-create" onSubmit={event => { event.preventDefault(); void save(); }}>
+      {error && <p role="alert" className="shared-supplier-message">{error}</p>}
+      <label>Port<select aria-label="Supplier port" value={selectedPort?.id ?? ''} disabled={saving || Boolean(port)} onChange={event => setPortId(event.target.value)}>{supplierPorts.filter(item => authority || item.countryCode !== 'SG').map(item => <option key={item.id} value={item.id}>{item.portName} · {item.countryName}</option>)}</select></label>
+      <label>Official name<input required maxLength={300} value={legalName} disabled={saving} onChange={event => setLegalName(event.target.value)} /></label>
+      <label>{selectedPort?.countryCode === 'SG' ? 'SPC short name' : 'Short name'}<input required maxLength={100} value={shortName} disabled={saving} onChange={event => setShortName(event.target.value)} /></label>
+      <label>STATUS<select value={isClosed ? 'closed' : 'active'} disabled={saving} onChange={event => setIsClosed(event.target.value === 'closed')}>
+        <option value="active">ACTIVE</option><option value="closed">CLOSED</option>
+      </select></label>
+      <footer><button type="button" className="button secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={!allowed || saving || !legalName.trim() || !shortName.trim()}>{saving ? 'Saving…' : 'Add supplier'}</button></footer>
+    </form>
+  </Modal>;
 }

@@ -28,6 +28,13 @@ const records = Array.from({ length: 51 }, (_, index) => ({
   account: 'SINGAPORE', eta: null, vessel: index === 50 ? 'SYNTHETIC OSPREY' : 'SYNTHETIC TERN', imo: null,
   hsfo: null, vlsfo: '160–220', lsmgo: null, supplierId, supplier: 'SYNTHETIC SUPPLIER', supplierAvailable: true,
   price: 'USD 455/MT', barging: null,
+  cancelled: index === 50,
+  ...(index === 50 ? { lsmgo: '60–70', supplyRows: [
+    { hsfo: null, vlsfo: '160–220', lsmgo: null, supplierId, supplier: 'SYNTHETIC SUPPLIER',
+      supplierAvailable: true, account: 'SINGAPORE', price: 'USD 455/MT', barging: null, cancelled: true },
+    { hsfo: null, vlsfo: null, lsmgo: '60–70', supplierId: secondSupplierId, supplier: 'SYNTHETIC SUPPLIER TWO',
+      supplierAvailable: true, account: 'ITALY', price: 'USD 490/MT', barging: null, cancelled: true },
+  ] } : {}),
 }));
 
 const results = [];
@@ -80,7 +87,10 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
             traders: [{ id: seller.id, name: seller.displayName, office: 'SINGAPORE' }],
             quantityReview: { HSFO: { min: 75, max: 6000 }, VLSFO: { min: 70, max: 3500 }, LSMGO: { min: 15, max: 1000 } },
           } });
-          if (request.method() === 'GET') return route.fulfill({ json: { ...booking, canConfirm: actor.id === seller.id && booking.status === 'pending' } });
+          if (request.method() === 'GET') return route.fulfill({ json: { ...booking,
+            canConfirm: !booking.cancelled && actor.id === seller.id && booking.status === 'pending',
+            canCancel: !booking.cancelled && (booking.status === 'pending' ? actor.id === member.id : actor.id === seller.id),
+          } });
           const body = request.postDataJSON();
           if (body.action === 'assign') {
             assert.equal(actor.id, member.id);
@@ -90,17 +100,24 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
             assert.equal(body.etaEnd, '2026-10-14');
             booking = { ...body, id: bookingId, revision: 1, status: 'pending', vessel: enquiry.vessel, imo: '',
               supplierTrader: seller.displayName, buyerTrader: member.displayName, reference: enquiry.reference,
-              confirmedAt: null, requested: enquiry.products, lines: [] };
-          } else {
+              confirmedAt: null, requested: enquiry.products, lines: [], cancellation: null };
+          } else if (body.action === 'confirm') {
             assert.equal(body.action, 'confirm');
             assert.equal(actor.id, seller.id);
             assert.equal(body.expectedRevision, 1);
             assert.equal(body.quantityReviewed, true);
             assert.deepEqual(body.lines.map(line => [line.grade, line.quantity, line.supplierId, line.accountId, line.buyPrice]),
               [['VLSFO', 250, supplierId, 'SINGAPORE', 500], ['VLSFO', 25, secondSupplierId, 'ITALY', 490]]);
-            booking = { ...booking, revision: 2, status: 'confirmed', confirmedAt: '2026-10-10T04:00:00Z', canConfirm: false,
+            booking = { ...booking, revision: 2, status: 'confirmed', confirmedAt: '2026-10-10T04:00:00Z', canConfirm: false, canCancel: true,
               lines: body.lines.map(line => ({ ...line, account: line.accountId, supplierAvailable: true,
                 supplier: line.supplierId === supplierId ? 'SYNTHETIC SUPPLIER' : 'SYNTHETIC SUPPLIER TWO' })) };
+          } else {
+            assert.equal(body.action, 'cancel');
+            assert.equal(actor.id, seller.id);
+            assert.equal(body.expectedRevision, 2);
+            assert.equal(body.reason, 'SYNTHETIC WITHDRAWAL');
+            booking = { ...booking, revision: 3, cancelled: true, canCancel: false,
+              cancellation: { at: '2026-10-10T05:00:00Z', by: seller.displayName, reason: body.reason } };
           }
           return route.fulfill({ json: booking });
         }
@@ -152,6 +169,8 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         await shot('fixtures');
         await dialog.getByRole('button', { name: 'Next fixtures page' }).click();
         await expect(grid.getByText('SYNTHETIC OSPREY', { exact: true })).toBeVisible();
+        await expect(grid.getByText('CANCELLED', { exact: true })).toBeVisible();
+        await expect(grid.locator('s, del')).toHaveCount(0);
         await expect(dialog.getByRole('status')).toHaveText('51–51 OF 51');
         await dialog.getByRole('button', { name: 'Previous fixtures page' }).click();
         await expect(dialog.getByRole('status')).toHaveText('1–50 OF 51');
@@ -168,11 +187,15 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         await grid.getByRole('button', { name: 'SYNTHETIC OSPREY' }).click();
         const archived = page.getByRole('dialog', { name: 'SYNTHETIC OSPREY', exact: true });
         await expect(archived).toContainText('160–220');
+        await expect(archived).toContainText('60–70');
         await expect(archived).toContainText('USD 455/MT');
+        await expect(archived.getByText('CANCELLED', { exact: true })).toBeVisible();
         await shot('fixture-history-details');
-        const detail = page.waitForResponse(response => new URL(response.url()).pathname === '/api/suppliers/detail');
-        await archived.getByRole('button', { name: 'SYNTHETIC SUPPLIER' }).click();
-        assert.equal((await detail).status(), 200);
+        const [detail] = await Promise.all([
+          page.waitForResponse(response => new URL(response.url()).pathname === '/api/suppliers/detail'),
+          archived.getByRole('button', { name: 'SYNTHETIC SUPPLIER', exact: true }).click(),
+        ]);
+        assert.equal(detail.status(), 200);
         await expect(page.getByRole('dialog', { name: 'Supplier Profiles', exact: true })).toContainText('SYNTHETIC SUPPLIER');
         async function openTrading(name) {
           const group = nav.getByRole('button', { name: 'Trading', exact: true });
@@ -214,8 +237,17 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         await supply.getByRole('button', { name: 'CONFIRM', exact: true }).click();
         await expect(supply).toContainText('USD 490/MT');
         await expect(supply).toContainText('USD 500/MT');
+        await supply.getByRole('button', { name: 'CANCEL STEM' }).click();
+        await expect(supply.getByRole('button', { name: 'CONFIRM CANCELLATION' })).toBeDisabled();
+        await supply.getByRole('textbox', { name: 'REASON' }).fill('SYNTHETIC WITHDRAWAL');
+        await supply.getByRole('button', { name: 'CONFIRM CANCELLATION' }).click();
+        await expect(supply).toContainText('SYNTHETIC WITHDRAWAL');
+        await expect(supply).toContainText('CANCELLED');
+        await expect(supply).toContainText('USD 490/MT');
+        await shot('cancelled-stem');
         await supply.getByRole('button', { name: 'Close dialog' }).click();
         await expect(ledger.getByRole('row').filter({ hasText: 'SYNTHETIC SPLIT' })).toContainText('275');
+        await expect(ledger.getByRole('row').filter({ hasText: 'SYNTHETIC SPLIT' })).toContainText('CANCELLED');
         assert.deepEqual(errors, []);
         results.push({ engine, width, theme, ok: true });
         console.log(`PASS ${engine} ${width} ${theme}: sign-in, fixture grid, filters, historical details, buyer handoff and supplier confirmation`);

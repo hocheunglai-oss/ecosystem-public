@@ -287,7 +287,7 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
     const own = item.ownerId === actor.id;
     const assigned = assignments[item.id];
     const fixture = assigned && assigned.revision > (item.fixture?.revision ?? 0) ? assigned : item.fixture;
-    const canAssign = own && liveEnabled && commercial.scope === 'mine' && item.status === 'confirmed' && item.port?.countryCode === 'SG' && fixture?.status !== 'confirmed';
+    const canAssign = own && liveEnabled && commercial.scope === 'mine' && item.status === 'confirmed' && item.port?.countryCode === 'SG' && (!fixture || fixture.status === 'pending');
     return <article key={item.id} className={`center-incoming-row${selection.kind === 'record' && selection.id === item.id ? ' is-selected' : ''}`} data-commercial-id={item.id}>
       {own ? <button className="center-incoming-open" aria-label={`Open ${item.vessel || item.reference}`} onClick={() => chooseRecord(item.id)}>
         <span><strong>{item.vessel || item.reference}</strong><br />

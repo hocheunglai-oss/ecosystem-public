@@ -13,7 +13,7 @@ export interface FixtureSchedule {
 export interface FixtureAssignment extends FixtureSchedule {
   id: string;
   revision: number;
-  status: 'pending' | 'confirmed';
+  status: 'pending' | 'confirmed' | 'cancelled';
   supplierTraderId: string;
   supplierTrader: string;
 }
@@ -31,6 +31,8 @@ export interface FixtureBooking extends FixtureAssignment {
   buyerTrader: string;
   confirmedAt: string | null;
   canConfirm: boolean;
+  canCancel: boolean;
+  cancellation: { at: string; by: string; reason: string } | null;
   requested: CommercialProduct[];
   lines: (FixtureSupplyLine & { supplier: string; supplierAvailable: boolean; account: string })[];
 }
@@ -42,7 +44,8 @@ export interface FixtureOptions {
 type FixtureWrite = { dataMode: 'live'; requestId: string; expectedRevision: number };
 export type AssignFixture = FixtureWrite & FixtureSchedule & { action: 'assign'; enquiryId: string; supplierTraderId: string };
 export type ConfirmFixture = FixtureWrite & { action: 'confirm'; id: string; lines: FixtureSupplyLine[]; quantityReviewed: boolean };
-export type FixtureMutation = AssignFixture | ConfirmFixture;
+export type CancelFixture = FixtureWrite & { action: 'cancel'; id: string; reason: string };
+export type FixtureMutation = AssignFixture | ConfirmFixture | CancelFixture;
 
 export function isFixtureDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^(?:19|20)\d\d-\d{2}-\d{2}$/.test(value)) return false;

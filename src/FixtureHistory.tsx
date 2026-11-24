@@ -18,12 +18,13 @@ const emptyFilters = { year: 0, month: 0, page: 0 };
 
 function FixtureRow({ item, onDetails }: { item: FixtureHistoryItem; onDetails: () => void }) {
   const number = (value: string | null) => <td className="record-sheet__number">{value ?? '—'}</td>;
+  const status = item.cancelled ? 'CANCELLED' : item.status === 'pending' ? 'PENDING' : '';
   return <tr data-record-id={item.id}>
     <td className="record-sheet__date">{presentDate(item.date)}</td>
     <td title={item.supplierTrader}>{item.supplierTrader}<br /><small>{item.supplierOffice}</small></td>
     <td title={item.buyerTrader}>{item.buyerTrader}<br /><small>{item.buyerOffice}</small></td>
     <td><button type="button" className="text-button" onClick={onDetails}>{item.vessel}</button>
-      {item.status === 'pending' && <small>PENDING</small>}</td>
+      {status && <small>{status}</small>}</td>
     <td>{fixtureEta(item.eta, item.etaKind, item.etaEnd)}</td>
     {number(item.hsfo)}{number(item.vlsfo)}{number(item.lsmgo)}
   </tr>;
@@ -100,7 +101,7 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
       </div>
     </footer>
     {selected && <FixtureDetails key={selected.id} item={selected} onOpen={onOpen}
-      onClose={() => setSelected(undefined)} onConfirmed={() => setAttempt(value => value + 1)} />}
+      onClose={() => setSelected(undefined)} onChanged={() => setAttempt(value => value + 1)} />}
   </section>;
 }
 

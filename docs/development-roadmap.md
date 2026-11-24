@@ -10,7 +10,7 @@ Fixture history uses the SPC column order and links to existing ECO users and su
 
 Closed suppliers retain their ECO identity and fixture links. Mark their status CLOSED in the supplier profile, show it in the ordinary supplier directory, and exclude closed suppliers from SPC VIEW before filtering results and pagination. Historical imports can use the same closed supplier identity.
 
-### Planned fixture workflow
+### Fixture workflow
 
 Reconcile and import the latest reviewed SPC sheet entries before implementing the new fixture workflow. Record the real signed-in buyer trader on the enquiry. At stem, the buyer trader selects an eligible supplier trader. The pending fixture appears in the assigned trader’s FIXTURES queue with a link to the original enquiry. Show the buyer the assignment and confirmation status. Allow pending reassignment and record who confirms the fixture.
 
@@ -21,6 +21,10 @@ Support an exact ETA, a date range, and an earliest ETA with no end date. Flag a
 Use one summary row per vessel booking, with agreed quantities aggregated by grade and each supply line retained in the details window. Use a confirmed fixture or enquiry reference to group historical supply lines. Account choices come from the offices in Users & Access, excluding CREDIT. The supplier trader can apply an account to the fixture’s supply lines and select a different account on any individual line.
 
 The historical fixture view shows the recorded quantities and ranges. Use confirmed quantities for actual-volume statistics. New fixture confirmation requires exact MT on each supply line and explicit review when a quantity falls outside the grade’s review limits.
+
+For reviewed SPC imports, keep the original row and source digest. An order crossed out in the sheet appears as CANCELLED in ECO with its original commercial details. For individual crossed-out values followed by a replacement, show the current vessel or quantity and retain the source evidence privately. Display both in plain text in FIXTURES. Count cancelled orders separately when fixture statistics are built.
+
+Let the buyer trader cancel a pending STEM. After supplier confirmation, the assigned supplier trader or an administrator can cancel it. Record the reason, actor and time and retain the booking and its original supply details. Associate verified split bookings in legacy imports with one fixture row and keep each supplier, quantity, account and price in the details window.
 
 ## Current refinement requirements
 

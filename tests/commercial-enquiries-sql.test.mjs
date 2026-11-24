@@ -161,6 +161,29 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    assert.equal((await get(1)).items[0].fixture.status,'confirmed');
    await assert.rejects(write(1,{...assign,expectedRevision:saved.revision,requestId:randomUUID()}),/revision conflict/);
    assert.equal(await query('select count(*) from eco_private.fixture_supply_lines'),'2');
+   const cancel={action:'cancel',requestId:randomUUID(),id:booking.id,expectedRevision:saved.revision,reason:'Fixture withdrawn'};
+   assert.equal((await read(0,{id:booking.id})).canCancel,true);
+   assert.equal((await read(1,{id:booking.id})).canCancel,false);
+   assert.equal((await read(2,{id:booking.id})).canCancel,true);
+   await assert.rejects(write(1,cancel),/cancellation is unavailable/);
+   await assert.rejects(write(2,{...cancel,reason:' '}),/Invalid input/);
+   await assert.rejects(write(2,{...cancel,reason:'\t\n'}),/Cancellation reason is required/);
+   const cancelled=await write(2,cancel);
+   assert.equal(cancelled.cancelled,true);
+   assert.equal(cancelled.canCancel,false);
+   assert.equal(cancelled.cancellation.reason,'Fixture withdrawn');
+   assert.deepEqual(cancelled.lines,saved.lines);
+   assert.deepEqual(await write(2,cancel),cancelled);
+   assert.equal((await list(1)).items[0].cancelled,true);
+   assert.equal((await get(1)).items[0].fixture.cancelled,true);
+   await assert.rejects(write(2,{...confirm,expectedRevision:cancelled.revision,requestId:randomUUID()}),/revision conflict/);
+   const pendingEnquiry=(await mutate(1,payload({action:'confirm'}))).item;
+   const pending=await write(1,{...assign,enquiryId:pendingEnquiry.id,requestId:randomUUID()});
+   const cancelPending={...cancel,id:pending.id,expectedRevision:pending.revision,requestId:randomUUID()};
+   await assert.rejects(write(0,cancelPending),/cancellation is unavailable/);
+   await assert.rejects(write(2,cancelPending),/cancellation is unavailable/);
+   assert.equal((await write(1,cancelPending)).cancelled,true);
+   await assert.rejects(write(1,{...assign,enquiryId:pendingEnquiry.id,expectedRevision:2,requestId:randomUUID()}),/revision conflict/);
    for(const table of ['fixture_bookings','fixture_supply_lines']) {
     assert.equal(await query(`select relrowsecurity from pg_class where oid='eco_private.${table}'::regclass`),'t');
     await assert.rejects(as(2,`select * from eco_private.${table}`),/permission denied/);
@@ -203,6 +226,34 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    assert.equal((await list(1, "2025,9,'%',0")).total, 0);
    assert.deepEqual(await list(1, "0,0,'',1"), { total: 2, items: [] });
    await assert.rejects(list(1, "2100,0,'',0"), /Invalid fixture filters/);
+   const reviews = 'eco_private.fixture_history_source_reviews';
+   await query(`insert into ${reviews} (fixture_id,cancelled,vessel,vlsfo,source_modified_at,source_evidence)
+     select id,false,'REPLACEMENT SHIP','150',now(),'{"original":"SYNTHETIC SOURCE REVIEW"}'::jsonb from ${table} where source_row=3
+     union all select id,true,null,null,now(),'{}'::jsonb from ${table} where source_row=2`);
+   const amended = (await list(1, "0,0,'replacement ship',0")).items[0];
+   assert.equal(amended.vessel, 'REPLACEMENT SHIP');
+   assert.equal(amended.vlsfo, '150');
+   assert.equal(amended.cancelled, false);
+   const cancelled = (await list(1, "2025,9,'synthetic ship',0")).items[0];
+   assert.equal(cancelled.cancelled, true);
+   assert.equal(cancelled.vlsfo, '100–200');
+   await query(`update ${reviews} set vlsfo=null,removed_grades=array['VLSFO'],lsmgo='150',barging='1,500'
+     where fixture_id=(select id from ${table} where source_row=3)`);
+   const regraded = (await list(1, "0,0,'replacement ship',0")).items[0];
+   assert.deepEqual([regraded.vlsfo,regraded.lsmgo,regraded.barging],[null,'150','1,500']);
+   assert.equal(await query(`select vessel || ' ' || vlsfo from ${table} where source_row=3`), 'SYNTHETIC SHIP 100–200');
+   assert.doesNotMatch(JSON.stringify(await list(1)), /SYNTHETIC SOURCE REVIEW|source_evidence/);
+   await assert.rejects(as(1, `select * from ${reviews}`), /permission denied/);
+   const group = randomUUID();
+   await query(`${insert(5, users[1], users[2])};${insert(6, users[1], users[2])};
+     update ${table} set booking_group_id=${lit(group)},vessel='SYNTHETIC GROUP',price='110' where source_row=5;
+     update ${table} set booking_group_id=${lit(group)},vessel='SYNTHETIC GROUP',vlsfo=null,lsmgo='40–50',price='120' where source_row=6;`);
+   const split = await list(1, "0,0,'synthetic group',0");
+   assert.equal(split.total,1);
+   assert.equal(split.items[0].id,group);
+   assert.equal(split.items[0].vlsfo,'100–200');
+   assert.equal(split.items[0].lsmgo,'40–50');
+   assert.deepEqual(split.items[0].supplyRows.map(row=>[row.vlsfo,row.lsmgo,row.price]),[['100–200',null,'110'],[null,'40–50','120']]);
    await as(0, "select public.eco_set_preview('admin','hk')");
    await assert.rejects(list(0), /unavailable in preview/);
    await query(`update eco_private.suppliers set archived_at=now() where id=${lit(supplier)}`);

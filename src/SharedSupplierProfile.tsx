@@ -25,7 +25,7 @@ const defaultTabs: ProfileTab[] = [
   { id: 'builtin:sources', title: 'Sources', visibility: 'shared', builtin: 'sources' },
 ];
 const infoFields: [keyof SupplierInfo, string][] = [['paymentTerms', 'Payment terms'], ['qualityClaimBar', 'Quality claim bar'], ['supplierTrader', 'Supplier trader'], ['availableGrade', 'Available grades'], ['foBdn', 'FO BDN'], ['goBdn', 'GO BDN']];
-const copyDraft = (item: SupplierRecord) => ({ id: item.id, revision: item.revision, legalName: item.legalName, shortName: item.shortName, background: item.background || supplierBackground(item).map(fact => fact.value).join(' '), info: { ...item.info }, contacts: item.contacts.map(value => ({ ...value })), barges: item.barges.map(value => ({ ...value })) });
+const copyDraft = (item: SupplierRecord) => ({ id: item.id, revision: item.revision, legalName: item.legalName, shortName: item.shortName, isClosed: Boolean(item.isClosed), background: item.background || supplierBackground(item).map(fact => fact.value).join(' '), info: { ...item.info }, contacts: item.contacts.map(value => ({ ...value })), barges: item.barges.map(value => ({ ...value })) });
 type Draft = Omit<SupplierUpdate, 'requestId'>;
 const initialKey = (tab: SupplierTab) => `builtin:${tab === 'bdn' ? 'information' : tab}`;
 const sameTabs = (left: readonly ProfileTab[], right: readonly ProfileTab[]) => {
@@ -105,7 +105,8 @@ function SupplierProfileContent({ id, initialTab = 'information', onBack, backLa
     event.preventDefault(); if (!draft || saving || !canEdit || !item) return;
     if (!draft.legalName?.trim() || !draft.shortName?.trim()) { setError(item.countryCode === 'SG' ? 'Enter the supplier name and SPC short name.' : 'Enter the supplier name and short name.'); return; }
     if (supplierContacts({ contacts: draft.contacts, sources: item.sources }).some(contact => ![contact.name, contact.phone].some(value => value.trim()))) { setError('Enter a name or phone for each contact.'); return; }
-    const changes = { ...draft, background: !item.background && draft.background === supplierBackground(item).map(fact => fact.value).join(' ') ? '' : draft.background };
+    const { isClosed, ...fields } = draft;
+    const changes = { ...fields, ...(isClosed === Boolean(item.isClosed) ? {} : { isClosed }), background: !item.background && draft.background === supplierBackground(item).map(fact => fact.value).join(' ') ? '' : draft.background };
     const body = JSON.stringify(changes); if (attempt.current?.body !== body) attempt.current = { body, id: crypto.randomUUID() };
     setSaving(true); setError(''); setMessage(''); setConflict(false);
     try { const result = await supplierApi.update({ ...changes, requestId: attempt.current.id }); if (!alive.current) return; setItem(result.item); setDraft(null); attempt.current = null; setMessage('CONTRIBUTION +1'); announceSupplierUpdate(); announceFeedbackUpdate(); }
@@ -165,13 +166,29 @@ function SupplierProfileContent({ id, initialTab = 'information', onBack, backLa
     {error && <div className="shared-supplier-message" role="alert">{error}{(!item || conflict) && <button className="button secondary" onClick={reload}>{conflict ? 'Reload latest' : 'Retry'}</button>}</div>}
     {message && <p className="shared-supplier-message" role="status">{message}</p>}
     {!loading && item && value && <>
-      <header className="shared-supplier-profile-heading"><div><h2>{supplierName(item)}</h2>{item.countryCode === 'SG' && <span>SPC: {supplierShortName(item)}</span>}{item.nameStatus === 'needs-review' && <strong className="shared-supplier-review">OFFICIAL NAME TO VERIFY</strong>}</div><div className="shared-supplier-heading-actions">{canEdit && !draft && <button className="button danger" disabled={saving} onClick={() => void removeSupplier()}>REMOVE SUPPLIER</button>}</div></header>
+      <header className="shared-supplier-profile-heading">
+        <div><h2>{supplierName(item)}</h2>
+          {item.countryCode === 'SG' && <span>SPC: {supplierShortName(item)}</span>}
+          {item.isClosed && <strong className="shared-supplier-review">CLOSED</strong>}
+          {item.nameStatus === 'needs-review' && <strong className="shared-supplier-review">OFFICIAL NAME TO VERIFY</strong>}
+        </div>
+        <div className="shared-supplier-heading-actions">{canEdit && !draft && <button className="button danger" disabled={saving} onClick={() => void removeSupplier()}>REMOVE SUPPLIER</button>}</div>
+      </header>
       <ProfileTabs tabs={visibleTabs.map(entry => ({ ...entry, title: entry.builtin === 'contacts' ? `${entry.title} (${contacts.length})` : entry.builtin === 'barges' ? `${entry.title} (${value.barges.length})` : entry.title }))} activeId={active?.id ?? ''} idPrefix={tabId} label="Supplier sections" onSelect={selectTab} onManage={canPrivate && tabData.data ? openManager : undefined} />
       {tabData.error && <div className="shared-supplier-message" role="alert">{tabData.error}<button className="button secondary" onClick={tabData.refresh}>Retry</button></div>}
       <div className="shared-supplier-profile-form">
         <div className="shared-supplier-profile-content" role="tabpanel" id={`${tabId}-panel`} aria-labelledby={active ? `${tabId}-${active.id}` : undefined}>
           {canEdit && !draft && active?.builtin && active.builtin !== 'sources' && <div className="shared-supplier-content-toolbar"><KnowledgeUpdateButton disabled={saving} onClick={() => { setDraft(copyDraft(item)); setMessage(''); setError(''); }} /></div>}
-          {draft && active?.builtin === 'information' && <section className="shared-supplier-section"><header><h3>Supplier</h3></header><div className="shared-supplier-edit-grid"><label>Official name<input value={draft.legalName ?? ''} maxLength={300} disabled={saving} onChange={event => setDraft(current => current ? { ...current, legalName: event.target.value } : null)} /></label><label>{item.countryCode === 'SG' ? 'SPC short name' : 'Short name'}<input value={draft.shortName ?? ''} maxLength={100} disabled={saving} onChange={event => setDraft(current => current ? { ...current, shortName: event.target.value } : null)} /></label></div></section>}
+          {draft && active?.builtin === 'information' && <section className="shared-supplier-section">
+            <header><h3>Supplier</h3></header>
+            <div className="shared-supplier-edit-grid">
+              <label>Official name<input value={draft.legalName ?? ''} maxLength={300} disabled={saving} onChange={event => setDraft(current => current ? { ...current, legalName: event.target.value } : null)} /></label>
+              <label>{item.countryCode === 'SG' ? 'SPC short name' : 'Short name'}<input value={draft.shortName ?? ''} maxLength={100} disabled={saving} onChange={event => setDraft(current => current ? { ...current, shortName: event.target.value } : null)} /></label>
+              <label>STATUS<select value={draft.isClosed ? 'closed' : 'active'} disabled={saving} onChange={event => setDraft(current => current ? { ...current, isClosed: event.target.value === 'closed' } : null)}>
+                <option value="active">ACTIVE</option><option value="closed">CLOSED</option>
+              </select></label>
+            </div>
+          </section>}
           {active?.builtin === 'information' && <>
             <section className="shared-supplier-section supplier-key-section"><header><h3>KEY INFO</h3></header>{draft ? <><div className="shared-supplier-edit-grid">{infoFields.map(([key, label]) => <label key={key}>{label}{key === 'supplierTrader' && item.countryCode === 'SG' ? <select value={draft.info[key]} disabled={saving || picOptions.loading || Boolean(picOptions.error)} onChange={event => updateInfo(key, event.target.value)}>{supplierPicChoices(picOptions.options, draft.info[key]).map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select> : <input value={draft.info[key]} maxLength={2000} disabled={saving} onChange={event => updateInfo(key, event.target.value)} />}</label>)}</div>{picOptions.error && <div className="shared-supplier-message" role="alert">{picOptions.error}<button type="button" className="button secondary" onClick={picOptions.refresh}>RETRY</button></div>}</> : <SupplierKeyInfo info={item.info} />}</section>
             {infospectrumSummary && <section className="shared-supplier-section supplier-summary-section"><header><h3>INFOSPECTRUM SUMMARY</h3></header><p className="shared-supplier-background">{infospectrumSummary.text}</p><footer>{sourceLabel(infospectrumSummary.source.id)}{reports.filter(report => report.sourceId === infospectrumSummary.source.id).map(report => <ReportDownload key={report.id} report={report} />)}</footer></section>}

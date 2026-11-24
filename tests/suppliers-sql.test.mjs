@@ -169,6 +169,42 @@ test('suppliers SQL against isolated native PostgreSQL',async t=>{
   assert.equal(await query('select count(*) from eco_private.supplier_revisions'),'4');
   await as(0,"select public.eco_set_preview('admin','hk')");await assert.rejects(call(0,'eco_create_supplier',{...create,requestId:randomUUID()}),/read.only/);
  });
+ await t.test('closing a supplier keeps its identity and fixtures and filters SPC before pagination',async()=>{
+  await seed();
+  await query(`update eco_private.users set is_spc_trader=false where id=${lit(ids[2])}`);
+  const closing=record({legalName:'A Supplier Closing',shortName:'CLOSING'});
+  const active=record({legalName:'Z Active Supplier',shortName:'OPEN'});
+  await service('eco_import_suppliers',batch([closing,active]));
+  await query(`insert into eco_private.fixture_history(fixture_date,supplier_trader_id,buyer_trader_id,supplier_id,vessel,vlsfo,source_workbook,source_tab,source_row,source_digest,source_labels)
+   values(date '2025-01-02',${lit(ids[1])},${lit(ids[2])},${lit(closing.id)},'Test Vessel','100','synthetic-workbook',1,2,repeat('a',64),'{}')`);
+  const closure={...update(closing),info:closing.info,isClosed:true};
+  await assert.rejects(call(2,'eco_update_supplier',closure),/authority/);
+  await assert.rejects(call(0,'eco_update_supplier',{...closure,isClosed:'true'}),/Invalid supplier status/);
+  const closed=await call(0,'eco_update_supplier',closure);
+  assert.equal(closed.id,closing.id);
+  assert.equal(closed.isClosed,true);
+  assert.deepEqual(await call(0,'eco_update_supplier',closure),closed);
+  assert.equal(JSON.parse(await as(2,`select public.eco_supplier_detail(${lit(closed.id)})`)).isClosed,true);
+  assert.equal((await call(2,'eco_list_suppliers',page({limit:1}))).items[0].isClosed,true);
+  const spc=await call(2,'eco_list_suppliers',page({portId:'port-singapore',excludeClosed:true,limit:1}));
+  assert.equal(spc.total,1);
+  assert.equal(spc.items[0].id,active.id);
+  assert.equal((await call(2,'eco_list_suppliers',page({country:'SG',search:'CLOSING',excludeClosed:true}))).total,0);
+  await assert.rejects(call(2,'eco_list_suppliers',page({excludeClosed:'true'})),/Invalid supplier filter/);
+  const history=JSON.parse(await as(0,"select public.eco_list_fixture_history(0,0,'',0)"));
+  assert.equal(history.items[0].supplierId,closed.id);
+  assert.equal(history.items[0].supplier,'CLOSING');
+  assert.equal(history.items[0].supplierAvailable,true);
+  const legacyEdit=await call(1,'eco_update_supplier',update(closed));
+  assert.equal(legacyEdit.isClosed,true);
+  const reopened=await call(1,'eco_update_supplier',{...update(legacyEdit),isClosed:false});
+  assert.equal(reopened.isClosed,false);
+  assert.equal(reopened.id,closing.id);
+  assert.equal((await call(2,'eco_list_suppliers',page({excludeClosed:true}))).total,2);
+  const created=await call(0,'eco_create_supplier',{requestId:randomUUID(),legalName:'Historical Example',shortName:'HISTORY',countryCode:'SG',countryName:'Singapore',portName:'Singapore',background:'',info,contacts:[],barges:[],isClosed:true});
+  assert.equal(created.isClosed,true);
+  assert.equal((await call(2,'eco_list_suppliers',page({excludeClosed:true}))).total,2);
+ });
  await t.test('private tabs remain owner-only even to other admins; preview hides private reads and blocks writes',async()=>{
   await seed();const a=record();await service('eco_import_suppliers',batch([a]));const target={kind:'supplier',id:a.id};
   const privateTab={id:randomUUID(),title:'PRIVATE SECRET TITLE',visibility:'private',content:'PRIVATE SECRET CONTENT'};

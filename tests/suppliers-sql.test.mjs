@@ -185,12 +185,12 @@ test('suppliers SQL against isolated native PostgreSQL',async t=>{
   assert.equal(closed.isClosed,true);
   assert.deepEqual(await call(0,'eco_update_supplier',closure),closed);
   assert.equal(JSON.parse(await as(2,`select public.eco_supplier_detail(${lit(closed.id)})`)).isClosed,true);
-  assert.equal((await call(2,'eco_list_suppliers',page({limit:1}))).items[0].isClosed,true);
-  const spc=await call(2,'eco_list_suppliers',page({portId:'port-singapore',excludeClosed:true,limit:1}));
+  assert.equal((await call(2,'eco_list_suppliers',page({limit:1,includeClosed:true}))).items[0].isClosed,true);
+  const spc=await call(2,'eco_list_suppliers',page({portId:'port-singapore',limit:1}));
   assert.equal(spc.total,1);
   assert.equal(spc.items[0].id,active.id);
-  assert.equal((await call(2,'eco_list_suppliers',page({country:'SG',search:'CLOSING',excludeClosed:true}))).total,0);
-  await assert.rejects(call(2,'eco_list_suppliers',page({excludeClosed:'true'})),/Invalid supplier filter/);
+  assert.equal((await call(2,'eco_list_suppliers',page({country:'SG',search:'CLOSING'}))).total,0);
+  await assert.rejects(call(2,'eco_list_suppliers',page({includeClosed:'true'})),/Invalid supplier filter/);
   const history=JSON.parse(await as(0,"select public.eco_list_fixture_history(0,0,'',0)"));
   assert.equal(history.items[0].supplierId,closed.id);
   assert.equal(history.items[0].supplier,'CLOSING');
@@ -200,10 +200,10 @@ test('suppliers SQL against isolated native PostgreSQL',async t=>{
   const reopened=await call(1,'eco_update_supplier',{...update(legacyEdit),isClosed:false});
   assert.equal(reopened.isClosed,false);
   assert.equal(reopened.id,closing.id);
-  assert.equal((await call(2,'eco_list_suppliers',page({excludeClosed:true}))).total,2);
+  assert.equal((await call(2,'eco_list_suppliers',page())).total,2);
   const created=await call(0,'eco_create_supplier',{requestId:randomUUID(),legalName:'Historical Example',shortName:'HISTORY',countryCode:'SG',countryName:'Singapore',portName:'Singapore',background:'',info,contacts:[],barges:[],isClosed:true});
   assert.equal(created.isClosed,true);
-  assert.equal((await call(2,'eco_list_suppliers',page({excludeClosed:true}))).total,2);
+  assert.equal((await call(2,'eco_list_suppliers',page())).total,2);
  });
  await t.test('private tabs remain owner-only even to other admins; preview hides private reads and blocks writes',async()=>{
   await seed();const a=record();await service('eco_import_suppliers',batch([a]));const target={kind:'supplier',id:a.id};

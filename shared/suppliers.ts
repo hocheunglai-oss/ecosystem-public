@@ -13,7 +13,7 @@ export interface SupplierImportRecord {
 }
 export interface SupplierRecord extends SupplierImportRecord { revision:number; updatedAt:string; background?:string; isClosed?:boolean }
 export type SupplierSummary = Omit<SupplierRecord,'contacts'|'barges'|'facts'|'sources'> & {contactCount:number;bargeCount:number};
-export interface SupplierListQuery {search:string;country:string;grade:string;trader:string;page:number;limit:number;portId?:string;excludeClosed?:boolean}
+export interface SupplierListQuery {search:string;country:string;grade:string;trader:string;page:number;limit:number;portId?:string;includeClosed?:boolean}
 export interface SupplierPage {items:SupplierSummary[];page:number;pageSize:number;total:number}
 export interface SupplierUpdate {requestId:string;id:string;revision:number;info:SupplierInfo;contacts:SupplierContact[];barges:SupplierBarge[];legalName?:string;shortName?:string;background?:string;isClosed?:boolean}
 /** Operator import is service-role-only; it has no HTTP/browser route. Existing records are preserved. */

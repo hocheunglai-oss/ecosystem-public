@@ -38,7 +38,7 @@ async function mock(context, mode = 'admin') {
     if (path==='pic-options') return route.fulfill({json:{options:['FIXTURE TRADER']}});
     if (path==='list') {
       const items=state.items.filter(item => (!url.searchParams.get('country')||url.searchParams.get('country')===item.countryCode)
-        && (url.searchParams.get('excludeClosed')!=='true'||!item.isClosed)
+        && (url.searchParams.get('includeClosed')==='true'||!item.isClosed)
         && (!url.searchParams.get('trader')||item.info.supplierTrader.toLowerCase().includes(url.searchParams.get('trader').toLowerCase()))
         && (!url.searchParams.get('grade')||item.info.availableGrade.includes(url.searchParams.get('grade')))
         && (!url.searchParams.get('search')||`${item.legalName} ${item.shortName}`.toLowerCase().includes(url.searchParams.get('search').toLowerCase())));

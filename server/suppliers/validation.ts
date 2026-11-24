@@ -16,14 +16,14 @@ export function supplierUpdate(value:unknown):SupplierUpdate{
  barges:rows<SupplierBarge>(v.barges,200,row=>{const b=object(row,['id','name','imo','grade','capacity','sourceId']);return {id:text(b.id,100,1),name:text(b.name,300,1),imo:text(b.imo,100),grade:text(b.grade,300),capacity:text(b.capacity,300),sourceId:text(b.sourceId,160)};})};
 }
 export function supplierListQuery(url:URL):SupplierListQuery {
- const allowed=['search','country','portId','grade','trader','page','limit','excludeClosed'];
+ const allowed=['search','country','portId','grade','trader','page','limit','includeClosed'];
  if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length>1))return invalid();
  const numeric=(key:string,fallback:number,max:number)=>{const raw=url.searchParams.get(key);if(raw!==null&&!/^[1-9]\d*$/.test(raw))return invalid();return number(raw===null?fallback:Number(raw),max);};
  const portId=url.searchParams.get('portId');
  if(portId!==null&&!supplierPortById(portId))return invalid();
- const excludeClosed=url.searchParams.get('excludeClosed');
- if(excludeClosed!==null&&excludeClosed!=='true'&&excludeClosed!=='false')return invalid();
- return {search:text(url.searchParams.get('search')??'',160),country:text(url.searchParams.get('country')??'',2),...(portId?{portId}:{}),...(excludeClosed===null?{}:{excludeClosed:excludeClosed==='true'}),grade:text(url.searchParams.get('grade')??'',100),trader:text(url.searchParams.get('trader')??'',160),page:numeric('page',1,100000),limit:numeric('limit',50,100)};
+ const includeClosed=url.searchParams.get('includeClosed');
+ if(includeClosed!==null&&includeClosed!=='true'&&includeClosed!=='false')return invalid();
+ return {search:text(url.searchParams.get('search')??'',160),country:text(url.searchParams.get('country')??'',2),...(portId?{portId}:{}),...(includeClosed===null?{}:{includeClosed:includeClosed==='true'}),grade:text(url.searchParams.get('grade')??'',100),trader:text(url.searchParams.get('trader')??'',160),page:numeric('page',1,100000),limit:numeric('limit',50,100)};
 }
 export function supplierDetailId(url:URL):string{if([...url.searchParams.keys()].some(k=>k!=='id')||url.searchParams.getAll('id').length!==1)return invalid();return text(url.searchParams.get('id'),160,1);}
 

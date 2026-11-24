@@ -9,8 +9,8 @@ $$;
 create or replace function eco_private.list_suppliers(p_query jsonb) returns jsonb language plpgsql security definer set search_path='' as $$
 declare q text; country text; grade text; trader text; page integer; lim integer; result jsonb; total bigint;port jsonb;
 begin
- perform eco_private.current_member();perform eco_private.admin_check_keys(p_query,array['search','country','grade','trader','page','limit','portId','excludeClosed']);
- if p_query ? 'excludeClosed' and jsonb_typeof(p_query->'excludeClosed') is distinct from 'boolean' then raise exception 'Invalid supplier filter' using errcode='22023';end if;
+ perform eco_private.current_member();perform eco_private.admin_check_keys(p_query,array['search','country','grade','trader','page','limit','portId','includeClosed']);
+ if p_query ? 'includeClosed' and jsonb_typeof(p_query->'includeClosed') is distinct from 'boolean' then raise exception 'Invalid supplier filter' using errcode='22023';end if;
  perform eco_private.admin_check_text(p_query,'search',0,160);perform eco_private.admin_check_text(p_query,'country',0,2);perform eco_private.admin_check_text(p_query,'grade',0,100);perform eco_private.admin_check_text(p_query,'trader',0,160);
  if jsonb_typeof(p_query->'page') is distinct from 'number' or (p_query->>'page') !~ '^[1-9][0-9]*$' or (p_query->>'page')::numeric>100000 or jsonb_typeof(p_query->'limit') is distinct from 'number' or (p_query->>'limit') !~ '^[1-9][0-9]*$' or (p_query->>'limit')::numeric>100 then raise exception 'Invalid pagination' using errcode='22023';end if;
  if p_query ? 'portId' then
@@ -19,7 +19,7 @@ begin
  end if;
  q:=lower(trim(p_query->>'search'));country:=upper(trim(p_query->>'country'));grade:=lower(trim(p_query->>'grade'));trader:=lower(trim(p_query->>'trader'));page:=(p_query->>'page')::integer;lim:=(p_query->>'limit')::integer;
  with matched as materialized (select s.* from eco_private.suppliers s where s.archived_at is null and (country='' or s.country_code=country)
- and (not coalesce((p_query->>'excludeClosed')::boolean,false) or s.closed_at is null)
+ and (coalesce((p_query->>'includeClosed')::boolean,false) or s.closed_at is null)
  and (port is null or (s.country_code=port->>'countryCode' and lower(trim(s.record->>'portName'))=lower(port->>'portName')))
  and (q='' or position(q in lower(s.legal_name||' '||s.short_name||' '||(s.record->'aliases')::text))>0)
  and (grade='' or position(grade in lower(s.record#>>'{info,availableGrade}'))>0)

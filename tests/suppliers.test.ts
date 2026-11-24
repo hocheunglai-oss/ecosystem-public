@@ -21,17 +21,17 @@ test('supplier validation rejects forged identity/provenance, duplicates and pag
 test('supplier API requires live authentication, same origin and writable real view',async()=>{
  for(const [options,req,status] of [[{signedIn:false},request('/api/suppliers/list'),401],[{active:false},request('/api/suppliers/list'),401],[{authorized:false},request('/api/suppliers/update',input()),403],[{preview:true},request('/api/suppliers/update',input()),403],[{},request('/api/suppliers/update',input(),'https://attacker.test'),403]] as const){const {g,calls}=gateway(options);assert.equal((await handleSuppliers(req,config,g)).status,status);assert.equal(calls.length,'authorized' in options&&options.authorized===false?1:0);}
 });
-test('supplier closure accepts explicit booleans and SPC filtering reaches the database',async()=>{
+test('supplier closure accepts explicit booleans and directory filtering reaches the database',async()=>{
  const create={requestId:id,legalName:'Example Supplier',shortName:'EXAMPLE',countryCode:'SG',countryName:'Singapore',portName:'Singapore',background:'',info:input().info,contacts:[],barges:[]};
  assert.equal(supplierCreate({...create,isClosed:true}).isClosed,true);
  assert.equal(supplierUpdate({...input(),isClosed:false}).isClosed,false);
  assert.throws(()=>supplierCreate({...create,isClosed:'true'}));
  assert.throws(()=>supplierUpdate({...input(),isClosed:null}));
- assert.throws(()=>supplierListQuery(new URL('https://example.test/?excludeClosed=1')));
- assert.throws(()=>supplierListQuery(new URL('https://example.test/?excludeClosed=true&excludeClosed=false')));
+ assert.throws(()=>supplierListQuery(new URL('https://example.test/?includeClosed=1')));
+ assert.throws(()=>supplierListQuery(new URL('https://example.test/?includeClosed=true&includeClosed=false')));
  const {g,calls}=gateway();
- assert.equal((await handleSuppliers(request('/api/suppliers/list?country=SG&excludeClosed=true'),config,g)).status,200);
- assert.deepEqual(calls,[{name:'eco_list_suppliers',args:{p_query:{search:'',country:'SG',excludeClosed:true,grade:'',trader:'',page:1,limit:50}}}]);
+ assert.equal((await handleSuppliers(request('/api/suppliers/list?country=SG&includeClosed=true'),config,g)).status,200);
+ assert.deepEqual(calls,[{name:'eco_list_suppliers',args:{p_query:{search:'',country:'SG',includeClosed:true,grade:'',trader:'',page:1,limit:50}}}]);
 });
 test('supplier routes forward only validated DTOs, preserve no-store/cookies and have literal Vercel files',async()=>{
  for(const [path,method] of [['list','eco_list_suppliers'],['detail?id='+id,'eco_supplier_detail'],['update','eco_update_supplier'],['pic-options','eco_supplier_pic_options']]){

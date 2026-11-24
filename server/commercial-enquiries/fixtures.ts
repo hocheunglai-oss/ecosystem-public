@@ -22,10 +22,16 @@ export function fixtureQuery(url: URL) {
 }
 export function fixtureMutation(input: unknown): FixtureMutation {
   const common = ['dataMode', 'requestId', 'expectedRevision', 'action'];
-  const value = record(input, [...common, 'enquiryId', 'supplierTraderId', 'date', 'eta', 'etaEnd', 'etaKind', 'etaReviewed', 'id', 'lines', 'quantityReviewed']);
+  const value = record(input, [...common, 'enquiryId', 'supplierTraderId', 'date', 'eta', 'etaEnd', 'etaKind', 'etaReviewed', 'id', 'lines', 'quantityReviewed', 'reason']);
   if (value.dataMode !== 'live') throw new ApiError(403, 'Switch to LIVE to use shared fixtures.');
   if (typeof value.expectedRevision !== 'number' || !Number.isInteger(value.expectedRevision) || value.expectedRevision < 0 || value.expectedRevision > 2147483646) return invalid();
   const base = { dataMode: 'live' as const, requestId: id(value.requestId), expectedRevision: value.expectedRevision };
+  if (value.action === 'cancel') {
+    record(input, [...common, 'id', 'reason']);
+    const reason = typeof value.reason === 'string' ? value.reason.trim() : '';
+    if (!base.expectedRevision || !reason || reason.length > 500 || reason.includes('\u0000')) return invalid();
+    return { ...base, action: 'cancel', id: id(value.id), reason };
+  }
   if (value.action === 'assign') {
     record(input, [...common, 'enquiryId', 'supplierTraderId', 'date', 'eta', 'etaEnd', 'etaKind', 'etaReviewed']);
     const { date, eta, etaEnd, etaKind, etaReviewed } = value;

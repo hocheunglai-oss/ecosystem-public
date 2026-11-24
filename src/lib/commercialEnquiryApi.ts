@@ -89,13 +89,14 @@ function fixtureAssignment(value: unknown): FixtureAssignment {
       || !isFixtureDate(value.date) || !isFixtureDate(value.eta) || typeof value.etaReviewed !== 'boolean'
       || !['date', 'range', 'earliest'].includes(String(value.etaKind))
       || (value.etaKind === 'range' ? !isFixtureDate(value.etaEnd) || value.etaEnd <= value.eta : value.etaEnd !== null)) throw unavailable();
-  return { id: value.id, revision: Number(value.revision), status: value.status, supplierTraderId: value.supplierTraderId,
+  return { id: value.id, revision: Number(value.revision), status: value.cancelled === true ? 'cancelled' : value.status, supplierTraderId: value.supplierTraderId,
     supplierTrader: value.supplierTrader, date: value.date, eta: value.eta, etaEnd: value.etaEnd as string | null,
     etaKind: value.etaKind as FixtureAssignment['etaKind'], etaReviewed: value.etaReviewed };
 }
 function fixtureDetail(value: unknown, id: string): FixtureBooking {
   const assignment = fixtureAssignment(value);
   if (!record(value) || assignment.id !== id || !strings(value, ['vessel', 'imo', 'reference', 'buyerTrader']) || typeof value.canConfirm !== 'boolean'
+      || typeof value.canCancel !== 'boolean' || (value.cancellation !== null && !strings(value.cancellation, ['at', 'by', 'reason']))
       || (value.confirmedAt !== null && typeof value.confirmedAt !== 'string')
       || !Array.isArray(value.requested) || value.requested.some(product => !record(product) || !fixtureGrades.includes(product.grade as typeof fixtureGrades[number]) || typeof product.quantityText !== 'string')
       || !Array.isArray(value.lines) || value.lines.length > 30
@@ -120,4 +121,5 @@ export const fixtureApi = {
   detail: async (id: string, signal?: AbortSignal) => fixtureDetail(await request(new URLSearchParams({ id }), undefined, signal, 'fixtures'), id),
   assign: async (input: Extract<FixtureMutation, { action: 'assign' }>) => fixtureAssignment(await request(new URLSearchParams(), input, undefined, 'fixtures')),
   confirm: async (input: Extract<FixtureMutation, { action: 'confirm' }>) => fixtureDetail(await request(new URLSearchParams(), input, undefined, 'fixtures'), input.id),
+  cancel: async (input: Extract<FixtureMutation, { action: 'cancel' }>) => fixtureDetail(await request(new URLSearchParams(), input, undefined, 'fixtures'), input.id),
 };

@@ -16,6 +16,7 @@ import type { OpenWorkspace } from './workspaceNavigation';
 const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
 const hongKongDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' });
+const hongKongTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Hong_Kong', dateStyle: 'medium', timeStyle: 'short' });
 const amount = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 9 });
 const asDate = (value: string | null) => value ? dateFormatter.format(new Date(`${value}T00:00:00Z`)) : '—';
 export function fixtureEta(eta: string | null, kind?: FixtureEtaKind, end?: string | null) {
@@ -211,17 +212,50 @@ function FixtureSupplyForm({ booking, onConfirmed }: { booking: FixtureBooking; 
   </form>;
 }
 
-function SupplyDetails({ grade, quantity, supplier, account, price, onSupplier }: {
-  grade: string; quantity: string; supplier: string; account: string | null; price: string | null; onSupplier?: () => void;
+function FixtureCancellation({ booking, onCancelled }: { booking: FixtureBooking; onCancelled: (booking: FixtureBooking) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submission = useSubmission();
+
+  async function save() {
+    if (busy || !reason.trim()) return;
+    setBusy(true); setError('');
+    const input = { action: 'cancel' as const, dataMode: 'live' as const, id: booking.id,
+      expectedRevision: booking.revision, reason: reason.trim() };
+    try { onCancelled(await fixtureApi.cancel({ ...input, requestId: submission(input) })); }
+    catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  if (!editing) return <footer className="modal-actions"><button type="button" className="ui-button ui-button--danger"
+    onClick={() => setEditing(true)}>CANCEL STEM</button></footer>;
+  return <form onSubmit={event => { event.preventDefault(); void save(); }}>
+    <Field label="REASON"><textarea aria-label="REASON" required maxLength={500} rows={3} value={reason} disabled={busy}
+      onChange={event => setReason(event.target.value)} /></Field>
+    {error && <p className="record-sheet__error" role="alert">{error}</p>}
+    <footer className="modal-actions">
+      <button type="button" className="ui-button ui-button--secondary" disabled={busy} onClick={() => { setEditing(false); setError(''); }}>BACK</button>
+      <button className="ui-button ui-button--danger" disabled={busy || !reason.trim()}>{busy ? 'SAVING…' : 'CONFIRM CANCELLATION'}</button>
+    </footer>
+  </form>;
+}
+
+function SupplyDetails({ grade, quantity, supplier, account, price, barging, cancelled, onSupplier }: {
+  grade: string; quantity: string; supplier: string; account: string | null; price: string | null;
+  barging?: string | null; cancelled?: boolean; onSupplier?: () => void;
 }) {
   return <dl className="form-grid fixture-dialog__record">
+    {cancelled && <div><dt>STATUS</dt><dd>CANCELLED</dd></div>}
     <div><dt>GRADE</dt><dd>{grade}</dd></div><div><dt>QUANTITY (MT)</dt><dd>{quantity}</dd></div>
     <div><dt>SUPPLIER</dt><dd>{onSupplier ? <button type="button" className="text-button" onClick={onSupplier}>{supplier}</button> : supplier || '—'}</dd></div>
     <div><dt>ACCOUNT</dt><dd>{account ?? '—'}</dd></div><div><dt>BUY PRICE</dt><dd>{price ?? '—'}</dd></div>
+    {barging && <div><dt>BARGING</dt><dd>{barging}</dd></div>}
   </dl>;
 }
-export function FixtureDetails({ item, onOpen, onClose, onConfirmed }: {
-  item: FixtureHistoryItem; onOpen: OpenWorkspace; onClose: () => void; onConfirmed: () => void;
+export function FixtureDetails({ item, onOpen, onClose, onChanged }: {
+  item: FixtureHistoryItem; onOpen: OpenWorkspace; onClose: () => void; onChanged: () => void;
 }) {
   const [booking, setBooking] = useState<FixtureBooking>();
   const [error, setError] = useState('');
@@ -236,6 +270,7 @@ export function FixtureDetails({ item, onOpen, onClose, onConfirmed }: {
     return () => abort.abort();
   }, [attempt, item.id, item.status]);
   const openSupplier = (supplierId: string) => { onClose(); onOpen('suppliers', { supplierId }); };
+  const saveBooking = (value: FixtureBooking) => { setBooking(value); onChanged(); };
   return <Modal title={item.vessel} onClose={onClose} wide={item.status === 'pending'}>
     <div className="fixture-dialog">
       <dl className="form-grid fixture-dialog__record">
@@ -243,19 +278,30 @@ export function FixtureDetails({ item, onOpen, onClose, onConfirmed }: {
         <div><dt>ETA</dt><dd>{fixtureEta(item.eta, item.etaKind, item.etaEnd)}</dd></div>
         {item.imo && <div><dt>IMO</dt><dd>{item.imo}</dd></div>}
         {!item.status && item.barging !== null && <div><dt>BARGING</dt><dd>{item.barging}</dd></div>}
-        {booking && <div><dt>STATUS</dt><dd>{booking.status}</dd></div>}
+        {(item.cancelled || booking) && <div><dt>STATUS</dt><dd>{item.cancelled ? 'CANCELLED' : booking?.status}</dd></div>}
+        {booking?.cancellation && <>
+          <div><dt>CANCELLED BY</dt><dd>{booking.cancellation.by}</dd></div>
+          <div><dt>CANCELLED AT</dt><dd>{hongKongTime.format(new Date(booking.cancellation.at))} HKT</dd></div>
+          <div><dt>REASON</dt><dd>{booking.cancellation.reason}</dd></div>
+        </>}
       </dl>
       {error && <p role="alert">{error} <button type="button" className="ui-button ui-button--secondary" onClick={() => setAttempt(value => value + 1)}>RETRY</button></p>}
       {item.status && !booking && !error && <p role="status">LOADING…</p>}
-      {booking?.canConfirm && <FixtureSupplyForm key={booking.revision} booking={booking} onConfirmed={confirmed => { setBooking(confirmed); onConfirmed(); }} />}
+      {booking?.canConfirm && <FixtureSupplyForm key={booking.revision} booking={booking} onConfirmed={saveBooking} />}
+      {booking && !booking.canConfirm && !booking.lines.length && booking.requested.map((line, index) =>
+        <dl className="form-grid fixture-dialog__record" key={index}>
+          <div><dt>GRADE</dt><dd>{line.grade}</dd></div><div><dt>QUANTITY (MT)</dt><dd>{line.quantityText}</dd></div>
+        </dl>)}
       {booking?.lines.map((line, index) => <SupplyDetails key={index} grade={line.grade} quantity={amount.format(line.quantity)} supplier={line.supplier}
         account={line.account} price={`USD ${amount.format(line.buyPrice)}/MT`}
         onSupplier={line.supplierAvailable ? () => openSupplier(line.supplierId) : undefined} />)}
-      {!item.status && fixtureGrades.map(grade => {
-        const quantity = item[grade.toLowerCase() as 'hsfo' | 'vlsfo' | 'lsmgo'];
-        return quantity !== null && <SupplyDetails key={grade} grade={grade} quantity={quantity} supplier={item.supplier}
-          account={item.account} price={item.price} onSupplier={item.supplierAvailable ? () => openSupplier(item.supplierId) : undefined} />;
-      })}
+      {!item.status && (item.supplyRows ?? [item]).map((row, index) => fixtureGrades.map(grade => {
+        const quantity = row[grade.toLowerCase() as 'hsfo' | 'vlsfo' | 'lsmgo'];
+        return quantity !== null && <SupplyDetails key={`${index}-${grade}`} grade={grade} quantity={quantity} supplier={row.supplier}
+          account={row.account} price={row.price} barging={item.supplyRows ? row.barging : undefined} cancelled={!item.cancelled && row.cancelled}
+          onSupplier={row.supplierAvailable ? () => openSupplier(row.supplierId) : undefined} />;
+      }))}
+      {booking?.canCancel && <FixtureCancellation key={booking.revision} booking={booking} onCancelled={saveBooking} />}
     </div>
   </Modal>;
 }

@@ -10,17 +10,8 @@ export interface FixtureHistoryQuery {
   page: number;
 }
 
-export interface FixtureHistoryItem {
-  id: string;
-  date: string;
-  supplierTrader: string;
-  supplierOffice: string;
-  buyerTrader: string;
-  buyerOffice: string;
+export interface FixtureHistorySupplyRow {
   account: string | null;
-  eta: string | null;
-  vessel: string;
-  imo: string | null;
   hsfo: string | null;
   vlsfo: string | null;
   lsmgo: string | null;
@@ -29,6 +20,20 @@ export interface FixtureHistoryItem {
   supplierAvailable: boolean;
   price: string | null;
   barging: string | null;
+  cancelled?: boolean;
+}
+
+export interface FixtureHistoryItem extends FixtureHistorySupplyRow {
+  id: string;
+  date: string;
+  supplierTrader: string;
+  supplierOffice: string;
+  buyerTrader: string;
+  buyerOffice: string;
+  eta: string | null;
+  vessel: string;
+  imo: string | null;
+  supplyRows?: FixtureHistorySupplyRow[];
   status?: 'pending' | 'confirmed';
   etaEnd?: string | null;
   etaKind?: FixtureEtaKind;

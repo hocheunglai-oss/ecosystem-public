@@ -237,6 +237,10 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    const cancelled = (await list(1, "2025,9,'synthetic ship',0")).items[0];
    assert.equal(cancelled.cancelled, true);
    assert.equal(cancelled.vlsfo, '100–200');
+   await query(`update ${reviews} set vlsfo=null,removed_grades=array['VLSFO'],lsmgo='150',barging='1,500'
+     where fixture_id=(select id from ${table} where source_row=3)`);
+   const regraded = (await list(1, "0,0,'replacement ship',0")).items[0];
+   assert.deepEqual([regraded.vlsfo,regraded.lsmgo,regraded.barging],[null,'150','1,500']);
    assert.equal(await query(`select vessel || ' ' || vlsfo from ${table} where source_row=3`), 'SYNTHETIC SHIP 100–200');
    assert.doesNotMatch(JSON.stringify(await list(1)), /SYNTHETIC SOURCE REVIEW|source_evidence/);
    await assert.rejects(as(1, `select * from ${reviews}`), /permission denied/);

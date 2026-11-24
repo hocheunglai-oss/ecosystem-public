@@ -7,10 +7,15 @@ create table eco_private.fixture_history_source_reviews (
   hsfo text check (length(trim(hsfo)) between 1 and 80),
   vlsfo text check (length(trim(vlsfo)) between 1 and 80),
   lsmgo text check (length(trim(lsmgo)) between 1 and 80),
+  barging text check (length(trim(barging)) between 1 and 120),
+  removed_grades text[] not null default '{}' check (removed_grades <@ array['HSFO','VLSFO','LSMGO']),
   source_modified_at timestamptz not null,
   source_evidence jsonb not null check (jsonb_typeof(source_evidence)='object' and octet_length(source_evidence::text) <= 8192),
   recorded_at timestamptz not null default statement_timestamp(),
-  check (cancelled = (coalesce(vessel,hsfo,vlsfo,lsmgo) is null))
+  check (cancelled = (coalesce(vessel,hsfo,vlsfo,lsmgo,barging) is null and cardinality(removed_grades)=0)),
+  check ((hsfo is null or not ('HSFO'=any(removed_grades)))
+     and (vlsfo is null or not ('VLSFO'=any(removed_grades)))
+     and (lsmgo is null or not ('LSMGO'=any(removed_grades))))
 );
 alter table eco_private.fixture_history_source_reviews enable row level security;
 revoke all on eco_private.fixture_history_source_reviews from public, anon, authenticated, service_role;
@@ -226,9 +231,11 @@ begin
       jsonb_build_object('id',f.id,'date',f.fixture_date,'supplierTrader',st.display_name,'supplierOffice',f.source_labels->>'supplierOffice',
         'buyerTrader',bt.display_name,'buyerOffice',f.source_labels->>'buyerOffice','account',f.account,'eta',f.eta,
         'vessel',coalesce(review.vessel,f.vessel),'cancelled',coalesce(review.cancelled,false),
-        'imo',f.imo,'hsfo',coalesce(review.hsfo,f.hsfo),'vlsfo',coalesce(review.vlsfo,f.vlsfo),
-        'lsmgo',coalesce(review.lsmgo,f.lsmgo),'supplierId',s.id,'supplier',s.short_name,
-        'supplierAvailable',s.archived_at is null,'price',f.price,'barging',f.barging) as item
+        'imo',f.imo,'hsfo',case when 'HSFO'=any(review.removed_grades) then null else coalesce(review.hsfo,f.hsfo) end,
+        'vlsfo',case when 'VLSFO'=any(review.removed_grades) then null else coalesce(review.vlsfo,f.vlsfo) end,
+        'lsmgo',case when 'LSMGO'=any(review.removed_grades) then null else coalesce(review.lsmgo,f.lsmgo) end,
+        'supplierId',s.id,'supplier',s.short_name,'supplierAvailable',s.archived_at is null,
+        'price',f.price,'barging',coalesce(review.barging,f.barging)) as item
     from eco_private.fixture_history f
     join eco_private.users st on st.id=f.supplier_trader_id join eco_private.users bt on bt.id=f.buyer_trader_id
     join eco_private.suppliers s on s.id=f.supplier_id

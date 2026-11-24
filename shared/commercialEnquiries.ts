@@ -1,4 +1,5 @@
 import type { ParserSnapshot } from './parserService.ts';
+import type { FixtureAssignment } from './fixtureWorkflow.ts';
 
 export type CommercialEnquiryStatus = 'draft' | 'confirmed';
 export type CommercialEnquiryScope = 'mine' | 'singapore';
@@ -19,6 +20,7 @@ export interface CommercialEnquirySummary {
   status: CommercialEnquiryStatus; vessel: string; imo: string; eta: string;
   products: CommercialProduct[]; port: CommercialPort | null; queue: CommercialQueue | null;
   createdAt: string; updatedAt: string; confirmedAt: string | null;
+  fixture?: FixtureAssignment;
 }
 export interface CommercialEnquiry extends CommercialEnquirySummary { source: CommercialSource; reviewed: CommercialReviewed }
 export interface CommercialEnquiryPage { items: CommercialEnquirySummary[]; nextCursor: string | null }

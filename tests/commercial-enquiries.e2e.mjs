@@ -174,14 +174,14 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       const device=await browser.newContext(settings);await installStagingCookies(device,base);
       await fixture(device,state.records,state.operations);const second=await device.newPage();
       await second.goto(base,{waitUntil:'domcontentloaded'});const secondDialog=await openEnquiry(second);
-      await secondDialog.locator(`[data-commercial-id="${id}"]`).getByRole('button').click();
+      await secondDialog.locator(`[data-commercial-id="${id}"]`).getByRole('button',{name:/^Open /}).click();
       await expect(secondDialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
       await expect(secondDialog).toContainText('Awaiting connection');await device.close();
 
       // A manual first save may commit before the response is lost. Selecting another
       // enquiry and returning must preserve both the record and operation identities.
       await dialog.getByRole('button',{name:'My enquiries',exact:true}).click();
-      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button').click();
+      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button',{name:/^Open /}).click();
       await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
       await dialog.getByRole('button',{name:'Clear parser',exact:true}).click();
       const manualRaw='VESSEL: MANUAL RETRY\nPORT: SINGAPORE\nETA: 25 OCT 2026\nVLSFO: 600 MT';
@@ -191,7 +191,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await expect(dialog.getByRole('alert')).toContainText(/fetch|load|network|saved/i);
       const uncertain=structuredClone(state.writes.at(-1)),recordCount=state.records.size;
       assert.equal(uncertain.source.inboxId,null);
-      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button').click();
+      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button',{name:/^Open /}).click();
       await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
       await dialog.locator('[data-draft-id]').getByRole('button',{name:'Open MANUAL RETRY',exact:true}).click();
       await expect(dialog.getByLabel('Raw enquiry',{exact:true})).toHaveValue(manualRaw);
@@ -203,7 +203,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       // A late old-owner detail response must not repopulate the next account's UI.
       let releaseDetail,detailStarted=false;
       state.holdDetail=()=>{detailStarted=true;return new Promise(resolve=>{releaseDetail=resolve;});};
-      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button').click();
+      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button',{name:/^Open /}).click();
       await expect.poll(()=>detailStarted).toBe(true);
       state.user=other;await invalidateFixtureAuthority(page,{user:state.user,preview:state.preview});
       await expect(page.getByRole('complementary',{name:'Your dashboard'})).toContainText('OTHER TRADER');

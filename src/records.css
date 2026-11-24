@@ -77,9 +77,13 @@
 .fixture-history-layout { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
 .fixture-history { flex: 1; }
 .fixture-history :is(th, td) { font-size: 13px; min-width: 78px; }
-.fixture-history th:nth-child(6) { min-width: 180px; }
+.fixture-history :is(th,td):nth-child(4) { min-width: 180px; white-space: normal; overflow-wrap: anywhere; }
+.fixture-history td:nth-child(4) button { text-align: left; }
 .fixture-history .record-sheet__pagination > div { width: auto; margin-left: auto; }
-.fixture-history__supplier { text-align: left; text-decoration: underline; }
+.fixture-dialog { padding: 16px; overflow-wrap: anywhere; }
+.fixture-dialog fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.fixture-dialog__record dd { margin: 0; }
+.fixture-dialog__check { display: flex; align-items: center; gap: 8px; }
 .fixture-history__legacy { flex: 0 1 auto; max-height: 40%; overflow: auto; }
 .fixture-history__legacy summary { cursor: pointer; margin-block-end: 8px; }
 .fixture-history__legacy .record-sheet { height: auto; }

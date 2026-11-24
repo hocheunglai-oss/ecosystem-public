@@ -1,4 +1,4 @@
-import { fixtureHistoryYears, type FixtureHistoryQuery } from '../../shared/fixtureHistory.ts';
+import type { FixtureHistoryQuery } from '../../shared/fixtureHistory.ts';
 import { ApiError } from './validation.ts';
 
 export function fixtureHistoryQuery(url: URL): FixtureHistoryQuery {
@@ -12,11 +12,11 @@ export function fixtureHistoryQuery(url: URL): FixtureHistoryQuery {
     if (!/^\d{1,4}$/.test(value) || Number(value) > max) throw new ApiError(400, 'Invalid fixture filters.');
     return Number(value);
   }
-  const year = boundedInteger('year', Math.max(...fixtureHistoryYears));
+  const year = boundedInteger('year', 2099);
   const month = boundedInteger('month', 12);
   const page = boundedInteger('page', 200);
   const search = params.get('search')?.trim() ?? '';
-  if ((year !== 0 && !fixtureHistoryYears.some(value => value === year)) || search.length > 120 || search.includes('\u0000'))
+  if ((year !== 0 && year < 2025) || search.length > 120 || search.includes('\u0000'))
     throw new ApiError(400, 'Invalid fixture filters.');
   return { year, month, page, search };
 }

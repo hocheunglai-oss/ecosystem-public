@@ -8,30 +8,24 @@ import RecordsPage from './RecordsPage';
 import { useDemo } from './store';
 import type { OpenModal } from './types';
 import type { OpenWorkspace } from './workspaceNavigation';
+import { FixtureDetails, fixtureEta } from './FixtureDialogs';
 
 const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-const columns = ['DATE', 'SUPPLIER TRADER', 'BUYER TRADER', 'ACCT', 'ETA', 'VESSEL', 'IMO',
-  'HSFO', 'VLSFO', 'LSMGO', 'SUPPLIER', 'PRICE', 'BARGING'] as const;
+const columns = ['DATE', 'SUPPLIER TRADER', 'BUYER TRADER', 'VESSEL', 'ETA', 'HSFO', 'VLSFO', 'LSMGO'] as const;
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
 const presentDate = (value: string | null) => value ? dateFormatter.format(new Date(value)) : '—';
 const emptyFilters = { year: 0, month: 0, page: 0 };
 
-function FixtureRow({ item, onOpen }: { item: FixtureHistoryItem; onOpen: OpenWorkspace }) {
+function FixtureRow({ item, onDetails }: { item: FixtureHistoryItem; onDetails: () => void }) {
   const number = (value: string | null) => <td className="record-sheet__number">{value ?? '—'}</td>;
   return <tr data-record-id={item.id}>
     <td className="record-sheet__date">{presentDate(item.date)}</td>
     <td title={item.supplierTrader}>{item.supplierTrader}<br /><small>{item.supplierOffice}</small></td>
     <td title={item.buyerTrader}>{item.buyerTrader}<br /><small>{item.buyerOffice}</small></td>
-    <td>{item.account ?? '—'}</td>
-    <td>{presentDate(item.eta)}</td>
-    <td title={item.vessel}>{item.vessel}</td>
-    <td>{item.imo ?? '—'}</td>
+    <td><button type="button" className="text-button" onClick={onDetails}>{item.vessel}</button>
+      {item.status === 'pending' && <small>PENDING</small>}</td>
+    <td>{fixtureEta(item.eta, item.etaKind, item.etaEnd)}</td>
     {number(item.hsfo)}{number(item.vlsfo)}{number(item.lsmgo)}
-    <td>{item.supplierAvailable
-      ? <button type="button" className="text-button fixture-history__supplier"
-          onClick={() => onOpen('suppliers', { supplierId: item.supplierId })}>{item.supplier}</button>
-      : item.supplier}</td>
-    {number(item.price)}{number(item.barging)}
   </tr>;
 }
 
@@ -40,6 +34,7 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
   const deferredSearch = useDeferredValue(search.trim());
   const [filter, setFilter] = useState(emptyFilters);
   const [attempt, setAttempt] = useState(0);
+  const [selected, setSelected] = useState<FixtureHistoryItem>();
   const query = new URLSearchParams({
     year: String(filter.year), month: String(filter.month), page: String(filter.page), search: deferredSearch,
   }).toString();
@@ -90,7 +85,7 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
     <div className="record-sheet__grid" role="region" aria-label="Fixture table" tabIndex={0} aria-busy={busy}>
       <table>
         <thead><tr>{columns.map((label, i) => <th key={label} scope="col" className={i === 0 ? 'record-sheet__date' : undefined}>{label}</th>)}</tr></thead>
-        <tbody>{!busy && data?.items.map(item => <FixtureRow key={item.id} item={item} onOpen={onOpen} />)}</tbody>
+        <tbody>{!busy && data?.items.map(item => <FixtureRow key={item.id} item={item} onDetails={() => setSelected(item)} />)}</tbody>
       </table>
       {!busy && settled && !data && <p className="record-sheet__empty" role="alert">FIXTURES UNAVAILABLE. TRY REFRESH.</p>}
       {!busy && data && data.items.length === 0 && <p className="record-sheet__empty">NO MATCHING FIXTURES.</p>}
@@ -104,6 +99,8 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
           disabled={busy || !data?.items.length || last >= data.total} onClick={() => setFilter(current => ({ ...current, page: current.page + 1 }))}><ChevronRight size={15} /></button>
       </div>
     </footer>
+    {selected && <FixtureDetails key={selected.id} item={selected} onOpen={onOpen}
+      onClose={() => setSelected(undefined)} onConfirmed={() => setAttempt(value => value + 1)} />}
   </section>;
 }
 

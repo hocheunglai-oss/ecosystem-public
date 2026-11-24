@@ -19,7 +19,7 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
  const call=async(i,name,input)=>JSON.parse(await as(i,`select public.${name}(${json(input)})`));
  const mutate=(i,input)=>call(i,'eco_mutate_commercial_enquiry',input),get=(i,extra={})=>call(i,'eco_get_commercial_enquiries',{dataMode:'live',...extra});
  const seed=async()=>{
-  await query(`truncate eco_private.commercial_enquiry_mutations,eco_private.commercial_enquiry_history,eco_private.commercial_enquiry_queue,eco_private.commercial_enquiries restart identity;truncate eco_private.administration_events;truncate eco_private.inbox_mutations,eco_private.inbox_messages,eco_private.inbox_sender_bindings,eco_private.inbox_sources;truncate auth.users cascade;
+  await query(`truncate eco_private.fixture_supply_lines,eco_private.fixture_bookings,eco_private.commercial_enquiry_mutations,eco_private.commercial_enquiry_history,eco_private.commercial_enquiry_queue,eco_private.commercial_enquiries restart identity;truncate eco_private.administration_events,eco_private.administration_requests;truncate eco_private.inbox_mutations,eco_private.inbox_messages,eco_private.inbox_sender_bindings,eco_private.inbox_sources;truncate auth.users cascade;
    insert into auth.users(id,email,email_confirmed_at,encrypted_password) values ${users.map((id,i)=>`(${lit(id)},${lit(`commercial-fixture-${i}@example.test`)},now(),'synthetic')`).join(',')};
    update eco_private.users set office_id='hk',display_name='Synthetic Trader',is_active=true,activated_at=now(),is_admin=id=${lit(users[0])},is_spc_trader=id=${lit(users[2])},is_manager=id=${lit(users[3])};
    insert into auth.sessions(id,user_id) values ${users.map((id,i)=>`(${lit(sessions[i])},${lit(id)})`).join(',')};
@@ -105,6 +105,67 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    for(const table of ['commercial_enquiry_queue','commercial_enquiry_history','commercial_enquiry_mutations']){assert.equal(await query(`select count(*) from eco_private.${table} where enquiry_id=${lit(first.item.id)}`),'0');assert.equal(await query(`select count(*) from eco_private.${table} where enquiry_id=${lit(second.item.id)}`),'1');}
    assert.equal((await get(1)).items.length,1);
   });
+  await t.test('buyer assignment, supplier confirmation and split fuel lines are atomic and account scoped', async () => {
+   await seed();
+   const input=payload({action:'confirm'});
+   const enquiry=(await mutate(1,input)).item;
+   const supplierA=randomUUID(),supplierB=randomUUID();
+   await query(`insert into eco_private.suppliers (id,source_key,record) values
+      (${lit(supplierA)},'test-shared-a','{"countryCode":"SG","legalName":"Synthetic A Ltd","shortName":"SYNTHETIC A"}'),
+      (${lit(supplierB)},'test-shared-b','{"countryCode":"SG","legalName":"Synthetic B Ltd","shortName":"SYNTHETIC B"}')`);
+   const write=(i,extra)=>call(i,'eco_mutate_fixture',{dataMode:'live',...extra});
+   const read=(i,extra)=>call(i,'eco_get_fixtures',{dataMode:'live',...extra});
+   const list=i=>as(i,"select public.eco_list_fixture_history(0,0,'',0)").then(JSON.parse);
+   const assign={action:'assign',requestId:randomUUID(),enquiryId:enquiry.id,expectedRevision:0,
+    supplierTraderId:users[2],date:'2026-10-20',eta:'2026-10-21',etaEnd:'2026-10-25',etaKind:'range',etaReviewed:false};
+   const options=await read(1,{options:true});
+   assert.deepEqual(options.traders.map(item=>item.id),[users[2]]);
+   assert.ok(options.accounts.some(account=>account.id==='sg'));
+   assert.equal(options.accounts.some(account=>account.id==='CREDIT'),false);
+   await assert.rejects(write(2,assign),/Enquiry not found/);
+   await assert.rejects(write(1,{...assign,supplierTraderId:users[3]}),/active SPC supplier trader/);
+   await assert.rejects(write(1,{...assign,etaEnd:'2026-10-19'}),/Invalid ETA range/);
+   const booking=await write(1,assign);
+   assert.equal(booking.status,'pending');
+   assert.deepEqual(await write(1,assign),booking);
+   assert.equal((await get(1)).items[0].fixture.id,booking.id);
+   assert.equal((await get(2,{scope:'singapore'})).items[0].fixture,undefined);
+   assert.equal((await list(2)).items[0].vlsfo,'100-200');
+   assert.deepEqual(await list(3),{total:0,items:[]});
+   await assert.rejects(read(3,{id:booking.id}),/Fixture not found/);
+   const revised=await write(1,{...assign,requestId:randomUUID(),expectedRevision:1,eta:'2026-10-22'});
+   assert.equal(revised.id,booking.id);
+   assert.equal(revised.revision,2);
+   const line={grade:'VLSFO',quantity:500,supplierId:supplierA,accountId:'sg',buyPrice:510};
+   const confirm={action:'confirm',requestId:randomUUID(),id:booking.id,expectedRevision:2,
+     lines:[line,{...line,quantity:250,supplierId:supplierB,accountId:'hk',buyPrice:490}],quantityReviewed:false};
+   await assert.rejects(write(1,confirm),/Assigned SPC supplier trader required/);
+   await assert.rejects(write(2,{...confirm,expectedRevision:1}),/revision conflict/);
+   await assert.rejects(write(2,{...confirm,lines:[line,{...line,quantity:'100-200'}]}),/agreed quantity/);
+   await assert.rejects(write(2,{...confirm,lines:[{...line,accountId:'UNKNOWN'}]}),/office account/);
+   await assert.rejects(write(2,{...confirm,lines:[{...line,accountId:'CREDIT'}]}),/office account/);
+   await assert.rejects(write(2,{...confirm,lines:[{...line,quantity:10}]}),/unusually/);
+   await query(`update eco_private.suppliers set closed_at=now() where id=${lit(supplierB)}`);
+   await assert.rejects(write(2,confirm),/active Singapore supplier/);
+   assert.equal(await query('select count(*) from eco_private.fixture_supply_lines'),'0');
+   await query(`update eco_private.suppliers set closed_at=null where id=${lit(supplierB)}`);
+   const [saved,retry]=await Promise.all([write(2,confirm),write(2,confirm)]);
+   assert.deepEqual(saved,retry);
+   assert.equal(saved.status,'confirmed');
+   assert.equal(saved.canConfirm,false);
+   assert.deepEqual(saved.lines.map(item=>[item.quantity,item.supplier,item.buyPrice,item.accountId,item.account]),
+     [[500,'SYNTHETIC A',510,'sg','Singapore'],[250,'SYNTHETIC B',490,'hk','Hong Kong']]);
+   assert.equal((await list(1)).items[0].vlsfo,'750');
+   assert.equal((await list(1)).items[0].price,null);
+   assert.equal((await read(1,{id:booking.id})).confirmedAt,saved.confirmedAt);
+   assert.equal((await get(1)).items[0].fixture.status,'confirmed');
+   await assert.rejects(write(1,{...assign,expectedRevision:saved.revision,requestId:randomUUID()}),/revision conflict/);
+   assert.equal(await query('select count(*) from eco_private.fixture_supply_lines'),'2');
+   for(const table of ['fixture_bookings','fixture_supply_lines']) {
+    assert.equal(await query(`select relrowsecurity from pg_class where oid='eco_private.${table}'::regclass`),'t');
+    await assert.rejects(as(2,`select * from eco_private.${table}`),/permission denied/);
+   }
+  });
   await t.test('fixture history links canonical records and limits reads to authorised live members', async () => {
    await seed();
    const supplier = randomUUID();
@@ -141,7 +202,7 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    assert.equal((await list(1, "2025,9,'ship old provider',0")).total, 1);
    assert.equal((await list(1, "2025,9,'%',0")).total, 0);
    assert.deepEqual(await list(1, "0,0,'',1"), { total: 2, items: [] });
-   await assert.rejects(list(1, "2027,0,'',0"), /Invalid fixture filters/);
+   await assert.rejects(list(1, "2100,0,'',0"), /Invalid fixture filters/);
    await as(0, "select public.eco_set_preview('admin','hk')");
    await assert.rejects(list(0), /unavailable in preview/);
    await query(`update eco_private.suppliers set archived_at=now() where id=${lit(supplier)}`);

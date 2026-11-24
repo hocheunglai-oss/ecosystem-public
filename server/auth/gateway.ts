@@ -189,6 +189,7 @@ export function createAuthGateway(request: Request, config: AuthConfig): AuthGat
         if (error.code === 'PT429') throw new ApiError(429, 'Too many requests. Try again shortly.');
         if (error.code === 'PT422' && name === 'eco_prepare_profile_attachment') throw new ApiError(422, 'Shared file capacity needs review. The original remains in this browser.');
         if (error.code === 'PT422' && ['eco_create_supplier','eco_update_supplier'].includes(name)) throw new ApiError(422, 'Select an active SPC trader.');
+        if (error.code === 'PT422' && name === 'eco_mutate_fixture') throw new ApiError(422, 'Review the supplier trader, account, supplier, and quantities before saving.');
         if (['22023','22P02','22007','22008','23505','23514'].includes(error.code)) throw new ApiError(400, 'Invalid administration request.');
         console.error('ECO administration RPC failed', {operation:name,code:error.code});
         throw new ApiError(503, 'Administration service unavailable.');

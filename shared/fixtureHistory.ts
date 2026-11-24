@@ -1,5 +1,7 @@
+import type { FixtureEtaKind } from './fixtureWorkflow.ts';
+
 export const fixtureHistoryPageSize = 50;
-export const fixtureHistoryYears = [2025, 2026] as const;
+export const fixtureHistoryYears = Array.from({ length: Math.max(2, new Date().getUTCFullYear() - 2023) }, (_, index) => 2025 + index);
 
 export interface FixtureHistoryQuery {
   year: number;
@@ -27,6 +29,9 @@ export interface FixtureHistoryItem {
   supplierAvailable: boolean;
   price: string | null;
   barging: string | null;
+  status?: 'pending' | 'confirmed';
+  etaEnd?: string | null;
+  etaKind?: FixtureEtaKind;
 }
 
 export interface FixtureHistoryPage {

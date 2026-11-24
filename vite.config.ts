@@ -6,6 +6,7 @@ import { serveSuppliers } from './server/suppliers/node.ts';
 import { serveSupplierReports } from './server/supplier-reports/node.ts';
 import { serveProfileTabs } from './server/profile-tabs/node.ts';
 import { serveEnquiryPolicy } from './server/enquiries/node.ts';
+import { serveCommercialEnquiries } from './server/commercial-enquiries/node.ts';
 import { serveParser } from './server/parser/node.ts';
 import { serveInbox } from './server/inbox/node.ts';
 import { serveEmailSync } from './server/inbox-email/node.ts';
@@ -26,6 +27,7 @@ export default defineConfig(({ mode }) => {
         if (req.url?.startsWith('/api/access/')) void serveAccess(req, res, accessEnvironment);
         else if (req.url?.split('?')[0] === '/api/enquiries/email-sync') void serveEmailSync(req, res, accessEnvironment);
         else if (req.url?.split('?')[0] === '/api/enquiries/inbox') void serveInbox(req, res, accessEnvironment);
+        else if (req.url?.split('?')[0] === '/api/enquiries/fixtures' || req.url?.split('?')[0] === '/api/enquiries/records') void serveCommercialEnquiries(req, res, accessEnvironment);
         else if (req.url?.startsWith('/api/enquiries/')) void serveEnquiryPolicy(req, res, accessEnvironment);
         else if (req.url?.startsWith('/api/parser/')) void serveParser(req, res, accessEnvironment);
         else if (req.url?.startsWith('/api/supplier-reports/')) void serveSupplierReports(req, res, accessEnvironment);

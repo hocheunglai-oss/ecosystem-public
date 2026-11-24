@@ -9,6 +9,8 @@ import { useAccess } from './auth';
 import { useTestWorkspace } from './TestWorkspace';
 import { commercialEnquiryApi } from './lib/commercialEnquiryApi';
 import { useCommercialEnquiries } from './useCommercialEnquiries';
+import { FixtureHandoff } from './FixtureDialogs';
+import type { FixtureAssignment } from '../shared/fixtureWorkflow';
 import type { CommercialEnquiry, CommercialEnquiryMutation, CommercialEnquirySummary } from '../shared/commercialEnquiries';
 import { supplierPortForLocation } from '../shared/supplierPorts';
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -118,6 +120,8 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   const live = dataMode === 'live';
   const liveEnabled = live && !preview && Boolean(realUser?.isActive && realUser.activated);
   const commercial = useCommercialEnquiries(actor.id, liveEnabled);
+  const [handoff, setHandoff] = useState<CommercialEnquirySummary>();
+  const [assignments, setAssignments] = useState<Record<string, FixtureAssignment>>({});
   const [remote, setRemote] = useState<{ key: string; item: CommercialEnquiry | null } | null>(null);
   const [detailError, setDetailError] = useState('');
   const [detailReload, setDetailReload] = useState(0);
@@ -281,17 +285,23 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   }
   function sharedRow(item: CommercialEnquirySummary) {
     const own = item.ownerId === actor.id;
+    const assigned = assignments[item.id];
+    const fixture = assigned && assigned.revision > (item.fixture?.revision ?? 0) ? assigned : item.fixture;
+    const canAssign = own && liveEnabled && commercial.scope === 'mine' && item.status === 'confirmed' && item.port?.countryCode === 'SG' && fixture?.status !== 'confirmed';
     return <article key={item.id} className={`center-incoming-row${selection.kind === 'record' && selection.id === item.id ? ' is-selected' : ''}`} data-commercial-id={item.id}>
       {own ? <button className="center-incoming-open" aria-label={`Open ${item.vessel || item.reference}`} onClick={() => chooseRecord(item.id)}>
         <span><strong>{item.vessel || item.reference}</strong><br />
           <span>{item.reference} · {item.port?.portName || '—'}</span><br />
-          <span>{item.queue ? 'Awaiting connection' : item.status} · {date(item.updatedAt)}</span></span>
+          <span>{fixture ? `${fixture.status} · ${fixture.supplierTrader}` : item.queue ? 'Awaiting connection' : item.status} · {date(item.updatedAt)}</span></span>
       </button> : <div className="center-incoming-open">
         <span><strong>{item.vessel || item.reference}</strong><br />
           <span>{item.reference} · {item.ownerName}</span><br />
           <span>{item.products.map(product => `${product.grade} ${product.quantityText}${/\b(?:MTS?|metric tonnes?)\b/i.test(product.quantityText) ? '' : ' MT'}`).join(' / ')}</span><br />
           <span>{item.eta} · Awaiting connection</span></span>
       </div>}
+      {canAssign && <div className="center-lifecycle"><button type="button" onClick={() => setHandoff({ ...item, fixture })}>
+        {fixture ? 'EDIT' : 'STEM'}
+      </button></div>}
     </article>;
   }
   function amend(enquiry: Enquiry) {
@@ -343,6 +353,11 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   }
   return (
     <div className={`enquiry-center${tab === "Intelligence" ? " enquiry-center-intelligence" : ""}`}>
+      {handoff && <FixtureHandoff enquiry={handoff} onClose={() => setHandoff(undefined)} onSaved={fixture => {
+        setAssignments(current => ({ ...current, [handoff.id]: fixture }));
+        setHandoff(undefined);
+        void commercial.reload();
+      }} />}
       <div className="center-main">
         <div className="center-tabs" role="tablist" aria-label="Enquiries">
           {(["Enquiry", "Intelligence", "Credit"] as Tab[]).map((item) => (

@@ -192,7 +192,7 @@ export function KnowledgePanel({
     : undefined;
   const info = port ? getLocationIntelligence(port, state.knowledgeRecords) : undefined;
   const overview = port ? profileSections.find(section => section.role === "port-information") : undefined;
-  const refineries = port ? profileSections.find(section => section.role === "refineries") : undefined;
+  const refineries = overview ? profileSections.find(section => section.role === "refineries") : undefined;
   const tabs = profileSections.filter(section => section !== refineries);
   const refineryScopes: AttachmentScope[] = [
     ...(refineries?.sources ?? []).map(source => ({ target: source.target, section: { id: source.sectionId, name: 'Refineries' } })),

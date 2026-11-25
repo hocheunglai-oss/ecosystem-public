@@ -13,7 +13,7 @@ export interface FixtureSchedule {
 export interface FixtureAssignment extends FixtureSchedule {
   id: string;
   revision: number;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'cancelled' | 'deleted';
   supplierTraderId: string;
   supplierTrader: string;
 }
@@ -34,7 +34,7 @@ export interface FixtureBooking extends FixtureAssignment {
   canCancel: boolean;
   cancellation: { at: string; by: string; reason: string } | null;
   requested: CommercialProduct[];
-  lines: (FixtureSupplyLine & { supplier: string; supplierAvailable: boolean; account: string })[];
+  lines: (FixtureSupplyLine & { supplier: string; supplierAvailable: boolean; account: string; barging?: string | null })[];
 }
 export interface FixtureOptions {
   traders: { id: string; name: string; office: string }[];

@@ -473,15 +473,16 @@ html { background: var(--ui-canvas); }
   .credit-workflow-tabs > button, .segmented > button:not(.danger)
 ) { color: var(--ui-muted); background: var(--ui-raised); border-color: transparent; }
 #root :is(.workspace-window, .modal, .workspace-module) :is(
+  .enquiry-terms > button, .attachment-view > button, .credit-attention-filter
+) { --ui-tab-active: var(--ui-selection); }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
   .tabs > button.active, .center-tabs > button[aria-selected="true"],
   .office-view-tabs [aria-selected="true"], .segmented > button.active:not(.danger),
   .profile-tabs-list > button:not([data-visibility="private"])[aria-selected="true"],
-  .buyer-profile__tabs > button[aria-selected="true"], .credit-workflow-tabs > button[aria-pressed="true"]
-) { background: var(--ui-tab-active); color: var(--ui-ink); border-color: transparent; box-shadow: var(--ui-tab-shadow); }
-#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .buyer-profile__tabs > button[aria-selected="true"], .credit-workflow-tabs > button[aria-pressed="true"],
   .enquiry-terms > button[aria-pressed="true"], .attachment-view > button[aria-pressed="true"],
   .credit-attention-filter[aria-pressed="true"]
-) { background: var(--ui-selection); color: var(--ui-ink); border-color: var(--ui-focus); box-shadow: inset 0 -2px var(--ui-focus); }
+) { background: var(--ui-tab-active); color: var(--ui-ink); border-color: transparent; box-shadow: var(--ui-tab-shadow); }
 #root :is(.workspace-window, .modal, .workspace-module) .tabs > button.active::after { background: transparent; }
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .tabs > button, .center-tabs > button, .office-view-tabs [role="tab"],

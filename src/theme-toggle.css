@@ -2,9 +2,17 @@
 #root .theme-mode-toggle {
   --mode-track: var(--ui-raised);
   --mode-thumb: var(--ui-tab-active);
+  --mode-thumb-shadow: var(--ui-tab-shadow);
   --mode-active: var(--ui-ink);
   --mode-inactive: var(--ui-muted);
   --mode-border: var(--ui-line);
+}
+#root .immersive-app[data-design="flowing-water"] .home-display-controls .theme-mode-toggle {
+  --mode-track: color-mix(in srgb, var(--ui-surface) 12%, transparent);
+  --mode-thumb: color-mix(in srgb, var(--ui-ink) 14%, transparent);
+  --mode-thumb-shadow: none;
+  --mode-inactive: var(--ui-ink);
+  --mode-border: color-mix(in srgb, var(--ui-ink) 28%, transparent);
 }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle,
 #root .workspace-window .window-foot button.theme-mode-toggle {
@@ -36,7 +44,7 @@
   width: calc((100% - 8px) / 2);
   border-radius: inherit;
   background: var(--mode-thumb);
-  box-shadow: var(--ui-tab-shadow);
+  box-shadow: var(--mode-thumb-shadow);
   transform: translateX(0);
   transition: transform 180ms ease, background-color 180ms ease;
   pointer-events: none;

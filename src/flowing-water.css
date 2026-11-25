@@ -4,7 +4,17 @@
   --flow-muted: var(--ui-muted);
   --flow-rule: #20201e40;
   --flow-glass: #faf9f6ed;
-  --flow-ghost: var(--flow-glass);
+  --flow-ghost: #f4faf58f;
+  --flow-ghost-hover: #f4faf5b3;
+  --flow-ghost-ink: #021316;
+  --flow-primary: #f8faf4b8;
+  --flow-primary-hover: #f8faf4d1;
+  --flow-primary-ink: #21463c;
+  --flow-edge: #edf9f561;
+  --flow-account: #143f40bf;
+  --flow-menu: #194c43d9;
+  --flow-panel-ink: #f8faf5;
+  --flow-panel-hover: #ffffff10;
   --flow-sheen: #e2f7ff;
   --flow-footer: #161615;
   --flow-focus: #262624;
@@ -19,7 +29,16 @@
 :root[data-theme="dark"] .immersive-app[data-design="flowing-water"] {
   --flow-muted: #e5e5ea;
   --flow-rule: #ffffff38;
-  --flow-ghost: #2c2c2ef0;
+  --flow-ghost: #211b2b8f;
+  --flow-ghost-hover: #342b40c7;
+  --flow-ghost-ink: var(--ui-ink);
+  --flow-primary: #f4e8dfb8;
+  --flow-primary-hover: #f4e8dfd1;
+  --flow-primary-ink: #34272f;
+  --flow-edge: #ffffff38;
+  --flow-account: #211b2bc7;
+  --flow-menu: #29222fd9;
+  --flow-panel-ink: var(--ui-ink);
   --flow-glass: #1c1c1ef0;
   --flow-sheen: #ffdcc3;
   --flow-footer: var(--ui-ink);
@@ -110,35 +129,35 @@
 #root .immersive-app[data-design="flowing-water"] .launcher-group { position: relative; min-width: 0; }
 #root .immersive-app[data-design="flowing-water"] .launcher-toggle {
   display: flex; align-items: center; justify-content: space-between; gap: 17px;
-  min-height: 58px; padding: 16px 22px; width: 100%; border: 1px solid var(--flow-rule);
+  min-height: 58px; padding: 16px 22px; width: 100%; border: 1px solid var(--flow-edge);
   border-radius: var(--ui-radius-action); font-size: 16px; font-weight: 600; line-height: 1.5;
-  letter-spacing: .015em; text-align: left; color: var(--flow-ink); background: var(--flow-ghost);
+  letter-spacing: .015em; text-align: left; color: var(--flow-ghost-ink); background: var(--flow-ghost);
   box-shadow: none; filter: none;
 }
 #root .immersive-app[data-design="flowing-water"] .launcher-group[data-group="Trading"] .launcher-toggle {
-  color: var(--ui-primary-ink); background: var(--ui-primary); border-color: var(--ui-primary-border);
+  color: var(--flow-primary-ink); background: var(--flow-primary); border-color: var(--flow-edge);
 }
-#root .immersive-app[data-design="flowing-water"] button.launcher-toggle:hover { background: var(--ui-control-hover); filter: none; }
-#root .immersive-app[data-design="flowing-water"] .launcher-group[data-group="Trading"] button.launcher-toggle:hover { background: var(--ui-primary-hover); }
+#root .immersive-app[data-design="flowing-water"] button.launcher-toggle:hover { background: var(--flow-ghost-hover); filter: none; }
+#root .immersive-app[data-design="flowing-water"] .launcher-group[data-group="Trading"] button.launcher-toggle:hover { background: var(--flow-primary-hover); }
 #root .immersive-app[data-design="flowing-water"] .launcher-toggle > svg { width: 20px; height: 20px; flex-shrink: 0; }
 #root .immersive-app[data-design="flowing-water"] .launcher-expansion { position: static; z-index: 4; margin-top: 0; border-radius: 16px; }
 #root .immersive-app[data-design="flowing-water"] .is-open .launcher-expansion { margin-top: 8px; }
-#root .immersive-app[data-design="flowing-water"] .is-open .launcher-menu { padding: 6px 9px; background: var(--ui-surface); border-radius: var(--ui-radius-panel); box-shadow: var(--ui-menu-shadow); }
-#root .immersive-app[data-design="flowing-water"] .launcher-menu > .launcher-menu-row { margin: 0; background: transparent; border: 0; border-radius: var(--ui-radius-control); color: var(--ui-ink); }
+#root .immersive-app[data-design="flowing-water"] .is-open .launcher-menu { padding: 6px 9px; background: var(--flow-menu); border-radius: var(--ui-radius-panel); box-shadow: var(--ui-menu-shadow); }
+#root .immersive-app[data-design="flowing-water"] .launcher-menu > .launcher-menu-row { margin: 0; background: transparent; border: 0; border-radius: var(--ui-radius-control); color: var(--flow-panel-ink); }
 #root .immersive-app[data-design="flowing-water"] .launcher-link { min-height: 46px; padding: 9px 8px; font-size: 13px; border-radius: var(--ui-radius-control); }
-#root .immersive-app[data-design="flowing-water"] .launcher-menu-row > .launcher-link:hover { background: var(--ui-control-hover); }
+#root .immersive-app[data-design="flowing-water"] .launcher-menu-row > .launcher-link:hover { background: var(--flow-panel-hover); }
 #root .immersive-app[data-design="flowing-water"] .launcher-release-remark { margin-top: 10px; padding: 0 15px; background: transparent; color: var(--flow-footer); text-align: left; font-size: 11px; line-height: 1.6; }
 #root .immersive-app[data-design="flowing-water"] .launcher-heading { opacity: .8; }
 
 #root .immersive-app[data-design="flowing-water"] .home-hud-stack { align-self: start; justify-self: end; width: 100%; max-width: 384px; margin: 0; }
-#root .immersive-app[data-design="flowing-water"] .trader-hud[data-trader-hud] { padding: 14px 16px 8px; background: var(--flow-glass); border: 1px solid var(--flow-rule); border-radius: var(--ui-radius-window); color: var(--flow-ink); box-shadow: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: none; }
+#root .immersive-app[data-design="flowing-water"] .trader-hud[data-trader-hud] { padding: 14px 16px 8px; background: var(--flow-account); border: 1px solid var(--flow-edge); border-radius: var(--ui-radius-window); color: var(--flow-panel-ink); box-shadow: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: none; }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .hud-header { padding: 0; border: 0; }
-#root .immersive-app[data-design="flowing-water"] .hud-identity strong { color: var(--flow-ink); font-size: 14px; font-weight: 600; letter-spacing: .04em; }
-#root .immersive-app[data-design="flowing-water"] .hud-identity > span { color: var(--flow-muted); font-size: 11px; }
-#root .immersive-app[data-design="flowing-water"] .hud-header-actions :is(.hud-profile-toggle,.inbox-toggle,.hud-settings) { width: 44px; height: 44px; min-height: 44px; border: 0; border-radius: 50%; background: transparent; color: var(--flow-ink); }
-#root .immersive-app[data-design="flowing-water"] .hud-header-actions button:hover { background: var(--ui-control-hover); }
-#root .immersive-app[data-design="flowing-water"] .hud-resource { color: var(--flow-ink); border-radius: var(--ui-radius-control); }
-#root .immersive-app[data-design="flowing-water"] .hud-resource:is(:hover, [aria-expanded="true"]) { background: var(--ui-selection); }
+#root .immersive-app[data-design="flowing-water"] .hud-identity strong { color: var(--flow-panel-ink); font-size: 14px; font-weight: 600; letter-spacing: .04em; }
+#root .immersive-app[data-design="flowing-water"] .hud-identity > span { color: var(--flow-panel-ink); font-size: 11px; }
+#root .immersive-app[data-design="flowing-water"] .hud-header-actions :is(.hud-profile-toggle,.inbox-toggle,.hud-settings) { width: 44px; height: 44px; min-height: 44px; border: 0; border-radius: 50%; background: transparent; color: var(--flow-panel-ink); }
+#root .immersive-app[data-design="flowing-water"] .hud-header-actions button:hover { background: var(--flow-panel-hover); }
+#root .immersive-app[data-design="flowing-water"] .hud-resource { color: var(--flow-panel-ink); border-radius: var(--ui-radius-control); }
+#root .immersive-app[data-design="flowing-water"] .hud-resource:is(:hover, [aria-expanded="true"]) { background: var(--flow-panel-hover); }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .hud-points-row { border: 0; padding: 5px 0; }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .account-inline-slot:not(:empty) { margin-top: 10px; border-radius: 16px; overflow: clip; background: var(--ui-surface); }
 #root .immersive-app[data-design="flowing-water"] .trader-hud .account-inline-panel { background: var(--ui-surface); border-radius: 16px; }
@@ -152,6 +171,7 @@
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback:hover { background: var(--ui-contribution-hover); color: var(--ui-contribution-ink); }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls :is(.theme-toggle,.test-workspace-control,.role-preview-controls > button):hover:not(.ecosystem-feedback):not(.theme-mode-toggle) { color: var(--flow-footer); background: var(--flow-footer-hover); }
 #root .immersive-app[data-design="flowing-water"] :is(.world-launcher,.home-hud-stack,.entry-screen,.flowing-footer) :focus-visible { outline: 2px solid var(--flow-focus); outline-offset: 4px; }
+#root .immersive-app[data-design="flowing-water"] :is(.launcher-menu, .hud-header-actions, .hud-points-row) :focus-visible { outline-color: var(--flow-panel-ink); }
 
 /* Keep the existing credential fields and submission flow, with the same quiet entry language. */
 #root .immersive-app[data-design="flowing-water"] .entry-screen { flex: 1; min-height: calc(100svh - 80px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; padding: 70px 24px; }
@@ -161,8 +181,8 @@
 #root .immersive-app[data-design="flowing-water"] .access-login input { min-height: 50px; border-radius: var(--ui-radius-control); padding: 12px 16px; background: var(--ui-field); color: var(--ui-ink); border: 1px solid var(--ui-line); font-size: 16px; letter-spacing: 0; }
 #root .immersive-app[data-design="flowing-water"] .access-login p { color: var(--flow-footer); font-size: 13px; line-height: 1.6; }
 #root .immersive-app[data-design="flowing-water"] .access-login p[role="alert"] { padding: 12px 14px; border-radius: 8px; background: var(--ui-danger-surface); color: var(--ui-danger); border: 1px solid var(--ui-danger-border); }
-#root .immersive-app[data-design="flowing-water"] .access-login .entry-submit { width: 100%; min-height: 56px; margin-top: 8px; padding: 15px 24px; border-radius: var(--ui-radius-action); justify-content: center; gap: 16px; background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary-border); font-size: 16px; font-weight: 600; }
-#root .immersive-app[data-design="flowing-water"] .access-login .entry-submit:hover:not(:disabled) { background: var(--ui-primary-hover); color: var(--ui-primary-ink); }
+#root .immersive-app[data-design="flowing-water"] .access-login .entry-submit { width: 100%; min-height: 56px; margin-top: 8px; padding: 15px 24px; border-radius: var(--ui-radius-action); justify-content: center; gap: 16px; background: var(--flow-primary); color: var(--flow-primary-ink); border-color: var(--flow-edge); font-size: 16px; font-weight: 600; }
+#root .immersive-app[data-design="flowing-water"] .access-login .entry-submit:hover:not(:disabled) { background: var(--flow-primary-hover); color: var(--flow-primary-ink); }
 
 @media (max-width: 1100px) {
   #root .immersive-app[data-design="flowing-water"] .flowing-footer { justify-content: center; flex-direction: column-reverse; gap: 10px; }

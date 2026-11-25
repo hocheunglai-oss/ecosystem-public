@@ -703,7 +703,16 @@ async function verifyNightContrast(page) {
   const inspect = async (action, state) => {
     await action.evaluate(node => Promise.all(node.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))));
     const style = await action.evaluate(node => {
-      const style = getComputedStyle(node), rgba = color => { const channels = color.match(/[\d.]+/g).map(Number); return { rgb: channels.slice(0, 3).map(channel => channel / 255), alpha: channels[3] ?? 1 }; };
+      const style = getComputedStyle(node), canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      const rgba = color => {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data;
+        return { rgb: [r / 255, g / 255, b / 255], alpha: alpha / 255 };
+      };
       return { label: node.textContent.trim(), fill: rgba(style.backgroundColor), ink: rgba(style.color), image: style.backgroundImage };
     });
     assert.equal(style.image, 'none', 'Entry contrast uses a measurable shared solid/translucent fill');

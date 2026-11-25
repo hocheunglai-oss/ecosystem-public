@@ -414,9 +414,12 @@ export function createGoogleAuthorizedFetch({ clientId, clientSecret, refreshTok
       const target = new URL(url), headers = new Headers(options.headers);
       check(target.origin === 'https://www.googleapis.com' && !target.username && !target.password && !target.hash
         && /^\/(?:drive\/v3\/(?:about|files(?:\/[A-Za-z0-9_-]+(?:\/permissions)?)?)|upload\/drive\/v3\/files(?:\/[A-Za-z0-9_-]+)?)$/u.test(target.pathname), 'UNSAFE_DRIVE_ENDPOINT');
-      check(!headers.has('authorization') && options.redirect === 'error', 'UNSAFE_DRIVE_REQUEST');
+      const resumablePut = options.method === 'PUT' && target.pathname.startsWith('/upload/drive/v3/files')
+        && target.searchParams.get('uploadType') === 'resumable' && Boolean(target.searchParams.get('upload_id'));
+      check(!headers.has('authorization') && (options.redirect === 'error' || options.redirect === 'manual' && resumablePut),
+        'UNSAFE_DRIVE_REQUEST');
       headers.set('Authorization', `Bearer ${await accessToken()}`);
-      const response = await fetchImpl(url, { ...options, headers, redirect:'error' });
+      const response = await fetchImpl(url, { ...options, headers });
       if (response.status === 401) { token = undefined; expiresAt = 0; }
       return response; // Never replay a potentially consumed upload body.
     } catch { fail('DRIVE_REQUEST_FAILED'); }

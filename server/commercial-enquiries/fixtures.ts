@@ -1,5 +1,5 @@
 import { fixtureGrades, isFixtureDate, type FixtureMutation, type FixtureSupplyLine } from '../../shared/fixtureWorkflow.ts';
-import type { FixtureRegisterFields, FixtureRegisterMutation } from '../../shared/fixtureHistory.ts';
+import type { FixtureCancellationMutation, FixtureRegisterFields, FixtureRegisterMutation } from '../../shared/fixtureHistory.ts';
 import { ApiError } from '../auth/validation.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,6 +28,12 @@ function text(value: unknown, max: number, required = false) {
   return value;
 }
 
+function version(value: unknown) {
+  const parsed = text(value, 32);
+  if (!/^[0-9a-f]{32}$/.test(parsed)) return invalid();
+  return parsed;
+}
+
 function registerFields(input: unknown): FixtureRegisterFields {
   const value = record(input, ['vessel', 'imo', 'date', 'eta', 'etaEnd', 'etaKind', 'etaReviewed', 'lines']);
   const { date, eta, etaEnd, etaKind, etaReviewed } = value;
@@ -47,13 +53,12 @@ function registerFields(input: unknown): FixtureRegisterFields {
   return { vessel: text(value.vessel, 240, true), imo, date, eta, etaEnd: etaEnd as string | null, etaKind, etaReviewed, lines };
 }
 
-function registerMutation(input: unknown): FixtureRegisterMutation {
+type LegacyVoid = { dataMode: 'live'; id: string; requestId: string; version: string; action: 'void'; reason: string };
+function registerMutation(input: unknown): FixtureRegisterMutation | LegacyVoid {
   const common = ['action', 'dataMode', 'id', 'requestId', 'version'];
   const value = record(input, [...common, 'fields', 'reason', 'quantityReviewed']);
   if (value.dataMode !== 'live') throw new ApiError(403, 'Switch to LIVE to use shared fixtures.');
-  const version = text(value.version, 32);
-  if (!/^[0-9a-f]{32}$/.test(version)) return invalid();
-  const base = { dataMode: 'live' as const, id: id(value.id), requestId: id(value.requestId), version };
+  const base = { dataMode: 'live' as const, id: id(value.id), requestId: id(value.requestId), version: version(value.version) };
   switch (value.action) {
     case 'update': case 'complete':
       record(input, [...common, 'fields', 'quantityReviewed']);
@@ -69,9 +74,26 @@ function registerMutation(input: unknown): FixtureRegisterMutation {
   }
 }
 
-export function fixtureWrite(input: unknown): FixtureMutation | FixtureRegisterMutation {
-  return input && typeof input === 'object' && 'action' in input && typeof input.action === 'string' && ['assign', 'confirm', 'cancel'].includes(input.action)
-    ? fixtureMutation(input) : registerMutation(input);
+function cancellation(input: unknown): FixtureCancellationMutation {
+  const common = ['dataMode', 'id', 'requestId', 'action'];
+  const value = record(input, [...common, 'version', 'expectedRevision']);
+  if (value.dataMode !== 'live') throw new ApiError(403, 'Switch to LIVE to use shared fixtures.');
+  if (value.action !== 'cancel' && value.action !== 'reinstate') return invalid();
+  const base = { dataMode: 'live', action: value.action, id: id(value.id), requestId: id(value.requestId) } as const;
+  if ('version' in value) {
+    record(input, [...common, 'version']);
+    return { ...base, version: version(value.version) };
+  }
+  const revision = value.expectedRevision;
+  if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 1 || revision > 2147483646) return invalid();
+  return { ...base, expectedRevision: revision };
+}
+
+export function fixtureWrite(input: unknown): FixtureMutation | FixtureRegisterMutation | LegacyVoid | FixtureCancellationMutation {
+  if (!input || typeof input !== 'object' || !('action' in input)) return invalid();
+  if (input.action === 'reinstate' || (input.action === 'cancel' && !('reason' in input))) return cancellation(input);
+  if (input.action === 'assign' || input.action === 'confirm' || input.action === 'cancel') return fixtureMutation(input);
+  return registerMutation(input);
 }
 export function fixtureMutation(input: unknown): FixtureMutation {
   const common = ['dataMode', 'requestId', 'expectedRevision', 'action'];

@@ -7,43 +7,37 @@ import { canTrade } from './lib/model';
 import RecordsPage from './RecordsPage';
 import { useDemo } from './store';
 import type { OpenModal } from './types';
-import type { OpenWorkspace } from './workspaceNavigation';
-import { FixtureDetails, fixtureEta } from './FixtureDialogs';
 import FixtureEditor from './FixtureEditor';
 
 const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const columns = ['DATE', 'SUPPLIER TRADER', 'BUYER TRADER', 'VESSEL', 'ETA', 'HSFO', 'VLSFO', 'LSMGO'] as const;
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
-const presentDate = (value: string | null) => value ? dateFormatter.format(new Date(value)) : '—';
+const presentDate = (value?: string | null) => value ? dateFormatter.format(new Date(value)) : '—';
 const emptyTraderFilter = { office: '', trader: '' };
 const emptyFilters = { year: 0, month: 0, page: 0, supplier: emptyTraderFilter, buyer: emptyTraderFilter, deleted: false };
 const traderColumns = { supplier: 'SUPPLIER TRADER', buyer: 'BUYER TRADER' } as const;
 type TraderColumn = keyof typeof traderColumns;
 type TraderFilter = typeof emptyTraderFilter;
 const shortTrader = (name: string, office: string) => [name.trim().split(/\s+/)[0], office && `(${office})`].filter(Boolean).join(' ');
-const vesselLabel = (item: FixtureHistoryItem) => item.imo ? `${item.vessel} (${item.imo})` : item.vessel;
-
-function FixtureRow({ item, onDetails, onEdit }: { item: FixtureHistoryItem; onDetails: () => void; onEdit: () => void }) {
-  const click = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(click.current), []);
-  const number = (value: string | null) => <td className="record-sheet__number">{value ?? '—'}</td>;
+function FixtureRow({ item, supplier, buyer, onEdit }: {
+  item: FixtureHistoryItem; supplier?: FixtureTraderFilter; buyer?: FixtureTraderFilter; onEdit: () => void;
+}) {
+  const number = (value?: string | null) => <td className="record-sheet__number">{value ?? '—'}</td>;
   const status = item.deleted ? 'DELETED' : item.cancelled ? 'CANCELLED' : item.status === 'pending' ? 'PENDING' : '';
-  const vessel = vesselLabel(item);
-  return <tr data-record-id={item.id} onDoubleClick={item.canEdit ? () => {
-    window.clearTimeout(click.current);
-    onEdit();
-  } : undefined}>
+  const vessel = <>
+    <span>{item.vessel}</span>
+    {item.imo && <span className="fixture-imo">{item.imo}</span>}
+    {status && <span className={item.cancelled && !item.deleted ? 'fixture-cancelled' : undefined}>{status}</span>}
+  </>;
+  const trader = (party?: FixtureTraderFilter) => <td title={party && [party.name, party.office].filter(Boolean).join(' · ')}>
+    {party ? shortTrader(party.name, party.code) : '—'}
+  </td>;
+  return <tr data-record-id={item.id} onDoubleClick={item.canEdit ? onEdit : undefined}>
     <td className="record-sheet__date">{presentDate(item.date)}</td>
-    <td title={`${item.supplierTrader} · ${item.supplierOffice}`}>{shortTrader(item.supplierTrader, item.supplierOfficeCode ?? item.supplierOffice)}</td>
-    <td title={`${item.buyerTrader} · ${item.buyerOffice}`}>{shortTrader(item.buyerTrader, item.buyerOfficeCode ?? item.buyerOffice)}</td>
-    <td><button type="button" className="text-button fixture-vessel" title={vessel} onClick={event => {
-      if (item.deleted) { onEdit(); return; }
-      if (!item.canEdit || !event.detail || !window.matchMedia('(any-pointer: fine)').matches ||
-        (event.nativeEvent instanceof PointerEvent && event.nativeEvent.pointerType === 'touch')) { onDetails(); return; }
-      window.clearTimeout(click.current);
-      if (event.detail === 1) click.current = window.setTimeout(onDetails, 450);
-    }}><span>{vessel}</span>{status && <span className={item.cancelled && !item.deleted ? 'fixture-cancelled' : undefined}>{status}</span>}</button></td>
-    <td>{fixtureEta(item.eta, item.etaKind, item.etaEnd)}</td>
+    {trader(supplier)}{trader(buyer)}
+    <td>{item.canEdit ? <button type="button" className="text-button fixture-vessel" title={item.vessel}
+      aria-label={`EDIT ${item.vessel}`} onClick={onEdit}>{vessel}</button> : <span className="fixture-vessel" title={item.vessel}>{vessel}</span>}</td>
+    <td>{presentDate(item.eta)}{item.eta && item.etaEnd ? ` – ${presentDate(item.etaEnd)}` : ''}</td>
     {number(item.hsfo)}{number(item.vlsfo)}{number(item.lsmgo)}
   </tr>;
 }
@@ -56,11 +50,6 @@ function TraderFilters({ column, options, value, onChange, onClose }: {
   useEffect(() => office.current?.focus({ preventScroll: true }), [column]);
   const offices = new Map(options.filter(option => option.code).map(option => [option.code, option.office]));
   const available = options.filter(option => !value.office || option.code === value.office);
-  const traders = new Map<string, { name: string; codes: Set<string> }>();
-  for (const { id, name, code } of available) {
-    if (!traders.has(id)) traders.set(id, { name, codes: new Set() });
-    if (code) traders.get(id)?.codes.add(code);
-  }
   return <div className="record-sheet__toolbar" id="fixture-trader-filters" role="group" aria-label={traderColumns[column]} onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
   }}>
@@ -70,22 +59,22 @@ function TraderFilters({ column, options, value, onChange, onClose }: {
     }}><option value="">ALL OFFICES</option>{[...offices].sort((a, b) => a[1].localeCompare(b[1])).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label>
     <label>TRADER<select aria-label={`${traderColumns[column]} NAME`} value={value.trader}
       onChange={event => onChange({ ...value, trader: event.target.value })}>
-      <option value="">ALL TRADERS</option>{[...traders].map(([id, trader]) => <option key={id} value={id}>{trader.name}{trader.codes.size ? ` (${[...trader.codes].join(' / ')})` : ''}</option>)}
+      <option value="">ALL TRADERS</option>{available.map(trader => <option key={trader.id} value={trader.id}>{trader.name}{trader.code ? ` (${trader.code})` : ''}</option>)}
     </select></label>
     <button type="button" className="ui-button ui-button--secondary" onClick={onClose}>DONE</button>
   </div>;
 }
 
-function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
+function HistoryTable() {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
   const [filter, setFilter] = useState(emptyFilters);
   const [attempt, setAttempt] = useState(0);
-  const [selected, setSelected] = useState<{ item: FixtureHistoryItem; editing: boolean }>();
+  const [selected, setSelected] = useState<FixtureHistoryItem>();
   const [traderFilter, setTraderFilter] = useState<TraderColumn>();
   const filterButton = useRef<HTMLButtonElement | null>(null);
   const query = new URLSearchParams({
-    year: String(filter.year), month: String(filter.month), page: String(filter.page), search: deferredSearch,
+    view: 'register', year: String(filter.year), month: String(filter.month), page: String(filter.page), search: deferredSearch,
     ...(filter.supplier.office && { supplierOffice: filter.supplier.office }),
     ...(filter.supplier.trader && { supplierTrader: filter.supplier.trader }),
     ...(filter.buyer.office && { buyerOffice: filter.buyer.office }),
@@ -98,6 +87,8 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
   const data = settled?.data;
   const busy = !settled || search.trim() !== deferredSearch;
   const traderOptions = result?.data?.filters;
+  const suppliers = new Map(traderOptions?.supplier.map(trader => [trader.id, trader]));
+  const buyers = new Map(traderOptions?.buyer.map(trader => [trader.id, trader]));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -121,15 +112,16 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
 
   const first = filter.page * fixtureHistoryPageSize + 1;
   const last = first + (data?.items.length ?? 0) - 1;
-  function changed() {
-    if (filter.page && data?.items.length === 1) setFilter(current => ({ ...current, page: current.page - 1 }));
+  function changed(action: string) {
+    if ((action === 'delete' || action === 'restore') && filter.page && data?.items.length === 1) {
+      setFilter(current => ({ ...current, page: current.page - 1 }));
+    }
     setAttempt(value => value + 1);
   }
   function closeFilter() {
     setTraderFilter(undefined);
     filterButton.current?.focus({ preventScroll: true });
   }
-  function open(item: FixtureHistoryItem, editing: boolean) { setSelected({ item, editing }); }
   return <>
     <section className="record-sheet fixture-history" aria-label="Fixtures">
       <div className="record-sheet__toolbar">
@@ -137,14 +129,14 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
           <input type="search" aria-label="Search fixtures" placeholder="SEARCH" value={search} maxLength={120}
             onChange={event => { setSearch(event.target.value); setFilter(current => ({ ...current, page: 0 })); }} />
         </label>
-        <label>YEAR<select aria-label="Fixture year" value={filter.year} onChange={event => {
+        <select aria-label="Fixture year" value={filter.year} onChange={event => {
           const year = Number(event.target.value);
           setFilter(current => ({ ...current, year, page: 0 }));
-        }}><option value={0}>ALL YEARS</option>{fixtureHistoryYears.map(year => <option key={year}>{year}</option>)}</select></label>
-        <label>MONTH<select aria-label="Fixture month" value={filter.month} onChange={event => {
+        }}><option value={0}>ALL YEARS</option>{fixtureHistoryYears.map(year => <option key={year}>{year}</option>)}</select>
+        <select aria-label="Fixture month" value={filter.month} onChange={event => {
           const month = Number(event.target.value);
           setFilter(current => ({ ...current, month, page: 0 }));
-        }}><option value={0}>ALL MONTHS</option>{months.map((label, i) => <option key={label} value={i + 1}>{label}</option>)}</select></label>
+        }}><option value={0}>ALL MONTHS</option>{months.map((label, i) => <option key={label} value={i + 1}>{label}</option>)}</select>
         <button type="button" className="ui-button ui-button--secondary" disabled={busy} onClick={() => setAttempt(value => value + 1)}>REFRESH</button>
         {(filter.deleted || traderOptions?.canSeeDeleted) && <button type="button" className="ui-button ui-button--secondary" aria-pressed={filter.deleted} onClick={() => {
           setTraderFilter(undefined);
@@ -164,7 +156,8 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
                   if (traderFilter === column) closeFilter(); else setTraderFilter(column);
                 }}>{label} <ListFilter size={14} aria-hidden="true" /></button> : label}</th>;
           })}</tr></thead>
-          <tbody>{!busy && data?.items.map(item => <FixtureRow key={item.id} item={item} onDetails={() => open(item, false)} onEdit={() => open(item, true)} />)}</tbody>
+          <tbody>{!busy && data?.items.map(item => <FixtureRow key={item.id} item={item} supplier={suppliers.get(item.supplierTraderId)}
+            buyer={buyers.get(item.buyerTraderId)} onEdit={() => setSelected(item)} />)}</tbody>
         </table>
         {!busy && settled && !data && <p className="record-sheet__empty" role="alert">FIXTURES UNAVAILABLE. TRY REFRESH.</p>}
         {!busy && data && data.items.length === 0 && <p className="record-sheet__empty">NO MATCHING FIXTURES.</p>}
@@ -179,13 +172,11 @@ function HistoryTable({ onOpen }: { onOpen: OpenWorkspace }) {
         </div>
       </footer>
     </section>
-    {selected?.editing ? <FixtureEditor key={selected.item.id} item={selected.item} onClose={() => setSelected(undefined)} onChanged={changed} /> :
-      selected && <FixtureDetails key={selected.item.id} item={selected.item} onOpen={onOpen} onChanged={changed}
-        onEdit={selected.item.canEdit ? () => open(selected.item, true) : undefined} onClose={() => setSelected(undefined)} />}
+    {selected && <FixtureEditor key={selected.id} item={selected} onClose={() => setSelected(undefined)} onChanged={changed} />}
   </>;
 }
 
-export default function FixtureHistory({ open, onOpen }: { open: OpenModal; onOpen: OpenWorkspace }) {
+export default function FixtureHistory({ open }: { open: OpenModal }) {
   const { user, preview } = useAccess();
   const { namespace, dataMode } = useTestWorkspace();
   const { state, actor } = useDemo();
@@ -193,7 +184,7 @@ export default function FixtureHistory({ open, onOpen }: { open: OpenModal; onOp
   if (!user) return null;
   const hasLegacy = state.outcomes.some(outcome => outcome.kind === 'fixture' && (!canTrade(actor) || outcome.owner === actor.id));
   return <div className="fixture-history-layout">
-    <HistoryTable key={namespace} onOpen={onOpen} />
+    <HistoryTable key={namespace} />
     {hasLegacy && <details className="fixture-history__legacy">
       <summary>BROWSER FIXTURES</summary>
       <RecordsPage open={open} kind="fixture" />

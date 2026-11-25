@@ -7,6 +7,7 @@ import {mkdtemp,mkdir,readFile,readdir,rm} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
 const exec=promisify(execFile),lit=v=>`'${String(v).replaceAll("'","''")}'`,json=v=>`${lit(JSON.stringify(v))}::jsonb`;
 const users=Array.from({length:4},()=>randomUUID()),sessions=users.map(()=>randomUUID()),sourceId=randomUUID(),inboxIds=users.map(()=>randomUUID());
 const payload=extra=>({dataMode:'live',requestId:randomUUID(),id:randomUUID(),expectedRevision:0,action:'save',source:{rawText:'SYNTHETIC ORIGINAL PRIVATE',parsed:null,parserVersion:null,inboxId:null},reviewed:{vessel:'SYNTHETIC VESSEL',imo:'9876543',eta:'20 OCT',portId:'port-singapore',buyerText:'PRIVATE BUYER',buyerId:null,products:[{grade:'VLSFO',quantityText:'100-200'}],remarks:'PRIVATE REMARKS',rmk:false,viscosity:[],formattedText:'PRIVATE FORMATTED',warnings:['PRIVATE WARNING']},...extra});
@@ -188,6 +189,16 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    const draft = await write(1,{...assign,enquiryId:newEnquiry.id,requestId:randomUUID()});
    const editor = i => as(i,`select public.eco_get_fixture_editor(${lit(draft.id)})`).then(JSON.parse);
    const edit = (i,body) => call(i,'eco_mutate_fixture_register',{dataMode:'live',id:draft.id,requestId:randomUUID(),...body});
+   const change = (i,body) => call(i,'eco_change_fixture_cancellation',{dataMode:'live',id:draft.id,requestId:randomUUID(),...body});
+   const cancelDraft = {action:'cancel',expectedRevision:draft.revision,requestId:randomUUID()};
+   await assert.rejects(change(0,cancelDraft),/cancellation is unavailable/);
+   const [cancelledDraft, retryDraft] = await Promise.all([change(1,cancelDraft),change(1,cancelDraft)]);
+   assert.deepEqual(cancelledDraft,retryDraft);
+   assert.equal(cancelledDraft.assignment.cancelled,true);
+   assert.equal(await query(`select cancellation_reason is null from eco_private.fixture_bookings where id=${lit(draft.id)}`),'t');
+   assert.equal((await read(1,{id:draft.id})).cancellation.reason,'');
+   await assert.rejects(change(1,{action:'reinstate',expectedRevision:draft.revision}),/Fixture changed/);
+   assert.equal((await change(1,{action:'reinstate',expectedRevision:cancelledDraft.assignment.revision})).assignment.cancelled,false);
    const before = await editor(2);
    assert.equal(before.canConfirm,true);
    assert.equal(before.canCancel,false);
@@ -203,10 +214,20 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    await assert.rejects(edit(2,complete),/Review unusually/);
    assert.equal((await read(2,{id:draft.id})).lines.length,0);
    await edit(2,{...complete,quantityReviewed:true});
-   const finished = await editor(2);
+   let finished = await editor(2);
    assert.equal(finished.item.status,'confirmed');
    assert.equal(finished.item.vlsfo,'25');
    assert.equal((await read(1,{id:draft.id})).lines[0].barging,'1,500');
+   await change(2,{action:'cancel',version:finished.version});
+   const canceledEditor = await editor(2);
+   assert.equal(canceledEditor.canCancel,false);
+   assert.equal(canceledEditor.canReinstate,true);
+   assert.equal(canceledEditor.item.cancellation.reason,null);
+   await assert.rejects(change(1,{action:'reinstate',expectedRevision:cancelledDraft.assignment.revision+3}),/cancellation is unavailable/);
+   await change(0,{action:'reinstate',version:canceledEditor.version});
+   finished = await editor(2);
+   assert.equal(finished.item.cancelled,false);
+   assert.deepEqual(finished.fields.lines,canceledEditor.fields.lines);
    await edit(2,{action:'delete',version:finished.version});
    await assert.rejects(read(1,{id:draft.id}),/Fixture not found/);
    await edit(0,{action:'restore',version:(await editor(0)).version});
@@ -323,6 +344,57 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    assert.ok(filtered.filters.buyer.some(trader=>trader.id===users[0] && trader.code==='IT'));
    assert.equal((await queryRegister(1,{buyerTrader:users[0]})).total,0);
    assert.equal((await queryRegister(1,{})).filters.buyer.some(trader=>trader.id===users[0]),false);
+   await query(Array.from({length:50},(_,i)=>insert(200+i,users[2],users[0],'2026-06-09')).join(';'));
+   await query(`update ${table} set source_labels=jsonb_set(source_labels,'{supplierOffice}','"GENOA"') where source_row%2=0;
+     update eco_private.users set office_id='sg' where id=${lit(users[2])}`);
+   const filters={supplierTrader:users[2],buyerTrader:users[0]};
+   const compact=await queryRegister(2,{view:'register',...filters,supplierOffice:'SG',buyerOffice:'HK'});
+   assert.equal(compact.total,102);
+   assert.equal(compact.items.length,100);
+   assert.ok(compact.items.every(item=>item.supplierTraderId===users[2] && item.buyerTraderId===users[0]));
+   assert.deepEqual(compact.filters.supplier.filter(trader=>trader.id===users[2]).map(trader=>trader.code),['SG']);
+   assert.deepEqual(compact.filters.buyer.filter(trader=>trader.id===users[0]).map(trader=>trader.code),['HK']);
+   assert.equal((await queryRegister(2,{view:'register',...filters,supplierOffice:'IT'})).total,0);
+   const last=await queryRegister(2,{view:'register',...filters,supplierOffice:'SG',page:1});
+   assert.equal(last.items.length,2);
+   assert.equal(new Set([...compact.items,...last.items].map(item=>item.id)).size,102);
+   assert.ok(compact.items.every(item=>!('supplyRows' in item)&&!('price' in item)&&!('buyerTrader' in item)));
+   const legacyPage=await queryRegister(2,filters);
+   assert.equal(legacyPage.items.length,50);
+   assert.ok(legacyPage.filters.supplier.filter(trader=>trader.id===users[2]).length>1);
+   const payloadSize = value => gzipSync(JSON.stringify(value)).length;
+   t.diagnostic(`Compressed fixture list in the test dataset: ${payloadSize(legacyPage)} bytes at 50 rows and ${payloadSize(compact)} bytes at 100 rows`);
+   await query(`insert into ${table}(fixture_date,supplier_trader_id,buyer_trader_id,supplier_id,vessel,vlsfo,
+     source_workbook,source_tab,source_row,source_digest,source_labels)
+     select '2026-06-09',${lit(users[2])},${lit(users[0])},${lit(supplier)},'SYNTHETIC LOAD','150',
+       ${lit(workbook)},1,n,lpad(n::text,64,'0'),'{"supplierOffice":"SINGAPORE","buyerOffice":"GENOA"}'::jsonb
+     from generate_series(300,1539) n`);
+   const executionTimes = { legacy: [], compact: [] };
+   for (let i=0;i<6;i++) for (const format of ['legacy','compact']) {
+    const input = {year:0,month:0,search:'',page:0,...(format==='compact'?{view:'register'}:{})};
+    const sql = `explain (analyze,timing off,format json) select public.eco_list_fixture_register(${json(input)})`;
+    const milliseconds = JSON.parse(await as(2,sql))[0]['Execution Time'];
+    if (i) executionTimes[format].push(milliseconds);
+   }
+   const median = values => values.sort((a,b)=>a-b)[2].toFixed(1);
+   t.diagnostic(`Median fixture query at production scale: ${median(executionTimes.legacy)} ms at 50 rows, ${median(executionTimes.compact)} ms at 100 rows`);
+
+   const crossedOut = cancelled.id;
+   const loadCrossedOut = i => as(i,`select public.eco_get_fixture_editor(${lit(crossedOut)})`).then(JSON.parse);
+   const extracted = await loadCrossedOut(1);
+   assert.equal(extracted.canReinstate,true);
+   const reinstate = {dataMode:'live',id:crossedOut,requestId:randomUUID(),action:'reinstate',version:extracted.version};
+   await assert.rejects(call(2,'eco_change_fixture_cancellation',reinstate),/editing is unavailable/);
+   await call(1,'eco_change_fixture_cancellation',reinstate);
+   const reinstated = await loadCrossedOut(1);
+   assert.equal(reinstated.item.cancelled,false);
+   assert.equal(reinstated.item.sourceReinstated,true);
+   assert.equal(await query(`select cancelled from ${reviews} where fixture_id=${lit(crossedOut)}`),'t');
+   await query(`update ${reviews} set source_modified_at=now()+interval '1 minute' where fixture_id=${lit(crossedOut)}`);
+   const reopened = await loadCrossedOut(1);
+   assert.equal(reopened.item.cancelled,true);
+   assert.notEqual(reopened.version,reinstated.version);
+   await assert.rejects(call(1,'eco_change_fixture_cancellation',{...reinstate,requestId:randomUUID(),version:reinstated.version}),/Fixture changed/);
    await as(0, "select public.eco_set_preview('admin','hk')");
    await assert.rejects(list(0), /unavailable in preview/);
    await assert.rejects(editor(0),/read.only/);

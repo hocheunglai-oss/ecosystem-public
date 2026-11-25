@@ -3,35 +3,36 @@ import { X } from 'lucide-react';
 import type {
   FixtureHistoryItem, FixtureRegisterChange, FixtureRegisterEditor, FixtureRegisterFields, FixtureRegisterLine,
 } from '../shared/fixtureHistory';
-import { fixtureGrades, type FixtureEtaKind } from '../shared/fixtureWorkflow';
+import { fixtureEtaRange, fixtureEtaTo, fixtureGrades } from '../shared/fixtureWorkflow';
 import { parseProductQuantity } from '../shared/productQuantity';
 import { fixtureApi } from './lib/commercialEnquiryApi';
-import { fixtureCancellationDate, useSubmission } from './FixtureDialogs';
+import { useSubmission } from './FixtureDialogs';
 import { Field, Modal } from './ui';
 
 type EditorLine = FixtureRegisterLine & { key: string };
-type EditorAction = FixtureRegisterChange['action'];
+type EditorAction = FixtureRegisterChange['action'] | 'cancel' | 'reinstate';
+const hongKongTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Hong_Kong', dateStyle: 'medium', timeStyle: 'short' });
 const lineColumns = ['GRADE', 'QUANTITY (MT)', 'SUPPLIER', 'ACCOUNT', 'BUY PRICE', 'BARGING'] as const;
 const newLine = (): EditorLine => ({ key: crypto.randomUUID(), grade: 'VLSFO',
   quantity: '', supplierId: '', accountId: '', price: '', barging: '', cancelled: false });
 
 function FixtureEditorForm({ editor, onClose, onChanged }: {
-  editor: FixtureRegisterEditor; onClose: () => void; onChanged: () => void;
+  editor: FixtureRegisterEditor; onClose: () => void; onChanged: (action: EditorAction) => void;
 }) {
   const { item } = editor;
   const [fields, setFields] = useState(() => editor.fields);
+  const [etaTo, setEtaTo] = useState(() => fixtureEtaTo(editor.fields));
   const [lines, setLines] = useState<EditorLine[]>(() => editor.fields.lines.map(line => ({ ...line, key: crypto.randomUUID() })));
   const [action, setAction] = useState<EditorAction>('update');
-  const [reason, setReason] = useState('');
   const [reviewed, setReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submission = useSubmission();
   const early = Boolean(fields.eta && fields.eta < fields.date);
-  const invalidRange = Boolean(fields.etaEnd && (!fields.eta || fields.etaEnd <= fields.eta));
+  const range = fixtureEtaRange(fields.eta, etaTo);
   const locked = Boolean(item.deleted);
   const status = locked ? 'DELETED' : item.cancelled ? 'CANCELLED' : item.status?.toUpperCase();
-  const scheduleInvalid = invalidRange || (early && !fields.etaReviewed) || (fields.etaKind === 'range' && !fields.etaEnd);
+  const scheduleInvalid = !range || (early && !fields.etaReviewed);
   const publishing = editor.canConfirm || item.status === 'confirmed';
   const quantities = publishing ? lines.map(line => parseProductQuantity(line.quantity)) : [];
   const unusual = quantities.some((amount, index) => {
@@ -55,52 +56,55 @@ function FixtureEditorForm({ editor, onClose, onChanged }: {
   async function submit(operation: EditorAction) {
     if (busy || ((operation === 'update' || operation === 'complete') && (scheduleInvalid ||
       ((operation === 'complete' || item.status === 'confirmed') && publishingBlocked)))) return;
-    if (operation === 'void' && !reason.trim()) return;
     setBusy(true); setError('');
     const base = { dataMode: 'live' as const, id: item.id, version: editor.version };
-    const write: FixtureRegisterChange =
-      operation === 'update' || operation === 'complete' ? { ...base, action: operation,
-        fields: { ...fields, vessel: fields.vessel.trim(), lines: lines.map(({ key: _key, ...line }) => line) }, quantityReviewed: reviewed } :
-        operation === 'void' ? { ...base, action: operation, reason: reason.trim() } : { ...base, action: operation };
     try {
-      await fixtureApi.edit({ ...write, requestId: submission(write) });
-      onChanged(); onClose();
+      if (operation === 'cancel' || operation === 'reinstate') {
+        const write = { ...base, action: operation };
+        await fixtureApi.changeCancellation({ ...write, requestId: submission(write) });
+      } else {
+        let write: FixtureRegisterChange;
+        if (operation === 'update' || operation === 'complete') {
+          if (!range) return;
+          write = { ...base, action: operation, fields: { ...fields, ...range, vessel: fields.vessel.trim(),
+            lines: lines.map(({ key: _key, ...line }) => line) }, quantityReviewed: reviewed };
+        } else write = { ...base, action: operation };
+        await fixtureApi.edit({ ...write, requestId: submission(write) });
+      }
+      onChanged(operation); onClose();
     } catch (failure) {
       setError((failure as Error).message);
     } finally { setBusy(false); }
   }
 
-  const confirmation = action === 'delete' || action === 'void';
+  const confirmation = action === 'delete' || action === 'cancel';
   return <Modal title="EDIT FIXTURE" onClose={() => { if (!busy) onClose(); }} wide>
     <form className="fixture-dialog fixture-editor" onSubmit={event => {
       event.preventDefault();
+      if (confirmation || locked) return;
       const pressed = (event.nativeEvent as SubmitEvent).submitter;
-      void submit(pressed instanceof HTMLButtonElement && pressed.value === 'complete' ? 'complete' : action);
+      void submit(pressed instanceof HTMLButtonElement && pressed.value === 'complete' ? 'complete' : 'update');
     }}>
       <fieldset hidden={confirmation} disabled={busy || locked || confirmation}>
         <div className="fixture-editor__booking">
           <Field label="VESSEL"><input required maxLength={240} aria-label="VESSEL" value={fields.vessel} onChange={event => change({ vessel: event.target.value })} /></Field>
           <Field label="IMO"><input inputMode="numeric" maxLength={7} pattern="[0-9]{7}" aria-label="IMO" value={fields.imo} onChange={event => change({ imo: event.target.value })} /></Field>
           <Field label="DATE"><input required type="date" aria-label="DATE" value={fields.date} onChange={event => change({ date: event.target.value, etaReviewed: false })} /></Field>
-          <Field label="ETA FROM"><input required={Boolean(item.status)} type="date" aria-label="ETA FROM" value={fields.eta ?? ''} onChange={event => change({ eta: event.target.value || null, etaReviewed: false })} /></Field>
-          <Field label="ETA TO"><input type="date" aria-label="ETA TO" min={fields.eta ?? undefined} value={fields.etaEnd ?? ''} onChange={event => {
-            const end = event.target.value || null;
-            change({ etaEnd: end, etaKind: end ? 'range' : 'date' });
+          <Field label="ETA FROM"><input required={Boolean(item.status)} type="date" aria-label="ETA FROM" value={fields.eta ?? ''} onChange={event => {
+            if (fields.eta && fields.eta === etaTo) setEtaTo(event.target.value);
+            change({ eta: event.target.value || null, etaReviewed: false });
           }} /></Field>
-          <Field label="ETA"><select aria-label="ETA" value={fields.etaKind} onChange={event => {
-            const etaKind = event.target.value as FixtureEtaKind;
-            change({ etaKind, etaEnd: etaKind === 'range' ? fields.etaEnd : null });
-          }}><option value="date">DATE</option><option value="range">DATE RANGE</option><option value="earliest">EARLIEST ONLY</option></select></Field>
+          <Field label="ETA TO"><input type="date" aria-label="ETA TO" min={fields.eta ?? undefined} value={etaTo}
+            onChange={event => setEtaTo(event.target.value)} /></Field>
         </div>
         <dl className="fixture-editor__metadata">
-          <div><dt>SUPPLIER TRADER</dt><dd>{item.supplierTrader} ({item.supplierOfficeCode ?? item.supplierOffice})</dd></div>
-          <div><dt>BUYER TRADER</dt><dd>{item.buyerTrader} ({item.buyerOfficeCode ?? item.buyerOffice})</dd></div>
+          <div><dt>SUPPLIER TRADER</dt><dd>{item.supplierTrader}{item.supplierOfficeCode && ` (${item.supplierOfficeCode})`}</dd></div>
+          <div><dt>BUYER TRADER</dt><dd>{item.buyerTrader}{item.buyerOfficeCode && ` (${item.buyerOfficeCode})`}</dd></div>
           {editor.reference && <div><dt>REFERENCE</dt><dd>{editor.reference}</dd></div>}
           {status && <div><dt>STATUS</dt><dd className={status === 'CANCELLED' ? 'fixture-cancelled' : undefined}>{status}</dd></div>}
           {item.cancellation && <>
             <div><dt>CANCELLED BY</dt><dd>{item.cancellation.by}</dd></div>
-            <div><dt>CANCELLED AT</dt><dd>{fixtureCancellationDate(item.cancellation.at)}</dd></div>
-            <div><dt>REASON</dt><dd>{item.cancellation.reason}</dd></div>
+            <div><dt>CANCELLED AT</dt><dd>{hongKongTime.format(new Date(item.cancellation.at))} HKT</dd></div>
           </>}
         </dl>
         {early && <label className="fixture-dialog__check"><input type="checkbox" checked={fields.etaReviewed}
@@ -113,7 +117,7 @@ function FixtureEditorForm({ editor, onClose, onChanged }: {
             return <tr key={line.key}>
               <td><Field label="GRADE"><select aria-label={`Grade ${num}`} value={line.grade} onChange={event => updateLine(line.key, { grade: event.target.value as FixtureRegisterLine['grade'] })}>
                 {fixtureGrades.map(grade => <option key={grade}>{grade}</option>)}
-              </select></Field>{line.cancelled && <small className="fixture-cancelled">CANCELLED</small>}</td>
+              </select></Field>{line.cancelled && !item.cancelled && !item.sourceReinstated && <small className="fixture-cancelled">CANCELLED</small>}</td>
               <td><Field label="QUANTITY (MT)"><input aria-label={`Quantity ${num}`} inputMode="decimal" maxLength={80} value={line.quantity}
                 onChange={event => updateLine(line.key, { quantity: event.target.value })} /></Field></td>
               <td><Field label="SUPPLIER"><select aria-label={`Supplier ${num}`} value={line.supplierId} onChange={event => updateLine(line.key, { supplierId: event.target.value })}>
@@ -139,21 +143,20 @@ function FixtureEditorForm({ editor, onClose, onChanged }: {
         {unusual && <label className="fixture-dialog__check"><input type="checkbox" checked={reviewed}
           onChange={event => setReviewed(event.target.checked)} /> CONFIRM UNUSUAL QUANTITIES</label>}
       </fieldset>
-      {confirmation && <fieldset disabled={busy}>
-        {action === 'delete' ? <p>DELETE {item.vessel}?</p> : <Field label="REASON"><textarea required aria-label="REASON" maxLength={500}
-          rows={3} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
-      </fieldset>}
+      {confirmation && <p>{action === 'delete' ? 'DELETE' : 'CANCEL'} {item.vessel}?</p>}
       {error && <p role="alert" className="record-sheet__error">{error}</p>}
       <footer className="modal-actions">
         {locked ? <button type="button" className="ui-button ui-button--primary" disabled={busy} onClick={() => void submit('restore')}>RESTORE</button> :
           confirmation ? <>
             <button type="button" className="ui-button ui-button--secondary" disabled={busy} onClick={() => stage('update')}>BACK</button>
-            <button className="ui-button ui-button--danger" disabled={busy || (action === 'void' && !reason.trim())}>
+            <button type="button" className="ui-button ui-button--danger" disabled={busy} onClick={() => void submit(action)}>
               {action === 'delete' ? 'CONFIRM DELETE' : 'CONFIRM CANCELLATION'}
             </button>
           </> : <>
             <button type="button" className="ui-button ui-button--danger" disabled={busy} onClick={() => stage('delete')}>DELETE</button>
-            {editor.canCancel && <button type="button" className="ui-button ui-button--danger" disabled={busy} onClick={() => stage('void')}>FIXTURE CANCELLED</button>}
+            {editor.canCancel && <button type="button" className="ui-button ui-button--danger" disabled={busy} onClick={() => stage('cancel')}>FIXTURE CANCELLED</button>}
+            {editor.canReinstate && <button type="button" className="ui-button ui-button--secondary" disabled={busy}
+              onClick={() => void submit('reinstate')}>REINSTATE</button>}
             <button className={`ui-button ui-button--${editor.canConfirm ? 'secondary' : 'primary'}`}
               disabled={busy || scheduleInvalid || (item.status === 'confirmed' && publishingBlocked)}>SAVE</button>
             {editor.canConfirm && <button value="complete" className="ui-button ui-button--primary"
@@ -165,7 +168,7 @@ function FixtureEditorForm({ editor, onClose, onChanged }: {
 }
 
 export default function FixtureEditor({ item, onClose, onChanged }: {
-  item: FixtureHistoryItem; onClose: () => void; onChanged: () => void;
+  item: FixtureHistoryItem; onClose: () => void; onChanged: (action: EditorAction) => void;
 }) {
   const [editor, setEditor] = useState<FixtureRegisterEditor>();
   const [error, setError] = useState('');

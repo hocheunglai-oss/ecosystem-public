@@ -34,6 +34,9 @@ export async function handleCommercialEnquiries(request: Request, config: AuthCo
     if (query && 'scope' in query && query.scope === 'singapore' && !actor.isAdmin && !actor.isSpcTrader) throw new ApiError(403,'Access denied.');
     if (fixtures) {
       if (query && 'edit' in query) return respond(await gateway.authenticatedRpc('eco_get_fixture_editor', { p_id: query.edit }));
+      if (input && (input.action === 'reinstate' || (input.action === 'cancel' && !('reason' in input)))) {
+        return respond(await gateway.authenticatedRpc('eco_change_fixture_cancellation', { p_input: input }));
+      }
       if (input && 'version' in input) return respond(await gateway.authenticatedRpc('eco_mutate_fixture_register', { p_input: input }));
       return respond(await gateway.authenticatedRpc(query ? 'eco_get_fixtures' : 'eco_mutate_fixture', query ? {p_query:query} : {p_input:input}));
     }

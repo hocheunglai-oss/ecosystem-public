@@ -56,6 +56,8 @@ On phones, stack entry actions and keep account and footer controls reachable wi
 
 Use shared `--surface`, `--ink`, `--muted`, `--line` and `--panel-boundary` tokens. A light fallback must never be paired with dark-mode text. Use compact reading and editing widths sitewide, including enlarged dialogs. Group related fields, align actions with their content and let dense comparison tables use the width their columns require. Knowledge cards fill the available width, with bounded readable prose inside; tables may use the full card. Resizing the shell preserves the draft and does not force ordinary forms or prose to fill an ultrawide display.
 
+Give spreadsheet-style editing tables a visible bottom border in both themes.
+
 Small standard dialogs open compact and fit their content. Wide editors, full workspaces and document previews keep their enlarged default. Preserve shrink/expand controls and unsaved work in either size. This replaces the earlier all-dialogs-enlarged rule for small forms.
 
 Users & Access is capped at 1480 px and centred. Its 180 px office column sits beside equally weighted directory and editor columns. At intermediate widths the editor follows the directory in the main column; on phones the office selector scrolls horizontally and the directory/editor stack without horizontal page overflow. Actions wrap; emails and long names may break within their container.

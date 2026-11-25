@@ -1,6 +1,6 @@
 import type { FixtureEtaKind, FixtureGrade, FixtureOptions } from './fixtureWorkflow.ts';
 
-export const fixtureHistoryPageSize = 50;
+export const fixtureHistoryPageSize = 100;
 export const fixtureHistoryYears = Array.from({ length: Math.max(2, new Date().getUTCFullYear() - 2023) }, (_, index) => 2025 + index);
 
 export interface FixtureHistoryQuery {
@@ -13,42 +13,30 @@ export interface FixtureHistoryQuery {
   buyerOffice?: string;
   buyerTrader?: string;
   deleted?: true;
+  view?: 'register';
 }
 
 export interface FixtureTraderFilter { id: string; name: string; office: string; code: string }
 
-export interface FixtureHistorySupplyRow {
-  account: string | null;
-  hsfo: string | null;
-  vlsfo: string | null;
-  lsmgo: string | null;
-  supplierId: string;
-  supplier: string;
-  supplierAvailable: boolean;
-  price: string | null;
-  barging: string | null;
+interface FixtureSummary {
+  hsfo?: string | null;
+  vlsfo?: string | null;
+  lsmgo?: string | null;
   cancelled?: boolean;
-}
-
-export interface FixtureHistoryItem extends FixtureHistorySupplyRow {
   id: string;
   date: string;
-  supplierTrader: string;
-  supplierOffice: string;
-  supplierOfficeCode?: string;
-  buyerTrader: string;
-  buyerOffice: string;
-  buyerOfficeCode?: string;
-  eta: string | null;
+  eta?: string | null;
   vessel: string;
-  imo: string | null;
-  supplyRows?: FixtureHistorySupplyRow[];
+  imo?: string | null;
   status?: 'pending' | 'confirmed';
   etaEnd?: string | null;
-  etaKind?: FixtureEtaKind;
   canEdit?: boolean;
   deleted?: boolean;
-  cancellation?: { at: string; by: string; reason: string } | null;
+}
+
+export interface FixtureHistoryItem extends FixtureSummary {
+  supplierTraderId: string;
+  buyerTraderId: string;
 }
 
 export interface FixtureHistoryPage {
@@ -80,10 +68,12 @@ export interface FixtureRegisterFields {
 
 export interface FixtureRegisterEditor {
   version: string;
-  item: FixtureHistoryItem;
+  item: FixtureSummary & { supplierTrader: string; supplierOfficeCode: string; buyerTrader: string; buyerOfficeCode: string;
+    sourceReinstated?: boolean; cancellation?: { at: string; by: string } | null };
   fields: FixtureRegisterFields;
   canConfirm: boolean;
   canCancel: boolean;
+  canReinstate: boolean;
   suppliers: { id: string; name: string }[];
   accounts: { id: string; name: string }[];
   reference: string | null;
@@ -92,7 +82,11 @@ export interface FixtureRegisterEditor {
 
 export type FixtureRegisterChange = { dataMode: 'live'; id: string; version: string } & (
   | { action: 'update' | 'complete'; fields: FixtureRegisterFields; quantityReviewed: boolean }
-  | { action: 'void'; reason: string }
   | { action: 'delete' | 'restore' }
 );
 export type FixtureRegisterMutation = FixtureRegisterChange & { requestId: string };
+
+export type FixtureCancellationChange = { dataMode: 'live'; id: string; action: 'cancel' | 'reinstate' } & (
+  { version: string } | { expectedRevision: number }
+);
+export type FixtureCancellationMutation = FixtureCancellationChange & { requestId: string };

@@ -1,20 +1,23 @@
-/* Flowing Water is the shared UI language; scene motion stays outside work surfaces. */
+/* Shared interface colours. Entry artwork has its own palette. */
 :root {
-  --ui-canvas: #f1f4ee;
-  --ui-surface: #fbfcf8;
-  --ui-raised: #eaf1eb;
-  --ui-field: #ffffff;
-  --ui-ink: #21443f;
-  --ui-muted: #536e68;
-  --ui-line: #b3c5bd;
-  --ui-boundary: #91aba1;
-  --ui-accent: #267064;
-  --ui-selection: #dfece3;
+  color: var(--ui-ink);
+  --ui-canvas: #f6f5f2;
+  --ui-surface: #faf9f6;
+  --ui-raised: #efeeeb;
+  --ui-field: #fdfcf9;
+  --ui-ink: #20201e;
+  --ui-muted: #5f5e58;
+  --ui-line: #d8d6d0;
+  --ui-boundary: #8a8780;
+  --ui-accent: #484743;
+  --ui-selection: #e6e4df;
+  --ui-tab-active: var(--ui-field);
+  --ui-tab-shadow: 0 1px 2px #20201e20, inset 0 0 0 1px var(--ui-boundary);
   --ui-radius-panel: 12px;
   --ui-radius-window: 20px;
-  --ui-window-shadow: 0 24px 72px #173f382b;
-  --ui-menu-shadow: 0 12px 32px #173f3826;
-  --ui-backdrop: #173f3852;
+  --ui-window-shadow: 0 20px 56px #20201e29;
+  --ui-menu-shadow: 0 8px 24px #20201e24;
+  --ui-backdrop: #17171652;
   --ui-font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ui-font-heading: "Manrope", "DM Sans", sans-serif;
   --ui-text-meta: 11px;
@@ -35,13 +38,13 @@
   --ui-control-surface: var(--ui-field);
   --ui-control-ink: var(--ui-ink);
   --ui-control-border: var(--ui-line);
-  --ui-control-hover: #e5eee7;
-  --ui-focus: #267064;
+  --ui-control-hover: #eeece7;
+  --ui-focus: #60605b;
   --ui-link: #245fb2;
-  --ui-primary: var(--ui-raised);
-  --ui-primary-hover: var(--ui-control-hover);
-  --ui-primary-border: var(--ui-boundary);
-  --ui-primary-ink: var(--ui-ink);
+  --ui-primary: #262624;
+  --ui-primary-hover: #42423e;
+  --ui-primary-border: var(--ui-primary);
+  --ui-primary-ink: #fffefa;
   --ui-contribution: #006fee;
   --ui-contribution-hover: #005bcc;
   --ui-contribution-border: #006fee;
@@ -74,25 +77,29 @@
   --theme-cyan: var(--ui-accent);
 }
 :root[data-theme="dark"] {
-  --ui-canvas: #171620;
-  --ui-surface: #211e2b;
-  --ui-raised: #2d2736;
-  --ui-field: #17151f;
-  --ui-ink: #f2edf2;
-  --ui-muted: #bdb3c1;
-  --ui-line: #554958;
-  --ui-boundary: #7a667c;
-  --ui-accent: #e3bca8;
-  --ui-selection: #3a303e;
-  --ui-window-shadow: 0 24px 72px #0b0818a6;
-  --ui-menu-shadow: 0 12px 32px #0b081880;
-  --ui-backdrop: #100c187a;
-  --ui-control-hover: #352d3d;
-  --ui-focus: #e3bca8;
+  --ui-canvas: #000000;
+  --ui-surface: #1c1c1e;
+  --ui-raised: #2c2c2e;
+  --ui-field: #18181a;
+  --ui-ink: #f5f5f7;
+  --ui-muted: #aeaeb2;
+  --ui-line: #3a3a3c;
+  --ui-boundary: #6b6b70;
+  --ui-accent: #d1d1d6;
+  --ui-selection: #3a3a3c;
+  --ui-tab-active: var(--ui-selection);
+  --ui-window-shadow: 0 20px 56px #000000a6;
+  --ui-menu-shadow: 0 8px 24px #00000080;
+  --ui-backdrop: #0000008c;
+  --ui-control-hover: #353537;
+  --ui-focus: #aeaeb2;
+  --ui-primary: #f2f2f7;
+  --ui-primary-hover: #d1d1d6;
+  --ui-primary-ink: #1c1c1e;
   --ui-link: #91c3ff;
   --ui-recognition-border: #aace69;
   --ui-danger: #ffb4c0;
-  --ui-danger-surface: #3b2736;
+  --ui-danger-surface: #361e24;
   --ui-danger-border: #b47d8d;
   --ui-private-surface: #342b43;
   --ui-private-ink: #dfc9f7;
@@ -103,10 +110,12 @@
   --theme-field: var(--ui-field);
   --theme-ink: var(--ui-ink);
   --theme-muted: var(--ui-muted);
-  --theme-faint: #aa9fae;
+  --theme-faint: #9a9a9e;
   --theme-line: var(--ui-line);
   --theme-cyan: var(--ui-accent);
 }
+
+html { background: var(--ui-canvas); }
 
 /* Opaque, still reading surfaces carry the same palette without the animated scene. */
 #root :is(.workspace-window, .modal, .workspace-module),
@@ -155,7 +164,7 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea)::placeholder { color: var(--ui-muted); opacity: 1; }
 #root :is(.workspace-window, .modal, .workspace-module) :is(.field input, .field select, .field textarea):disabled { background: var(--ui-raised); color: var(--ui-muted); }
 #root :is(.workspace-window, .modal, .workspace-module) :is(input, textarea, select):focus { border-color: var(--ui-focus); box-shadow: none; }
-/* Legacy profile headings and selected tabs must follow the night palette too. */
+/* Legacy profile headings follow the shared palette in dark mode. */
 :root[data-theme="dark"] #root :is(.buyer-profile, .buyer-profile-directory) {
   --buyer-heading: var(--ui-raised);
   --buyer-section-heading: var(--ui-raised);
@@ -164,13 +173,6 @@
   .credit-record-heading, .credit-record-table th, .credit-form-section > h3,
   .profile-tab-content > header
 ) { background: var(--ui-raised); }
-:root[data-theme="dark"] #root :is(.workspace-window, .modal, .workspace-module) :is(
-  .profile-tabs-list > button:not([data-visibility="private"])[aria-selected="true"],
-  .credit-workflow-tabs button[aria-pressed="true"]
-) {
-  background: var(--ui-raised); border-color: var(--ui-focus); color: var(--ui-ink);
-  box-shadow: inset 0 -2px var(--ui-focus);
-}
 
 /* Finite working type scale; never change the application's root rem scale. */
 #root :is(.workspace-window, .modal, .workspace-module, .access-login, .password-suggestion) {
@@ -300,10 +302,7 @@
 #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(.button, .lime-control, .icon-button, .modal-close, .window-tool, .attachments-trigger) > svg,
 #root :is(.ui-button, .button, .icon-button) > svg { width: 16px; height: 16px; flex-shrink: 0; }
 
-#root :is(.workspace-window, .modal, .workspace-module) .enquiry-terms button[aria-pressed="true"] {
-  background:var(--ui-control-hover); color:var(--ui-control-ink); border-color:var(--ui-focus);
-}
-/* Navigation keeps its selected-state indication without contribution blue. */
+/* Navigation uses compact rounded tabs within the existing button geometry. */
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .tabs > button, .center-tabs > button, .knowledge-tabs > button, .profile-tabs-list > button, .buyer-profile__tabs > button,
   .office-view-tabs [role="tab"], .segmented > button, .enquiry-terms > button,
@@ -311,7 +310,7 @@
 ) {
   min-height: var(--ui-control-height);
   padding: var(--ui-control-padding);
-  border-radius: var(--ui-radius-action);
+  border-radius: var(--ui-radius-control);
   font-family: var(--ui-font);
   font-size: var(--ui-text-action-compact);
   font-weight: var(--ui-weight-label);
@@ -363,20 +362,6 @@
 #root .profile-dropdown {
   font-family: var(--ui-font); font-size: var(--ui-text-body); line-height: 1.5;
 }
-#root .account-inline-panel {
-  --ui-control-surface: #173638;
-  --ui-control-ink: #e5eeea;
-  --ui-control-border: #608279;
-  --ui-control-hover: #294c48;
-  --ui-focus: #a5d9c6;
-}
-:root[data-theme="dark"] #root .account-inline-panel {
-  --ui-control-surface: var(--ui-field);
-  --ui-control-ink: var(--ui-ink);
-  --ui-control-border: var(--ui-boundary);
-  --ui-control-hover: #352d3d;
-  --ui-focus: #e3bca8;
-}
 #root .profile-dropdown label > span { font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
 #root .profile-dropdown input {
   font-family: var(--ui-font); font-size: var(--ui-text-body); font-weight: var(--ui-weight-body);
@@ -387,8 +372,7 @@
 /* Readable fact labels may exceed legacy fixed tracks; keep both columns bounded. */
 #root .admin-facts :is(dt, dd) { min-width: 0; overflow-wrap: anywhere; }
 
-/* 29 October: carry Flowing Water through existing work surfaces without changing
-   their layout. These semantic groups deliberately exclude grades, business status,
+/* Shared work surfaces preserve semantic colours for grades, business status,
    private records, document pixels and contribution actions. */
 #root :is(.workspace-window, .modal) {
   border-radius: var(--ui-radius-window);
@@ -402,7 +386,7 @@
   color: var(--ui-ink); background: var(--ui-selection);
 }
 
-/* Nested reading panels have opaque calm surfaces, not legacy blue glass. */
+/* Nested reading panels use opaque surfaces. */
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .knowledge, .profile-tab-content, .shared-supplier-section, .supplier-information,
   .buyer-profile__section, .buyer-credit-metric, .buyer-profile__metrics > div,
@@ -479,19 +463,34 @@
   background: var(--ui-primary-hover); border-color: var(--ui-focus);
 }
 
-/* Selection is teal/mist by day and warm-neutral/plum by night. Row geometry stays. */
+/* Tabs and segmented controls share an inset selection; rows have their own marker. */
+#root :is(.workspace-window, .modal, .workspace-module) .segmented {
+  background: var(--ui-raised); border-color: var(--ui-line);
+}
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .tabs > button, .center-tabs > button, .office-view-tabs [role="tab"],
   .profile-tabs-list > button:not([data-visibility="private"]), .buyer-profile__tabs > button,
-  .credit-workflow-tabs > button, .users-access-offices > button, .users-access-list > button
-) { color: var(--ui-muted); background: var(--ui-surface); border-color: var(--ui-line); }
+  .credit-workflow-tabs > button, .segmented > button:not(.danger)
+) { color: var(--ui-muted); background: var(--ui-raised); border-color: transparent; }
 #root :is(.workspace-window, .modal, .workspace-module) :is(
-  .center-tabs > button[aria-selected="true"], .office-view-tabs [aria-selected="true"],
+  .tabs > button.active, .center-tabs > button[aria-selected="true"],
+  .office-view-tabs [aria-selected="true"], .segmented > button.active:not(.danger),
   .profile-tabs-list > button:not([data-visibility="private"])[aria-selected="true"],
   .buyer-profile__tabs > button[aria-selected="true"], .credit-workflow-tabs > button[aria-pressed="true"],
   .enquiry-terms > button[aria-pressed="true"], .attachment-view > button[aria-pressed="true"],
   .credit-attention-filter[aria-pressed="true"]
-) { background: var(--ui-selection); color: var(--ui-ink); border-color: var(--ui-focus); box-shadow: inset 0 -2px var(--ui-focus); }
+) { background: var(--ui-tab-active); color: var(--ui-ink); border-color: transparent; box-shadow: var(--ui-tab-shadow); }
+#root :is(.workspace-window, .modal, .workspace-module) .tabs > button.active::after { background: transparent; }
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .tabs > button, .center-tabs > button, .office-view-tabs [role="tab"],
+  .profile-tabs-list > button:not([data-visibility="private"]), .buyer-profile__tabs > button,
+  .credit-workflow-tabs > button, .segmented > button:not(.danger)
+):hover:where(:not(:disabled, .active, [aria-selected="true"], [aria-pressed="true"])) {
+  background: var(--ui-control-hover); color: var(--ui-ink);
+}
+#root :is(.workspace-window, .modal, .workspace-module) :is(
+  .users-access-offices > button, .users-access-list > button
+) { color: var(--ui-muted); background: var(--ui-surface); border-color: var(--ui-line); }
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .directory-item.active, .port-card.active, .center-incoming-row.is-selected,
   .office-comparison-table tbody tr.is-selected, .users-access-offices > button.active,
@@ -500,11 +499,9 @@
 #root :is(.workspace-window, .modal, .workspace-module) :is(
   .search-select-list > button:hover, .search-select-list > button.is-active,
   .directory-item:hover, .port-card:hover, .center-incoming-open:hover,
-  .center-history-compact summary:hover, .center-tabs > button:hover,
+  .center-history-compact summary:hover,
   .users-access-offices > button:hover, .users-access-list > button:hover
 ) { background: var(--ui-control-hover); color: var(--ui-ink); }
-#root :is(.workspace-window, .modal, .workspace-module) .tabs > button.active { color: var(--ui-accent); }
-#root :is(.workspace-window, .modal, .workspace-module) .tabs > button.active::after { background: var(--ui-accent); }
 
 /* Data surfaces are opaque and neutral; semantic cells and chart series are untouched. */
 #root :is(.workspace-window, .modal, .workspace-module) table { color: var(--ui-ink); }
@@ -538,7 +535,7 @@
   --ink: var(--ui-ink); --muted: var(--ui-muted); --surface: var(--ui-surface); --line: var(--ui-line);
   --hud-expanded-surface: var(--ui-surface);
   --ui-control-surface: var(--ui-field); --ui-control-ink: var(--ui-ink);
-  --ui-control-border: var(--ui-line); --ui-control-hover: var(--ui-selection); --ui-focus: var(--ui-accent);
+  --ui-control-border: var(--ui-line);
   color: var(--ui-ink);
 }
 #root .trader-hud :is(.account-inline-panel, .hud-inline-section) { background: var(--ui-surface); border-color: var(--ui-line); }
@@ -556,12 +553,18 @@
   .office-comparison-list > button, .office-view-tabs [role="tab"]
 ) { color: var(--ui-ink); border-color: var(--ui-line); }
 #root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(
-  .inbox-arrivals button, .office-view-tabs [role="tab"], .search-box
+  .inbox-arrivals button, .search-box
 ) { background: var(--ui-field); border-radius: var(--ui-radius-action); }
+#root .trader-hud .hud-inline-section .office-view-tabs [role="tab"] {
+  background: var(--ui-raised); color: var(--ui-muted); border-radius: var(--ui-radius-control);
+}
+#root .trader-hud .hud-inline-section .office-view-tabs [aria-selected="true"] {
+  background: var(--ui-tab-active); color: var(--ui-ink); box-shadow: var(--ui-tab-shadow);
+}
 #root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(
   .inbox-item:hover, .inbox-item.is-unread, .inbox-item-clear:hover,
   .inbox-scenarios > button:hover, .inbox-scenarios > button:focus-visible,
-  .office-view-tabs [aria-selected="true"], .office-comparison-list > button[aria-pressed="true"]
+  .office-comparison-list > button[aria-pressed="true"]
 ) { background: var(--ui-selection); color: var(--ui-ink); }
 #root .trader-hud .account-inline-panel .inbox-item.is-unread { border-left-color: var(--ui-focus); }
 #root .trader-hud :is(.account-inline-panel, .hud-inline-section) :is(.inbox-source, .inbox-sender, .hud-activity-period) { color: var(--ui-muted); }

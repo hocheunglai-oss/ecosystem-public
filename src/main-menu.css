@@ -6,12 +6,12 @@
 .main-search-field input::-webkit-search-cancel-button { display: none; }
 .main-search-field input::placeholder { color: #c2d5df; }
 .main-search-field button { display: grid; place-items: center; padding: 4px; background: transparent; color: #c2d5df; border: 0; }
-.main-search-results { position: absolute; inset: calc(100% + 5px) auto auto 0; width: min(430px, calc(100vw - 44px)); max-height: min(440px, 55dvh); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #7396a5; border-radius: 4px; background: #102a3b; box-shadow: 0 12px 28px #00182855; }
-.main-search-results > button { display: grid; grid-template-columns: 74px minmax(0, 1fr); width: 100%; gap: 3px 8px; min-height: 52px; padding: 9px 12px; text-align: left; color: #edf6fc; background: transparent; border: 0; border-bottom: 1px solid #7396a540; }
-.main-search-results > button[aria-selected="true"] { background: #244c60; }
+.main-search-results { position: absolute; inset: calc(100% + 5px) auto auto 0; width: min(430px, calc(100vw - 44px)); max-height: min(440px, 55dvh); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--ui-line); border-radius: 4px; background: var(--ui-surface); color: var(--ui-ink); box-shadow: var(--ui-menu-shadow); }
+.main-search-results > button { display: grid; grid-template-columns: 74px minmax(0, 1fr); width: 100%; gap: 3px 8px; min-height: 52px; padding: 9px 12px; text-align: left; color: var(--ui-ink); background: transparent; border: 0; border-bottom: 1px solid var(--ui-line); }
+.main-search-results > button:is(:hover, [aria-selected="true"]) { background: var(--ui-selection); }
 .main-search-results strong { font-size: 11px; overflow-wrap: anywhere; }
-.main-search-results small { grid-column: 2; color: #c0d6e1; font-size: 10px; overflow-wrap: anywhere; }
-.main-search-type { grid-row: span 2; color: #a9d5df; font-size: 9px; padding-top: 2px; }
+.main-search-results small { grid-column: 2; color: var(--ui-muted); font-size: 10px; overflow-wrap: anywhere; }
+.main-search-type { grid-row: span 2; color: var(--ui-muted); font-size: 9px; padding-top: 2px; }
 .main-search-results > p { font-size: 12px; padding: 10px 12px; margin: 0; }
 .launcher-menu > .launcher-menu-row { display: flex; width: 100%; align-items: stretch; border: 1px solid #ffffff35; border-radius: 2px; background: #183b50ed; color: #fff; opacity: 0; transform: translateY(-8px); transition: opacity .25s, transform .25s, background .2s; }
 .launcher-menu > .launcher-menu-row:first-child { margin-top: 6px; }

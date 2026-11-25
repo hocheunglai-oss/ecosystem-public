@@ -25,6 +25,7 @@ async function fixture(context) {
   await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
   await installProfileTabMocks(context, { ownerId: () => state.user?.id });
   await context.route('**/api/access/**', route => route.fulfill(state.user ? { json: { user: state.user, preview: null } } : { status: 401, json: { message: 'Sign in required.' } }));
+  await context.route('**/api/access/port-fixtures?**', route => route.fulfill({ json: { items: [], total: 0, pageSize: 50, supplierCount: 0 } }));
   await context.route('**/api/admin/**', route => route.fulfill({ json: { count: 0, items: [] } }));
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: false } }));
   await context.route('**/api/suppliers/**', async route => {

@@ -73,7 +73,7 @@ async function addLocation(page, directory, type, name, country) {
 async function profile(directory, kind) {
   const tabs = directory.getByRole("tablist", { name: "Information sections" });
   await expect(tabs).toBeVisible();
-  assert.deepEqual(await tabs.getByRole("tab").allTextContents(), kind === "Port" ? ["Port Information", ...TABS, "Price History"] : TABS);
+  assert.deepEqual(await tabs.getByRole("tab").allTextContents(), kind === "Port" ? ["Port Information", ...TABS.filter(name => name !== "Refineries"), "Price History"] : TABS);
   await expect(tabs.getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
   await expect(directory.getByRole("button", { name: /^Files\b/ })).toHaveCount(0);
   await expect(directory.locator(".knowledge-metadata")).toHaveCount(0);

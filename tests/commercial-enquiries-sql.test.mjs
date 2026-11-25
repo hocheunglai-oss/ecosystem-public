@@ -307,6 +307,63 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    assert.equal((await register(0,{search:'',missing:true})).total,0);
    assert.equal(await query(`select count(*) from ${holds}`),'2');
   });
+  await t.test('port price history and statistics use eligible supply lines and distinct bookings', async () => {
+   await seed();
+   const supplier = randomUUID(), closed = randomUUID(), tokyo = randomUUID(), group = randomUUID();
+   const port = "eco_private.supplier_port('port-singapore')";
+   const reports = (actor, mode, portId = 'port-singapore', search = '', page = 0) =>
+    as(actor, 'select public.eco_read_port_fixtures(' + [lit(mode),lit(portId),lit(search),page].join(',') + ')').then(JSON.parse);
+   const history = 'eco_private.fixture_history';
+   const row = (i, vessel, grade, quantity, price, supplierId = supplier, grouping = null, source = {}) =>
+    "insert into " + history + "(fixture_date,supplier_trader_id,buyer_trader_id,supplier_id,vessel," + grade + ",price,booking_group_id,source_workbook,source_tab,source_row,source_digest,source_labels) values (" +
+    [lit('2026-11-10'),lit(users[2]),lit(users[1]),lit(supplierId),lit(vessel),lit(quantity),price === null ? 'null' : lit(price),grouping ? lit(grouping) : 'null',lit('fixture_port_workbook'),1,i,lit(String(i).padStart(64,'0')),json({buyerOffice:'GENOA',...source})].join(',') + ')';
+   await query("insert into eco_private.suppliers(id,source_key,record,closed_at) values " + [
+    [supplier,'report-supplier','Singapore','SG',false],
+    [closed,'report-closed','Singapore','SG',true],
+    [tokyo,'report-tokyo','Tokyo','JP',false],
+   ].map(([id,key,portName,countryCode,isClosed])=>'('+[lit(id),lit(key),json({countryCode,portName,legalName:key,shortName:key}),isClosed?'now()':'null'].join(',')+')').join(','));
+   await query([
+    row(10,'REPORT MULTILINE','hsfo','75–125','$610.25',supplier,group),
+    row(11,'REPORT MULTILINE','lsmgo','25','720',supplier,group),
+    row(12,'REPORT MISSING','hsfo','1300',null,supplier,null,{ownerReview:{price:{status:'missing'}}}),
+    row(13,'REPORT HELD','lsmgo','1500','530'),
+    row(14,'REPORT CANCELLED','vlsfo','1700','540'),
+    row(15,'REPORT TOKYO','lsmgo','2000','550',tokyo),
+    row(16,'REPORT CLOSED','vlsfo','55','560',closed),
+   ].join(';'));
+   await query("insert into eco_private.fixture_import_holds(source_workbook,source_tab,source_row,fixture_date,vessel,missing_field,related_fixture_id,source_evidence) " +
+    "select 'fixture_port_workbook',1,17,fixture_date,vessel,'quantity',id,'{}' from " + history + " where source_row=13;" +
+    "insert into eco_private.fixture_history_source_reviews(fixture_id,source_modified_at,cancelled,source_evidence) " +
+    "select id,now(),true,'{}' from " + history + " where source_row=14");
+   const prices = await reports(0,'prices');
+   assert.equal(prices.total,3);
+   assert.equal(prices.pageSize,50);
+   assert.equal((await reports(0,'prices','port-singapore','10 nov 2026 610.25')).items[0].price,610.25);
+   assert.equal((await reports(0,'prices','port-singapore','multiline')).total,2);
+   assert.deepEqual((await reports(0,'prices','port-singapore','',1)).items,[]);
+   assert.deepEqual((await reports(0,'prices','port-tokyo')).items.map(item=>item.vessel),['REPORT TOKYO']);
+   assert.equal((await reports(1,'prices')).total,3);
+   assert.equal((await reports(2,'prices')).total,3);
+   assert.equal((await reports(3,'prices')).total,0);
+   const report = JSON.parse(await query("select eco_private.spc_port_statistics(u,"+port+",'2026-11-25') from eco_private.users u where u.id="+lit(users[0])));
+   assert.equal(report.monthly[10].current,180);
+   assert.equal(report.estimated,true);
+   assert.equal(report.cancelled,1);
+   assert.equal(report.enquiries,0);
+   assert.deepEqual(report.byBuyerOffice,[]);
+   assert.deepEqual(report.volumeBySupplier,[{label:'report-supplier',value:125},{label:'report-closed',value:55}]);
+   assert.deepEqual(report.fixturesByOffice,[{label:'GENOA',value:2}]);
+   assert.equal(report.fixturesBySupplier[0].value,1);
+   assert.equal(report.bySupplierTrader[0].value,2);
+   assert.equal((await reports(0,'ranking')).items.some(item=>item.id===closed),false);
+   assert.equal((await reports(3,'ranking')).personal,true);
+   await assert.rejects(reports(3,'statistics'),/Access denied/);
+   await assert.rejects(reports(0,'statistics','port-tokyo'),/Invalid port fixture report/);
+   await assert.rejects(query("set role anon; select public.eco_read_port_fixtures('prices','port-singapore','',0)"),/permission denied/);
+   await as(0,"select public.eco_set_preview('trader','hk')");
+   await assert.rejects(reports(0,'prices'),/unavailable in preview/);
+   await as(0,"select public.eco_set_preview(null,null)");
+  });
   await t.test('fixture history links canonical records and limits reads to authorised live members', async () => {
    await seed();
    const supplier = randomUUID();

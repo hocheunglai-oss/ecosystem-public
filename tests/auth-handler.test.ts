@@ -22,6 +22,7 @@ function fixture(current: AccessUser | null = user) {
     consumeLoginAttempt: async () => { calls.push('limit'); },
     signIn: async () => { calls.push('login'); }, signOut: async () => { calls.push('logout'); },
     listFixtureHistory: async query => { calls.push('fixtures:' + JSON.stringify(query)); return { items: [], total: 0 }; },
+    readPortFixtures: async query => { calls.push('port-fixtures:' + JSON.stringify(query)); return { items: [], total: 0, pageSize: 50 }; },
     listUsers: async () => { calls.push('list'); return { users: [user], offices: [{ id: 'hk', name: 'Hong Kong' }] }; },
     updateUser: async input => { calls.push('update'); return { ...user, ...input, revision: 2 }; },
     activate: async () => { calls.push('activate'); },
@@ -403,4 +404,27 @@ test('only actual administrators can review phone requests; actions are strict',
     const f=fixture({...user,isAdmin:true});assert.equal((await handleAuth(request('phone-requests/review',input),config,f.gateway)).status,400);assert.deepEqual(f.calls,[]);
   }
   const f=fixture({...user,isAdmin:true});assert.equal((await handleAuth(request('phone-requests/review',{id:phoneRequestId,decision:'approve'}),config,f.gateway)).status,200);assert.deepEqual(f.calls,['review-phone']);
+});
+
+test('port reports enforce the active session and use bounded, non-cacheable requests', async () => {
+  const live = { 'x-eco-data-mode': 'live' };
+  const price = 'port-fixtures?view=prices&portId=port-singapore&search=+VESSEL+&page=2';
+  const stats = 'port-fixtures?view=statistics&portId=port-singapore';
+  const admin = fixture({ ...user, isAdmin: true });
+  const ordinary = fixture(user);
+  const read = await handleAuth(request(price, undefined, live), config, ordinary.gateway);
+  assert.equal(read.status, 200);
+  assert.match(read.headers.get('cache-control')!, /private, no-store/);
+  assert.deepEqual(ordinary.calls, ['port-fixtures:{"view":"prices","portId":"port-singapore","search":"VESSEL","page":2}']);
+  assert.equal((await handleAuth(request(stats, undefined, live), config, ordinary.gateway)).status, 403);
+  assert.equal((await handleAuth(request(stats, undefined, live), config, admin.gateway)).status, 200);
+  assert.equal((await handleAuth(request(price, undefined, live), config, fixture(null).gateway)).status, 401);
+  const deniedModes: Record<string, string>[] = [{}, { 'x-eco-data-mode': 'test' }, { ...live, 'sec-fetch-site': 'cross-site' }];
+  for (const extra of deniedModes) {
+    assert.equal((await handleAuth(request(price, undefined, extra), config, admin.gateway)).status, 403);
+  }
+  for (const query of [stats + '&search=VESSEL', price + '&portId=port-tokyo', price.replace('VESSEL', '%00'),
+    price.replace('page=2', 'page=-1'), stats.replace('port-singapore', 'port-tokyo')]) {
+    assert.equal((await handleAuth(request(query, undefined, live), config, admin.gateway)).status, 400);
+  }
 });

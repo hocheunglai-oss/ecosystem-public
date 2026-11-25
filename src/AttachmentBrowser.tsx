@@ -158,7 +158,7 @@ export default function AttachmentBrowser({ scope, onClose }: { scope: Attachmen
   </Modal>;
 }
 
-function AttachmentPreview({ item }: { item: AttachmentItem }) {
+export function AttachmentPreview({ item }: { item: AttachmentItem }) {
   const pdf = item.type === 'file' && isPdfAttachment(item.mime, item.name);
   const [opened, setOpened] = useState(pdf);
   const [resource, setResource] = useState<{ url: string; blob: Blob; text?: string }>(), [error, setError] = useState('');

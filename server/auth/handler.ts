@@ -4,6 +4,7 @@ import type { AuthConfig } from './config.ts';
 import type { AuthGateway } from './gateway.ts';
 import { accountPrivacyNotice } from './privacy.ts';
 import { fixtureHistoryQuery } from './fixtureHistory.ts';
+import { portFixtureQuery } from './portFixtureReports.ts';
 import { ApiError, email, password, update, createUser, resetPassword, deleteUser, phoneChange, phoneChangeReview } from './validation.ts';
 
 export async function handleAuth(request: Request, config: AuthConfig, gateway: AuthGateway): Promise<Response> {
@@ -65,6 +66,15 @@ export async function handleAuth(request: Request, config: AuthConfig, gateway: 
         throw new ApiError(403, 'Access denied.');
       }
       return response(await gateway.listFixtureHistory(historyQuery));
+    }
+    if (path === '/api/access/port-fixtures') {
+      if (request.method !== 'GET') throw new ApiError(405, 'Method not allowed.');
+      if (preview || request.headers.get('x-eco-data-mode') !== 'live' || request.headers.get('sec-fetch-site') === 'cross-site') {
+        throw new ApiError(403, 'Access denied.');
+      }
+      const query = portFixtureQuery(url);
+      if (query.view === 'statistics' && !user.isAdmin && !user.isSpcTrader) throw new ApiError(403, 'Access denied.');
+      return response(await gateway.readPortFixtures(query));
     }
     if (path === '/api/access/privacy' && request.method === 'GET') return response(accountPrivacyNotice);
     if (path === '/api/access/preview/end' && request.method === 'POST') {

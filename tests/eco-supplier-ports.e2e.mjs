@@ -91,7 +91,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
  try{
  await page.goto(base);const nav=page.getByRole('navigation',{name:'Workspace navigation'});await nav.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();await nav.getByRole('button',{name:'Countries & Ports',exact:true}).click();
  const workspace=await openPort(page,'Singapore');let table=workspace.getByRole('table',{name:'Supplier results',exact:true});
- await expect(table.locator('tbody tr')).toHaveCount(3);await expect(workspace.getByRole('button',{name:'SPC VIEW',exact:true})).toHaveAttribute('aria-pressed','true');await expect(workspace.getByRole('button',{name:'Add supplier',exact:true})).toHaveCount(0);
+ await expect(table.locator('tbody tr')).toHaveCount(3);await expect(workspace.getByRole('button',{name:'SPC VIEW',exact:true})).toHaveCount(0);await expect(workspace.locator('.shared-suppliers.has-spc-view')).toBeVisible();await expect(workspace.getByRole('button',{name:'Add supplier',exact:true})).toHaveCount(0);
  await expect(table).not.toContainText('HONG KONG');await expect(table).not.toContainText('TOKYO');
  assert.ok(state.requests.some(r=>r.path==='list'&&new URLSearchParams(r.query).get('portId')==='port-singapore'));
  await page.screenshot({path:`${output}/${engine}-${width}-${theme}-singapore-initial.png`,fullPage:true});

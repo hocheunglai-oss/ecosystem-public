@@ -209,7 +209,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await dialog.getByRole('tab', { name: 'Price History', exact: true }).click();
       const prices = dialog.getByRole('region', { name: 'Price History', exact: true });
       await expect(prices.getByText('SYNTHETIC VESSEL', { exact: true })).toBeVisible();
-      await expect(prices.getByText('$610.25', { exact: true })).toBeVisible();
+      await expect(prices.getByText('$610.25 / MT', { exact: true })).toBeVisible();
       await prices.getByPlaceholder('Search price history').fill('unavailable');
       await expect(prices).toContainText('NO PRICES FOUND.');
       await prices.getByPlaceholder('Search price history').fill('vessel');

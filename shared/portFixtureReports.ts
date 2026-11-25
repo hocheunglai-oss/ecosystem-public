@@ -6,7 +6,7 @@ export interface PortFixtureQuery {
 }
 
 export interface PortFixturePrices {
-  items: { id: string; date: string; supplier: string; vessel: string; grade: string; quantity: string; price: number }[];
+  items: { id: string; date: string; supplier: string; vessel: string; grade: string; quantity: string; price: number | null; recordedPrice: string | null }[];
   total: number;
   pageSize: number;
 }

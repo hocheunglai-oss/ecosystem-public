@@ -13,4 +13,12 @@ export function syntheticIntelligence() {
 }
 export async function installIntelligence(context, snapshot = syntheticIntelligence()) {
   await context.route('**/api/intelligence/snapshot', route => route.fulfill({ json: { available: snapshot !== null, snapshot } }));
+  await context.route('**/api/access/port-fixtures?**', route => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.get('view') !== 'ranking') return route.fallback();
+    const suppliers = (snapshot?.suppliers ?? []).filter(item => item.portIds.includes(query.get('portId')));
+    const items = suppliers.toSorted((a, b) => b.fixtureCount - a.fixtureCount).slice(0, 10)
+      .map(({ id, name, grades, fixtureCount }) => ({ id, name, grades, fixtures: fixtureCount }));
+    return route.fulfill({ json: { items, supplierCount: suppliers.length, through: snapshot?.periodEnd, personal: false } });
+  });
 }

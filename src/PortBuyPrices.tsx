@@ -21,7 +21,7 @@ export default function PortBuyPrices({ portId, scopeId, title, search, searchRe
   const useLocal = dataMode === 'test' || !scopeId;
   const local = useLocal ? portBuyPriceRows(state, portId, search ?? query).flatMap(row =>
     row.buyPrice != null && Number.isFinite(row.buyPrice) && row.buyPrice > 0
-      ? [{ ...row, quantity: row.quantityText, price: row.buyPrice }] : []) : [];
+      ? [{ ...row, quantity: row.quantityText, price: row.buyPrice, recordedPrice: null }] : []) : [];
   const total = shared?.total ?? local.length;
   const pageSize = shared?.pageSize ?? 50;
   const rows = shared?.items ?? local.slice(page * pageSize, (page + 1) * pageSize);
@@ -39,10 +39,10 @@ export default function PortBuyPrices({ portId, scopeId, title, search, searchRe
       {!loading && !report.error && <div className="port-report-table table-wrap" role="region" aria-label="Historical buy prices" tabIndex={0}>
         <table>
           <thead><tr><th scope="col">DATE</th><th scope="col">SUPPLIER</th><th scope="col">VESSEL</th>
-            <th scope="col">GRADE</th><th scope="col">QUANTITY (MT)</th><th scope="col">BUY PRICE (USD / MT)</th></tr></thead>
+            <th scope="col">GRADE</th><th scope="col">QUANTITY (MT)</th><th scope="col">BUY PRICE</th></tr></thead>
           <tbody>{rows.length ? rows.map(row => (
             <tr key={row.id}><td>{reportDate.format(new Date(row.date))}</td><td>{row.supplier}</td>
-              <td>{row.vessel}</td><td>{row.grade}</td><td>{row.quantity}</td><td>{money(row.price)}</td></tr>
+              <td>{row.vessel}</td><td>{row.grade}</td><td>{row.quantity}</td><td>{row.recordedPrice ?? (row.price == null ? '—' : money(row.price) + ' / MT')}</td></tr>
           )) : <tr><td colSpan={6}>NO PRICES FOUND.</td></tr>}</tbody>
         </table>
       </div>}

@@ -324,12 +324,12 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    ].map(([id,key,portName,countryCode,isClosed])=>'('+[lit(id),lit(key),json({countryCode,portName,legalName:key,shortName:key}),isClosed?'now()':'null'].join(',')+')').join(','));
    await query([
     row(10,'REPORT MULTILINE','hsfo','75–125','$610.25',supplier,group),
-    row(11,'REPORT MULTILINE','lsmgo','25','720',supplier,group),
+    row(11,'REPORT MULTILINE','lsmgo','25','1.37 / liter',supplier,group),
     row(12,'REPORT MISSING','hsfo','1300',null,supplier,null,{ownerReview:{price:{status:'missing'}}}),
     row(13,'REPORT HELD','lsmgo','1500','530'),
     row(14,'REPORT CANCELLED','vlsfo','1700','540'),
     row(15,'REPORT TOKYO','lsmgo','2000','550',tokyo),
-    row(16,'REPORT CLOSED','vlsfo','55','560',closed),
+    row(16,'REPORT CLOSED','vlsfo','55','560.25/MT',closed),
    ].join(';'));
    await query("insert into eco_private.fixture_import_holds(source_workbook,source_tab,source_row,fixture_date,vessel,missing_field,related_fixture_id,source_evidence) " +
     "select 'fixture_port_workbook',1,17,fixture_date,vessel,'quantity',id,'{}' from " + history + " where source_row=13;" +
@@ -338,6 +338,8 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    const prices = await reports(0,'prices');
    assert.equal(prices.total,3);
    assert.equal(prices.pageSize,50);
+   assert.deepEqual(prices.items.filter(item=>item.recordedPrice).map(item=>item.recordedPrice).sort(),['1.37 / liter','560.25/MT']);
+   assert.equal((await reports(0,'prices','port-singapore','liter')).total,1);
    assert.equal((await reports(0,'prices','port-singapore','10 nov 2026 610.25')).items[0].price,610.25);
    assert.equal((await reports(0,'prices','port-singapore','multiline')).total,2);
    assert.deepEqual((await reports(0,'prices','port-singapore','',1)).items,[]);

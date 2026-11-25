@@ -1,11 +1,10 @@
 /* The reference's sun/moon pill is shared by home, sign-in and workspaces. */
 #root .theme-mode-toggle {
-  --mode-track: color-mix(in srgb, var(--ui-surface) 12%, transparent);
-  --mode-thumb: color-mix(in srgb, var(--ui-ink) 14%, transparent);
+  --mode-track: var(--ui-raised);
+  --mode-thumb: var(--ui-tab-active);
   --mode-active: var(--ui-ink);
-  --mode-inactive: var(--ui-ink);
-  --mode-border: color-mix(in srgb, var(--ui-ink) 28%, transparent);
-  --mode-shadow: none;
+  --mode-inactive: var(--ui-muted);
+  --mode-border: var(--ui-line);
 }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls button.theme-mode-toggle,
 #root .workspace-window .window-foot button.theme-mode-toggle {
@@ -25,7 +24,7 @@
   border-radius: 999px;
   background: var(--mode-track);
   color: var(--mode-inactive);
-  box-shadow: var(--mode-shadow);
+  box-shadow: none;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -37,6 +36,7 @@
   width: calc((100% - 8px) / 2);
   border-radius: inherit;
   background: var(--mode-thumb);
+  box-shadow: var(--ui-tab-shadow);
   transform: translateX(0);
   transition: transform 180ms ease, background-color 180ms ease;
   pointer-events: none;

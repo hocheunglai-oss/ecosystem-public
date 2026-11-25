@@ -216,9 +216,11 @@
   line-height: 1.5;
   white-space: nowrap;
 }
-.trader-hud .contribution-tier { color: #d2e0e7; background: #d2e0e710; border-color: #c1d4df70; }
-.trader-hud .contribution-tier[data-tier="active"] { color: #aeebea; background: #7ac8ca16; border-color: #7ac8caa0; }
-.trader-hud .contribution-tier[data-tier="outstanding"] { color: var(--ui-recognition); background: #c5f57412; border-color: var(--ui-recognition-border); }
+.hud-resource-activity > .contribution-tier { color: var(--ui-muted); background: var(--ui-raised); border-color: var(--ui-line); }
+.hud-resource-activity > .contribution-tier[data-tier="active"] { color: #246661; background: #e6f1ef; border-color: #9cbbb5; }
+.hud-resource-activity > .contribution-tier[data-tier="outstanding"] { color: var(--ui-recognition-ink); background: var(--ui-recognition); border-color: var(--ui-recognition-border); }
+:root[data-theme="dark"] .hud-resource-activity > .contribution-tier[data-tier="active"] { color: #aeebea; background: #7ac8ca16; border-color: #7ac8caa0; }
+:root[data-theme="dark"] .hud-resource-activity > .contribution-tier[data-tier="outstanding"] { color: var(--ui-recognition); background: #c5f57412; }
 .trader-hud .hud-resource-activity { gap: 8px; }
 .trader-hud .hud-resource-activity > .contribution-tier { max-width: none; font-size: var(--ui-text-meta); line-height: 1.5; white-space: nowrap; }
 .contribution-activity--compact { font-family: var(--ui-font); }

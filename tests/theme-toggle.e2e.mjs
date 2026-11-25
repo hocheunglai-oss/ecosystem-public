@@ -78,6 +78,14 @@ function unchangedGeometry(before, after, label) {
       `${label}: ${box.name} ${key} remains stable (${box[key]} to ${after[index][key]})`);
   });
 }
+function contrast(first, second) {
+  const luminance = rgb => rgb.slice(0, 3)
+    .map(value => value / 255)
+    .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+    .reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+  const a = luminance(first), b = luminance(second);
+  return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+}
 async function usable(page, control) {
   await expect(control).toBeVisible(); await expect(control).toBeEnabled();
   await control.scrollIntoViewIfNeeded();
@@ -97,15 +105,21 @@ async function usable(page, control) {
     return {
       actual: rgba(style.backgroundColor), expected: rgba(style.getPropertyValue('--mode-track').trim()),
       thumb: rgba(getComputedStyle(node.querySelector('.theme-mode-toggle__thumb')).backgroundColor),
-      ink: rgba(style.getPropertyValue('--ui-ink').trim()),
+      activeInk: rgba(style.getPropertyValue('--ui-ink').trim()),
+      inactiveInk: rgba(style.getPropertyValue('--ui-muted').trim()),
+      activeIndex: node.dataset.mode === 'dark' ? 1 : 0,
       icons: [...node.querySelectorAll('svg')].map(icon => rgba(getComputedStyle(icon).color)),
     };
   });
-  assert.deepEqual(paint.actual, paint.expected, 'Shared switch retains its exact translucent theme paint, including after hover/touch');
-  assert.ok(paint.actual[3] > 0 && paint.actual[3] < 64, 'Theme track remains subtly translucent');
-  assert.ok(paint.thumb[3] > 0 && paint.thumb[3] < 64, 'Selected thumb remains subtly translucent');
+  assert.deepEqual(paint.actual, paint.expected, 'The switch uses its shared track paint after hover and touch');
+  assert.equal(paint.actual[3], 255, 'The track keeps its contrast over any artwork');
+  assert.equal(paint.thumb[3], 255, 'The selected thumb stays opaque');
+  assert.notDeepEqual(paint.actual, paint.thumb, 'The thumb is visibly distinct from the track');
   assert.equal(paint.icons.length, 2, 'Both theme icons remain present');
-  for (const ink of paint.icons) assert.deepEqual(ink, paint.ink, 'Both icons use the shared dark/light theme ink');
+  assert.deepEqual(paint.icons[paint.activeIndex], paint.activeInk);
+  assert.deepEqual(paint.icons[1 - paint.activeIndex], paint.inactiveInk);
+  assert.ok(contrast(paint.activeInk, paint.thumb) >= 4.5, 'Selected icon is readable on the thumb');
+  assert.ok(contrast(paint.inactiveInk, paint.actual) >= 4.5, 'Other icon is readable on the track');
 
   const peers = await control.locator('..').locator(':scope > button, :scope > label').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().width && node.getBoundingClientRect().height).map(node => {
     const { left, right, top, bottom } = node.getBoundingClientRect(); return { left, right, top, bottom };
@@ -116,6 +130,19 @@ async function usable(page, control) {
     assert.ok(horizontal <= 1 || vertical <= 1, 'Display controls do not overlap');
   }
   return box;
+}
+async function workspacePaint(workspace, name, theme) {
+  const dark = theme === 'dark';
+  await expect(workspace).toHaveCSS('background-color', dark ? 'rgb(0, 0, 0)' : 'rgb(246, 245, 242)');
+  const selectors = name === 'Enquiries' ? ['.center-tabs > button', '[aria-selected="true"]']
+    : name === 'Settings' ? ['.tabs > button', '.active'] : null;
+  if (!selectors) return;
+  const [tab, active] = selectors;
+  const selected = workspace.locator(tab + active);
+  const idle = workspace.locator(`${tab}:not(${active})`).first();
+  await expect(selected).toHaveCSS('background-color', dark ? 'rgb(58, 58, 60)' : 'rgb(253, 252, 249)');
+  await expect(idle).toHaveCSS('background-color', dark ? 'rgb(44, 44, 46)' : 'rgb(239, 238, 235)');
+  await expect(selected).toHaveCSS('border-radius', '8px');
 }
 async function activateHalf(page, control, side, mobile) {
   const box = await usable(page, control), position = { x: box.width * (side === 'left' ? .2 : .8), y: box.height / 2 };
@@ -176,6 +203,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await authentication(page, 'login', () => page.getByRole('button', { name: 'Sign in', exact: true }).click());
       await mode(page, theme);
       await authentication(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' })); await mode(page, theme);
+      const contributionTier = page.locator('.hud-resource-activity > .contribution-tier');
+      await expect(contributionTier).toHaveCSS('color', theme === 'dark' ? 'rgb(174, 174, 178)' : 'rgb(95, 94, 88)');
       for (const name of ['Enquiries', 'Countries & Ports', 'Supplier Profiles', 'Settings']) {
         const workspace = await openWorkspace(page, name), control = controlIn(workspace.locator('.window-foot'));
         await mode(page, theme); await usable(page, control);
@@ -184,6 +213,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
         await activateHalf(page, control, 'right', mobile); theme = opposite(theme); await mode(page, theme);
         unchangedGeometry(before, await geometry(page), `${name} footer`);
         await control.focus(); await control.press('Space'); theme = opposite(theme); await mode(page, theme); await expect(control).toBeFocused();
+        await workspacePaint(workspace, name, theme);
         await page.screenshot({ path: `${out}/${engine}-${width}-${initialTheme}-${name.replaceAll(' ', '-')}-${theme}.png`, fullPage: true });
         await workspace.getByRole('button', { name: 'Close workspace', exact: true }).click(); await mode(page, theme);
       }
@@ -191,8 +221,8 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await authentication(page, 'logout', () => page.getByRole('button', { name: 'Sign out', exact: true }).click(), false); await mode(page, theme);
       await authentication(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' }), false); await mode(page, theme);
       assert.deepEqual(state.writes, ['/api/access/login', '/api/access/logout']); assert.deepEqual(state.unexpected, []); assert.deepEqual(errors, []);
-      results.push({ engine, width, initialTheme, passed: true, keyboard: ['Enter', 'Space'], bothHalves: true, geometryStable: true, workspaceFooters: ['Enquiries', 'Countries & Ports', 'Supplier Profiles', 'Settings'], persistence: true });
-      console.log(`PASS ${engine} ${width} ${initialTheme}: switch semantics, keyboard/touch, stable geometry and session persistence`);
+      results.push({ engine, width, initialTheme, passed: true, keyboard: ['Enter', 'Space'], bothHalves: true, geometryStable: true, workspaceFooters: ['Enquiries', 'Countries & Ports', 'Supplier Profiles', 'Settings'], persistence: true, workspacePaint: true });
+      console.log(`PASS ${engine} ${width} ${initialTheme}: switch, palette, stable geometry and session persistence`);
     } catch (error) {
       results.push({ engine, width, initialTheme, passed: false, error: error.message, errors, unexpected: state.unexpected });
       await page.screenshot({ path: `${out}/${engine}-${width}-${initialTheme}-failure.png`, fullPage: true }).catch(() => {}); throw error;

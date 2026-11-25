@@ -167,10 +167,14 @@ export function createDriveBackupClient({ authorizedFetch, config, beforeMutatio
           catch { fail('MUTATION_AUTHORIZATION_FAILED'); }
         }
         checkActive();
-        response = await abortRace(authorizedFetch(url, { ...options, redirect: 'error', signal: controller.signal }), controller.signal);
+        // Fetch treats even a locationless Drive 308 as a redirect in error mode.
+        // Inspect resumable responses without following any redirect.
+        response = await abortRace(authorizedFetch(url, {
+          ...options, redirect: resume ? 'manual' : 'error', signal: controller.signal,
+        }), controller.signal);
         check(!response.redirected && (!response.url || response.url === url), 'REDIRECT_REJECTED');
         if (response.status >= 300 && response.status < 400)
-          check(resume && response.status === 308 && !response.headers.get('location'), 'REDIRECT_REJECTED');
+          check(resume && response.status === 308 && !response.headers.has('location'), 'REDIRECT_REJECTED');
         if (!allowed.includes(response.status)) {
           if ([408, 429, 500, 502, 503, 504].includes(response.status) && attempt < retries) {
             await abortRace(response.body?.cancel().catch(() => {}) || Promise.resolve(), controller.signal);

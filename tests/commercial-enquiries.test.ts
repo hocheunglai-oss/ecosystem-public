@@ -64,6 +64,26 @@ test('fixture register uses separate editor RPCs and rejects altered authority a
   for (const request of [read(), put(input)]) assert.equal((await handleCommercialEnquiries(request, config, preview.gateway)).status, 403);
   assert.deepEqual(preview.calls, []);
 });
+test('fixture cancellation and reinstatement accept either editor version or pending-owner revision', async () => {
+  const resource = origin + '/api/enquiries/fixtures';
+  const id = randomUUID();
+  const send = (input: unknown, f = fixture()) => handleCommercialEnquiries(new Request(resource, { method: 'POST', headers: {
+    origin, 'X-Eco-Data-Mode': 'live', 'X-Eco-Request': '1', 'Content-Type': 'application/json',
+  }, body: JSON.stringify(input) }), config, f.gateway);
+  const base = { dataMode: 'live', id, requestId: randomUUID() };
+  const cancel = { ...base, action: 'cancel', version: 'a'.repeat(32) };
+  const reinstate = { ...base, action: 'reinstate', expectedRevision: 7 };
+  const f = fixture();
+  for (const input of [cancel, reinstate]) assert.equal((await send(input, f)).status, 200);
+  assert.deepEqual(f.calls, [cancel, reinstate].map(input => ({ name: 'eco_change_fixture_cancellation', args: { p_input: input } })));
+  for (const bad of [{ ...cancel, expectedRevision: 7 }, { ...reinstate, reason: 'unexpected' }, { ...reinstate, expectedRevision: 0 }]) {
+    assert.equal((await send(bad)).status, 400);
+  }
+  const previous = fixture();
+  const legacy = { ...base, action: 'cancel', expectedRevision: 7, reason: 'Existing client' };
+  assert.equal((await send(legacy, previous)).status, 200);
+  assert.deepEqual(previous.calls, [{ name: 'eco_mutate_fixture', args: { p_input: legacy } }]);
+});
 test('conflicts preserve409, outages fail503 without fallback; refreshed cookies remain private',async()=>{
  for(const error of [new ApiError(409,'This record changed.'),new Error('PRIVATE-SENTINEL')]){const f=fixture();f.gateway.cookies.push('eco=fixture; HttpOnly');f.gateway.authenticatedRpc=async()=>{throw error;};const r=await handleCommercialEnquiries(post(payload()),config,f.gateway);assert.equal(r.status,error instanceof ApiError?409:503);assert.match(r.headers.get('cache-control')??'',/private.*no-store/);assert.match(r.headers.get('set-cookie')??'',/HttpOnly/);assert.doesNotMatch(await r.text(),/PRIVATE-SENTINEL/);}
 });

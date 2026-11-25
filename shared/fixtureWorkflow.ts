@@ -14,6 +14,7 @@ export interface FixtureAssignment extends FixtureSchedule {
   id: string;
   revision: number;
   status: 'pending' | 'confirmed' | 'cancelled' | 'deleted';
+  confirmed: boolean;
   supplierTraderId: string;
   supplierTrader: string;
 }
@@ -23,18 +24,6 @@ export interface FixtureSupplyLine {
   supplierId: string;
   accountId: string;
   buyPrice: number;
-}
-export interface FixtureBooking extends FixtureAssignment {
-  vessel: string;
-  imo: string;
-  reference: string;
-  buyerTrader: string;
-  confirmedAt: string | null;
-  canConfirm: boolean;
-  canCancel: boolean;
-  cancellation: { at: string; by: string; reason: string } | null;
-  requested: CommercialProduct[];
-  lines: (FixtureSupplyLine & { supplier: string; supplierAvailable: boolean; account: string; barging?: string | null })[];
 }
 export interface FixtureOptions {
   traders: { id: string; name: string; office: string }[];
@@ -51,4 +40,14 @@ export function isFixtureDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^(?:19|20)\d\d-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export function fixtureEtaTo({ eta, etaEnd, etaKind }: { eta: string | null; etaEnd: string | null; etaKind: FixtureEtaKind }) {
+  return etaKind === 'date' ? eta ?? '' : etaEnd ?? '';
+}
+
+export function fixtureEtaRange(eta: string | null, to: string): { etaEnd: string | null; etaKind: FixtureEtaKind } | null {
+  if (!to) return { etaEnd: null, etaKind: eta ? 'earliest' : 'date' };
+  if (!eta || !isFixtureDate(to) || to < eta) return null;
+  return to === eta ? { etaEnd: null, etaKind: 'date' } : { etaEnd: to, etaKind: 'range' };
 }

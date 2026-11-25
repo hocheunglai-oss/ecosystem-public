@@ -5,9 +5,9 @@ import type {
 import { assertPreviewWritable } from './previewGuard';
 import { assertLiveDataWritable } from './testWorkspaceGuard';
 import {
-  fixtureGrades, isFixtureDate, type FixtureAssignment, type FixtureBooking, type FixtureMutation, type FixtureOptions,
+  fixtureGrades, isFixtureDate, type FixtureAssignment, type FixtureMutation, type FixtureOptions,
 } from '../../shared/fixtureWorkflow';
-import type { FixtureRegisterEditor, FixtureRegisterMutation } from '../../shared/fixtureHistory';
+import type { FixtureCancellationMutation, FixtureRegisterEditor, FixtureRegisterMutation } from '../../shared/fixtureHistory';
 
 const unavailable = () => new Error('Enquiries are unavailable. Try again.');
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -40,7 +40,7 @@ export function commercialPage(value: unknown, owner?: string): CommercialEnquir
   if (!record(value) || !Array.isArray(value.items) || value.items.length > 100 || value.nextCursor !== null && typeof value.nextCursor !== 'string') throw unavailable();
   return { items: value.items.map(item => summary(item, owner)), nextCursor: value.nextCursor };
 }
-async function request(query: URLSearchParams, input?: CommercialEnquiryMutation | FixtureMutation | FixtureRegisterMutation, signal?: AbortSignal, resource: 'records' | 'fixtures' = 'records'): Promise<unknown> {
+async function request(query: URLSearchParams, input?: CommercialEnquiryMutation | FixtureMutation | FixtureRegisterMutation | FixtureCancellationMutation, signal?: AbortSignal, resource: 'records' | 'fixtures' = 'records'): Promise<unknown> {
   // Reads also stay closed in TEST and VIEW AS; neither mode may reveal LIVE records.
   assertPreviewWritable(); assertLiveDataWritable();
   const response = await fetch(`/api/enquiries/${resource}${query.size ? `?${query}` : ''}`, {
@@ -90,22 +90,10 @@ function fixtureAssignment(value: unknown): FixtureAssignment {
       || !isFixtureDate(value.date) || !isFixtureDate(value.eta) || typeof value.etaReviewed !== 'boolean'
       || !['date', 'range', 'earliest'].includes(String(value.etaKind))
       || (value.etaKind === 'range' ? !isFixtureDate(value.etaEnd) || value.etaEnd <= value.eta : value.etaEnd !== null)) throw unavailable();
-  return { id: value.id, revision: Number(value.revision),
+  return { id: value.id, revision: Number(value.revision), confirmed: value.status === 'confirmed',
     status: value.deleted === true ? 'deleted' : value.cancelled === true ? 'cancelled' : value.status, supplierTraderId: value.supplierTraderId,
     supplierTrader: value.supplierTrader, date: value.date, eta: value.eta, etaEnd: value.etaEnd as string | null,
     etaKind: value.etaKind as FixtureAssignment['etaKind'], etaReviewed: value.etaReviewed };
-}
-function fixtureDetail(value: unknown, id: string): FixtureBooking {
-  const assignment = fixtureAssignment(value);
-  if (!record(value) || assignment.id !== id || !strings(value, ['vessel', 'imo', 'reference', 'buyerTrader']) || typeof value.canConfirm !== 'boolean'
-      || typeof value.canCancel !== 'boolean' || (value.cancellation !== null && !strings(value.cancellation, ['at', 'by', 'reason']))
-      || (value.confirmedAt !== null && typeof value.confirmedAt !== 'string')
-      || !Array.isArray(value.requested) || value.requested.some(product => !record(product) || !fixtureGrades.includes(product.grade as typeof fixtureGrades[number]) || typeof product.quantityText !== 'string')
-      || !Array.isArray(value.lines) || value.lines.length > 30
-      || value.lines.some(line => !record(line) || !fixtureGrades.includes(line.grade as typeof fixtureGrades[number])
-        || !uuid(line.supplierId) || !strings(line, ['supplier', 'account', 'accountId']) || typeof line.supplierAvailable !== 'boolean'
-        || !Number.isFinite(line.quantity) || !Number.isFinite(line.buyPrice))) throw unavailable();
-  return { ...value, ...assignment } as unknown as FixtureBooking;
 }
 export const fixtureApi = {
   options: async (signal?: AbortSignal): Promise<FixtureOptions> => {
@@ -120,7 +108,6 @@ export const fixtureApi = {
     }
     return value as unknown as FixtureOptions;
   },
-  detail: async (id: string, signal?: AbortSignal) => fixtureDetail(await request(new URLSearchParams({ id }), undefined, signal, 'fixtures'), id),
   editor: async (id: string, signal?: AbortSignal) => {
     const value = await request(new URLSearchParams({ edit: id }), undefined, signal, 'fixtures');
     if (!record(value) || !record(value.item) || value.item.id !== id || !record(value.fields) || !Array.isArray(value.fields.lines)
@@ -133,6 +120,13 @@ export const fixtureApi = {
     if (!record(value) || value.id !== input.id) throw unavailable();
   },
   assign: async (input: Extract<FixtureMutation, { action: 'assign' }>) => fixtureAssignment(await request(new URLSearchParams(), input, undefined, 'fixtures')),
-  confirm: async (input: Extract<FixtureMutation, { action: 'confirm' }>) => fixtureDetail(await request(new URLSearchParams(), input, undefined, 'fixtures'), input.id),
-  cancel: async (input: Extract<FixtureMutation, { action: 'cancel' }>) => fixtureDetail(await request(new URLSearchParams(), input, undefined, 'fixtures'), input.id),
+  changeCancellation: async (input: FixtureCancellationMutation) => {
+    const value = await request(new URLSearchParams(), input, undefined, 'fixtures');
+    if (!record(value) || value.id !== input.id) throw unavailable();
+    if ('expectedRevision' in input) {
+      const assignment = fixtureAssignment(value.assignment);
+      if (assignment.id !== input.id) throw unavailable();
+      return assignment;
+    }
+  },
 };

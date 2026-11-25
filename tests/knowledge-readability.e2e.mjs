@@ -6,6 +6,7 @@ import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import { installProfileTabMocks } from './fixtures/profile-tabs.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
+import { installIntelligence } from './fixtures/intelligence.mjs';
 
 const base = process.env.ECO_READABILITY_ORIGIN || 'http://127.0.0.1:4398';
 const out = process.env.ECO_READABILITY_OUTPUT || '/private/tmp/eco-knowledge-readability-oct21';
@@ -25,7 +26,7 @@ async function fixture(context) {
   await context.route('**/api/access/**', route => route.fulfill(state.user ? {json:{user:state.user,preview:state.preview,users:[],offices:[],requests:[]}} : {status:401,json:{message:'Sign in required.'}}));
   await context.route('**/api/admin/**', route => route.fulfill({json:{count:0,items:[],hats:[],timeZone:'Asia/Hong_Kong'}}));
   await context.route('**/api/suppliers/**', route => route.fulfill({json:{items:[],total:0,page:1,pageSize:50}}));
-  await context.route('**/api/intelligence/snapshot*', route => route.fulfill({json:{suppliers:[],fixtureCounts:[]}}));
+  await installIntelligence(context);
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({json:{enabled:false}}));
   return state;
 }
@@ -127,6 +128,10 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
       await expect(workspace.locator('.location-search')).toBeVisible();await expect(workspace.locator('.knowledge-profile-search')).toBeVisible();await expect(btn(workspace,'Public holidays')).toBeVisible();await expect(workspace.locator('.window-foot')).toBeVisible();
       await selectCountry(workspace,'Singapore');await workspace.getByRole('tab',{name:'PORT INFORMATION',exact:true}).click();
       const infoHeader=workspace.locator('.knowledge-facts > header');
+      const headingPaint=theme==='dark'?'rgb(44, 44, 46)':'rgb(237, 237, 237)';
+      await expect(infoHeader).toHaveCSS('background-color',headingPaint);
+      await expect(workspace.locator('.knowledge-top-suppliers > header')).toHaveCSS('background-color',headingPaint);
+      await expect(workspace.locator('.knowledge-supplier-bar > i').first()).toHaveCSS('background-color',theme==='dark'?'rgb(174, 174, 178)':'rgb(93, 93, 93)');
       const alignment=await infoHeader.evaluate(node=>{const heading=node.querySelector('h3').getBoundingClientRect(),action=node.querySelector('.attachments-control').getBoundingClientRect();return {headingRight:heading.right,actionLeft:action.left,actionRight:action.right,right:node.getBoundingClientRect().right};});
       assert.ok(alignment.actionLeft>=alignment.headingRight-1&&alignment.right-alignment.actionRight<=20,'Key Info attachments align at header right');
       await infoHeader.scrollIntoViewIfNeeded();await shot('key-info-read');

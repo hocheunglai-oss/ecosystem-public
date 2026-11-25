@@ -103,23 +103,28 @@ async function usable(page, control) {
       return [...context.getImageData(0, 0, 1, 1).data];
     };
     return {
+      onArtwork: Boolean(node.closest('.home-display-controls')),
       actual: rgba(style.backgroundColor), expected: rgba(style.getPropertyValue('--mode-track').trim()),
       thumb: rgba(getComputedStyle(node.querySelector('.theme-mode-toggle__thumb')).backgroundColor),
-      activeInk: rgba(style.getPropertyValue('--ui-ink').trim()),
-      inactiveInk: rgba(style.getPropertyValue('--ui-muted').trim()),
+      activeInk: rgba(style.getPropertyValue('--mode-active').trim()),
+      inactiveInk: rgba(style.getPropertyValue('--mode-inactive').trim()),
       activeIndex: node.dataset.mode === 'dark' ? 1 : 0,
       icons: [...node.querySelectorAll('svg')].map(icon => rgba(getComputedStyle(icon).color)),
     };
   });
   assert.deepEqual(paint.actual, paint.expected, 'The switch uses its shared track paint after hover and touch');
-  assert.equal(paint.actual[3], 255, 'The track keeps its contrast over any artwork');
-  assert.equal(paint.thumb[3], 255, 'The selected thumb stays opaque');
+  if (paint.onArtwork) {
+    assert.ok([paint.actual, paint.thumb].every(fill => fill[3] > 0 && fill[3] < 64), 'Artwork remains visible through the track and selected thumb');
+  } else {
+    assert.equal(paint.actual[3], 255, 'The workspace track is opaque');
+    assert.equal(paint.thumb[3], 255, 'The workspace thumb is opaque');
+    assert.ok(contrast(paint.activeInk, paint.thumb) >= 4.5, 'Selected icon is readable on the thumb');
+    assert.ok(contrast(paint.inactiveInk, paint.actual) >= 4.5, 'Other icon is readable on the track');
+  }
   assert.notDeepEqual(paint.actual, paint.thumb, 'The thumb is visibly distinct from the track');
   assert.equal(paint.icons.length, 2, 'Both theme icons remain present');
   assert.deepEqual(paint.icons[paint.activeIndex], paint.activeInk);
   assert.deepEqual(paint.icons[1 - paint.activeIndex], paint.inactiveInk);
-  assert.ok(contrast(paint.activeInk, paint.thumb) >= 4.5, 'Selected icon is readable on the thumb');
-  assert.ok(contrast(paint.inactiveInk, paint.actual) >= 4.5, 'Other icon is readable on the track');
 
   const peers = await control.locator('..').locator(':scope > button, :scope > label').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().width && node.getBoundingClientRect().height).map(node => {
     const { left, right, top, bottom } = node.getBoundingClientRect(); return { left, right, top, bottom };
@@ -131,17 +136,32 @@ async function usable(page, control) {
   }
   return box;
 }
+async function translucent(controls) {
+  await expect(controls.first()).toBeVisible();
+  const fills = await controls.evaluateAll(nodes => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    return nodes.map(node => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = getComputedStyle(node).backgroundColor;
+      ctx.fillRect(0, 0, 1, 1);
+      return { name: node.className, alpha: ctx.getImageData(0, 0, 1, 1).data[3] / 255 };
+    });
+  });
+  for (const { name, alpha } of fills) assert.ok(alpha > 0 && alpha < .9, `${name} has a visible translucent fill`);
+}
 async function workspacePaint(workspace, name, theme) {
   const dark = theme === 'dark';
-  await expect(workspace).toHaveCSS('background-color', dark ? 'rgb(0, 0, 0)' : 'rgb(246, 245, 242)');
+  await expect(workspace).toHaveCSS('background-color', dark ? 'rgb(0, 0, 0)' : 'rgb(245, 245, 245)');
   const selectors = name === 'Enquiries' ? ['.center-tabs > button', '[aria-selected="true"]']
     : name === 'Settings' ? ['.tabs > button', '.active'] : null;
   if (!selectors) return;
   const [tab, active] = selectors;
   const selected = workspace.locator(tab + active);
   const idle = workspace.locator(`${tab}:not(${active})`).first();
-  await expect(selected).toHaveCSS('background-color', dark ? 'rgb(58, 58, 60)' : 'rgb(253, 252, 249)');
-  await expect(idle).toHaveCSS('background-color', dark ? 'rgb(44, 44, 46)' : 'rgb(239, 238, 235)');
+  await expect(selected).toHaveCSS('background-color', dark ? 'rgb(58, 58, 60)' : 'rgb(253, 253, 253)');
+  await expect(idle).toHaveCSS('background-color', dark ? 'rgb(44, 44, 46)' : 'rgb(237, 237, 237)');
   await expect(selected).toHaveCSS('border-radius', '8px');
 }
 async function activateHalf(page, control, side, mobile) {
@@ -166,6 +186,7 @@ async function openWorkspace(page, name) {
     const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
     const group = nav.getByRole('button', { name: name === 'Enquiries' ? 'Trading' : 'Ports & Suppliers', exact: true });
     if (await group.getAttribute('aria-expanded') !== 'true') await group.click();
+    await translucent(nav.locator('.is-open .launcher-menu'));
     await nav.getByRole('button', { name, exact: true }).click();
   }
   const workspace = page.getByRole('dialog', { name, exact: true }); await expect(workspace).toBeVisible(); return workspace;
@@ -187,6 +208,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     try {
       await authentication(page, 'session', () => page.goto(base, { waitUntil: 'domcontentloaded' }), false);
       await mode(page, theme); const home = homeControl(page); await usable(page, home);
+      await translucent(page.getByRole('button', { name: 'Sign in', exact: true }));
       const entryGeometry = await geometry(page);
       await home.focus(); await home.press('Enter'); theme = opposite(theme); await mode(page, theme); await expect(home).toBeFocused();
       const outline = await home.evaluate(node => ({ width: parseFloat(getComputedStyle(node).outlineWidth), style: getComputedStyle(node).outlineStyle }));
@@ -203,8 +225,9 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await authentication(page, 'login', () => page.getByRole('button', { name: 'Sign in', exact: true }).click());
       await mode(page, theme);
       await authentication(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' })); await mode(page, theme);
+      await translucent(page.locator('.trader-hud[data-trader-hud], .world-launcher button.launcher-toggle'));
       const contributionTier = page.locator('.hud-resource-activity > .contribution-tier');
-      await expect(contributionTier).toHaveCSS('color', theme === 'dark' ? 'rgb(174, 174, 178)' : 'rgb(95, 94, 88)');
+      await expect(contributionTier).toHaveCSS('color', theme === 'dark' ? 'rgb(174, 174, 178)' : 'rgb(93, 93, 93)');
       for (const name of ['Enquiries', 'Countries & Ports', 'Supplier Profiles', 'Settings']) {
         const workspace = await openWorkspace(page, name), control = controlIn(workspace.locator('.window-foot'));
         await mode(page, theme); await usable(page, control);

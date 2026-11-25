@@ -881,13 +881,12 @@
 
 /* Shared profile headings and compact search across every information tab. */
 .knowledge {
-  --knowledge-heading: color-mix(in srgb, #1a9aaa 17%, var(--surface));
-  --knowledge-section-heading: color-mix(in srgb, #1a9aaa 10%, var(--surface));
+  --knowledge-section-heading: var(--ui-raised);
 }
 .knowledge-header {
   flex-wrap: wrap;
-  background: var(--knowledge-heading);
-  border-bottom-color: color-mix(in srgb, #1a9aaa 35%, var(--line));
+  background: var(--ui-raised);
+  border-bottom-color: var(--ui-line);
 }
 .knowledge-profile-search {
   display: flex;
@@ -1002,7 +1001,7 @@
 .knowledge-top-suppliers .knowledge-top-supplier-count { display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 10px; }
 .knowledge-top-suppliers .knowledge-top-supplier-count strong { min-width: 24px; text-align: right; font-size: 12px; }
 .knowledge-supplier-bar { display: block; height: 5px; width: 100%; max-width: 100px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.knowledge-supplier-bar > i { display: block; height: 100%; background: #53aeba; border-radius: inherit; }
+.knowledge-supplier-bar > i { display: block; height: 100%; background: var(--ui-muted); border-radius: inherit; }
 .knowledge-fact-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; }
 .knowledge-fact-title .knowledge-entry-audit { margin-left: auto; font-weight: 400; }
 @media(max-width:650px) {

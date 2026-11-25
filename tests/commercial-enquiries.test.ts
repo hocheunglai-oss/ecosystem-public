@@ -40,6 +40,30 @@ test('CSRF, body, route and content checks precede database operations',async()=
  for(const r of [post(payload(),{origin:'https://other.test'}),post(payload(),{'X-Eco-Request':''}),post(payload(),{'sec-fetch-site':'cross-site'}),post(payload(),{'content-type':'text/plain'}),post({huge:'x'.repeat(131073)}),get('/other'),new Request(url,{method:'DELETE'})]){const f=fixture();assert.ok((await handleCommercialEnquiries(r,config,f.gateway)).status>=400);assert.deepEqual(f.calls,[]);}
  const f=fixture();assert.equal((await handleCommercialEnquiries(post(payload(),{origin:config.deploymentOrigin!}),config,f.gateway)).status,200);
 });
+test('fixture register uses separate editor RPCs and rejects altered authority and dates', async () => {
+  const resource = origin + '/api/enquiries/fixtures';
+  const id = randomUUID();
+  const put = (input: unknown) => new Request(resource, { method: 'POST', headers: { origin,
+    'X-Eco-Data-Mode': 'live', 'X-Eco-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+  const read = () => new Request(resource + '?edit=' + id, { headers: { 'X-Eco-Data-Mode': 'live' } });
+  const input = { action: 'update', dataMode: 'live', version: 'a'.repeat(32), requestId: randomUUID(), id, quantityReviewed: false,
+    fields: { vessel: 'SYNTHETIC', imo: '9876543', date: '2026-11-25', eta: '2026-11-27', etaEnd: '2026-11-28',
+      etaKind: 'range', etaReviewed: false, lines: [] } };
+  const allowed = fixture();
+  assert.equal((await handleCommercialEnquiries(read(), config, allowed.gateway)).status, 200);
+  assert.equal((await handleCommercialEnquiries(put(input), config, allowed.gateway)).status, 200);
+  assert.deepEqual(allowed.calls, [{ name: 'eco_get_fixture_editor', args: { p_id: id } },
+    { name: 'eco_mutate_fixture_register', args: { p_input: input } }]);
+  const rejected = fixture();
+  for (const bad of [{ ...input, version: 'invalid' }, { ...input, buyerTraderId: user.id },
+    { ...input, fields: { ...input.fields, etaEnd: '2026-11-26' } }, { ...input, fields: { ...input.fields, imo: '123456' } }]) {
+    assert.equal((await handleCommercialEnquiries(put(bad), config, rejected.gateway)).status, 400);
+  }
+  assert.deepEqual(rejected.calls, []);
+  const preview = fixture({ ...user, isAdmin: true }, { role: 'admin', officeId: 'hk', officeName: 'Hong Kong', readOnly: true });
+  for (const request of [read(), put(input)]) assert.equal((await handleCommercialEnquiries(request, config, preview.gateway)).status, 403);
+  assert.deepEqual(preview.calls, []);
+});
 test('conflicts preserve409, outages fail503 without fallback; refreshed cookies remain private',async()=>{
  for(const error of [new ApiError(409,'This record changed.'),new Error('PRIVATE-SENTINEL')]){const f=fixture();f.gateway.cookies.push('eco=fixture; HttpOnly');f.gateway.authenticatedRpc=async()=>{throw error;};const r=await handleCommercialEnquiries(post(payload()),config,f.gateway);assert.equal(r.status,error instanceof ApiError?409:503);assert.match(r.headers.get('cache-control')??'',/private.*no-store/);assert.match(r.headers.get('set-cookie')??'',/HttpOnly/);assert.doesNotMatch(await r.text(),/PRIVATE-SENTINEL/);}
 });

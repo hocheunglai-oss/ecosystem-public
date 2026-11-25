@@ -75,15 +75,47 @@
 }
 
 .fixture-history-layout { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
-.fixture-history { flex: 1; }
-.fixture-history :is(th, td) { font-size: 13px; min-width: 78px; }
-.fixture-history :is(th,td):nth-child(4) { min-width: 180px; white-space: normal; overflow-wrap: anywhere; }
-.fixture-history td:nth-child(4) button { text-align: left; }
+.fixture-history { flex: 1; gap: 8px; --record-cell: var(--ui-field); }
+.fixture-history :is(th,td) { height: 28px; min-width: 72px; padding: 3px 8px; }
+.fixture-history :is(th,td):nth-child(4) { min-width: 180px; max-width: 440px; }
+.fixture-history th button[data-filtered="true"], .fixture-history button[aria-pressed="true"] { background: var(--ui-selection); color: var(--ui-ink); }
+.fixture-vessel { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; text-align: left; }
+.fixture-vessel span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.fixture-vessel span + span { flex: none; font-size: var(--ui-text-meta); }
+#root .fixture-cancelled { color: var(--ui-danger); font-weight: 700; }
 .fixture-history .record-sheet__pagination > div { width: auto; margin-left: auto; }
 .fixture-dialog { padding: 16px; overflow-wrap: anywhere; }
 .fixture-dialog fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .fixture-dialog__record dd { margin: 0; }
 .fixture-dialog__check { display: flex; align-items: center; gap: 8px; }
+.fixture-editor__booking { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px 16px; max-width: 760px; }
+.fixture-editor__booking .field, .fixture-editor__lines .field { min-width: 0; margin: 0; }
+.fixture-editor__metadata { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-block: 12px; }
+.fixture-editor__metadata dt { font-size: var(--ui-text-meta); color: var(--ui-muted); }
+.fixture-editor__metadata dd { margin: 0; }
+.fixture-editor__lines { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 12px 0; }
+.fixture-editor__lines :is(td,th) { padding: 5px; text-align: start; border: 1px solid var(--ui-line); }
+.fixture-editor__lines th { background: var(--ui-raised); white-space: normal; }
+.fixture-editor__lines th:nth-child(3) { width: 23%; }
+.fixture-editor__lines th:last-child { width: 56px; }
+.fixture-editor__lines :is(input,select), .fixture-editor__booking :is(input,select) { width: 100%; min-width: 0; }
+@media (min-width: 701px) { .fixture-editor__lines .field > span { display: none; } }
+@media (max-width: 700px) {
+ .fixture-history :is(th,td) { min-height: 44px; padding-block: 0; }
+ .fixture-history th.record-sheet__date { left: auto; }
+ .fixture-history :is(th button,.fixture-vessel) { min-height: 44px; }
+ .fixture-editor__booking { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .fixture-editor__booking .field:first-child { grid-column: 1 / -1; }
+ .fixture-editor__lines, .fixture-editor__lines :is(thead,tbody,td) { display: block; }
+ .fixture-editor__lines thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+ .fixture-editor__lines tr { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: 6px; border: 1px solid var(--ui-line); margin-bottom: 8px; }
+ .fixture-editor__lines td { border: 0; }
+ .fixture-editor__lines td:nth-child(3) { grid-column: 1 / -1; }
+}
+@media (max-width: 380px) {
+ .fixture-editor__booking { grid-template-columns: minmax(0,1fr); }
+ .fixture-editor__lines td:nth-child(4) { grid-column: 1 / -1; }
+}
 .fixture-history__legacy { flex: 0 1 auto; max-height: 40%; overflow: auto; }
 .fixture-history__legacy summary { cursor: pointer; margin-block-end: 8px; }
 .fixture-history__legacy .record-sheet { height: auto; }

@@ -7,6 +7,7 @@ import { assertLiveDataWritable } from './testWorkspaceGuard';
 import {
   fixtureGrades, isFixtureDate, type FixtureAssignment, type FixtureBooking, type FixtureMutation, type FixtureOptions,
 } from '../../shared/fixtureWorkflow';
+import type { FixtureRegisterEditor, FixtureRegisterMutation } from '../../shared/fixtureHistory';
 
 const unavailable = () => new Error('Enquiries are unavailable. Try again.');
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -39,7 +40,7 @@ export function commercialPage(value: unknown, owner?: string): CommercialEnquir
   if (!record(value) || !Array.isArray(value.items) || value.items.length > 100 || value.nextCursor !== null && typeof value.nextCursor !== 'string') throw unavailable();
   return { items: value.items.map(item => summary(item, owner)), nextCursor: value.nextCursor };
 }
-async function request(query: URLSearchParams, input?: CommercialEnquiryMutation | FixtureMutation, signal?: AbortSignal, resource: 'records' | 'fixtures' = 'records'): Promise<unknown> {
+async function request(query: URLSearchParams, input?: CommercialEnquiryMutation | FixtureMutation | FixtureRegisterMutation, signal?: AbortSignal, resource: 'records' | 'fixtures' = 'records'): Promise<unknown> {
   // Reads also stay closed in TEST and VIEW AS; neither mode may reveal LIVE records.
   assertPreviewWritable(); assertLiveDataWritable();
   const response = await fetch(`/api/enquiries/${resource}${query.size ? `?${query}` : ''}`, {
@@ -89,7 +90,8 @@ function fixtureAssignment(value: unknown): FixtureAssignment {
       || !isFixtureDate(value.date) || !isFixtureDate(value.eta) || typeof value.etaReviewed !== 'boolean'
       || !['date', 'range', 'earliest'].includes(String(value.etaKind))
       || (value.etaKind === 'range' ? !isFixtureDate(value.etaEnd) || value.etaEnd <= value.eta : value.etaEnd !== null)) throw unavailable();
-  return { id: value.id, revision: Number(value.revision), status: value.cancelled === true ? 'cancelled' : value.status, supplierTraderId: value.supplierTraderId,
+  return { id: value.id, revision: Number(value.revision),
+    status: value.deleted === true ? 'deleted' : value.cancelled === true ? 'cancelled' : value.status, supplierTraderId: value.supplierTraderId,
     supplierTrader: value.supplierTrader, date: value.date, eta: value.eta, etaEnd: value.etaEnd as string | null,
     etaKind: value.etaKind as FixtureAssignment['etaKind'], etaReviewed: value.etaReviewed };
 }
@@ -119,6 +121,17 @@ export const fixtureApi = {
     return value as unknown as FixtureOptions;
   },
   detail: async (id: string, signal?: AbortSignal) => fixtureDetail(await request(new URLSearchParams({ id }), undefined, signal, 'fixtures'), id),
+  editor: async (id: string, signal?: AbortSignal) => {
+    const value = await request(new URLSearchParams({ edit: id }), undefined, signal, 'fixtures');
+    if (!record(value) || !record(value.item) || value.item.id !== id || !record(value.fields) || !Array.isArray(value.fields.lines)
+      || typeof value.version !== 'string' || !/^[0-9a-f]{32}$/.test(value.version) || !Array.isArray(value.suppliers)
+      || !Array.isArray(value.accounts) || !record(value.quantityReview)) throw unavailable();
+    return value as unknown as FixtureRegisterEditor;
+  },
+  edit: async (input: FixtureRegisterMutation) => {
+    const value = await request(new URLSearchParams(), input, undefined, 'fixtures');
+    if (!record(value) || value.id !== input.id) throw unavailable();
+  },
   assign: async (input: Extract<FixtureMutation, { action: 'assign' }>) => fixtureAssignment(await request(new URLSearchParams(), input, undefined, 'fixtures')),
   confirm: async (input: Extract<FixtureMutation, { action: 'confirm' }>) => fixtureDetail(await request(new URLSearchParams(), input, undefined, 'fixtures'), input.id),
   cancel: async (input: Extract<FixtureMutation, { action: 'cancel' }>) => fixtureDetail(await request(new URLSearchParams(), input, undefined, 'fixtures'), input.id),

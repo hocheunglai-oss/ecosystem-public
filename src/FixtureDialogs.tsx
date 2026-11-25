@@ -3,13 +3,9 @@ import type { CommercialEnquirySummary } from '../shared/commercialEnquiries';
 import type { FixtureHistoryItem } from '../shared/fixtureHistory';
 import {
   fixtureGrades, isFixtureDate, type FixtureAssignment, type FixtureBooking, type FixtureEtaKind,
-  type FixtureGrade, type FixtureOptions, type FixtureSupplyLine,
+  type FixtureOptions,
 } from '../shared/fixtureWorkflow';
-import { parseProductQuantity } from '../shared/productQuantity';
 import { fixtureApi } from './lib/commercialEnquiryApi';
-import { useSupplierCatalog } from './lib/supplierApi';
-import { supplierName } from './lib/supplierPresentation';
-import SearchableSelect from './SearchableSelect';
 import { Field, Modal } from './ui';
 import type { OpenWorkspace } from './workspaceNavigation';
 
@@ -17,13 +13,14 @@ const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
 const hongKongDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' });
 const hongKongTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Hong_Kong', dateStyle: 'medium', timeStyle: 'short' });
+export const fixtureCancellationDate = (value: string) => `${hongKongTime.format(new Date(value))} HKT`;
 const amount = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 9 });
 const asDate = (value: string | null) => value ? dateFormatter.format(new Date(`${value}T00:00:00Z`)) : '—';
 export function fixtureEta(eta: string | null, kind?: FixtureEtaKind, end?: string | null) {
   if (!eta) return '—';
   const start = asDate(eta);
   if (kind === 'range' && end) return `${start} – ${asDate(end)}`;
-  return kind === 'date' ? start : `FROM ${start}`;
+  return start;
 }
 function knownEnquiryEta(value: string) {
   const written = value.trim().toUpperCase();
@@ -48,7 +45,7 @@ function useFixtureOptions(enabled: boolean) {
   }, [attempt, enabled]);
   return { options, error, retry: () => setAttempt(value => value + 1) };
 }
-function useSubmission() {
+export function useSubmission() {
   const request = useRef<{ body: string; id: string } | undefined>(undefined);
   return (input: object) => {
     const body = JSON.stringify(input);
@@ -116,102 +113,6 @@ export function FixtureHandoff({ enquiry, onClose, onSaved }: {
   </Modal>;
 }
 
-type DraftLine = { key: string; grade: FixtureGrade; quantity: string; supplierId: string; accountId: string; price: string; requested?: string };
-const blankSupplyLine = (grade: FixtureGrade, accountId: string): DraftLine => ({
-  key: crypto.randomUUID(), grade, accountId, quantity: '', supplierId: '', price: '',
-});
-function exactQuantity(raw: string) {
-  const parsed = parseProductQuantity(raw);
-  return parsed && parsed.min === parsed.max && parsed.max <= 1_000_000 ? parsed.min : null;
-}
-
-function FixtureSupplyForm({ booking, onConfirmed }: { booking: FixtureBooking; onConfirmed: (booking: FixtureBooking) => void }) {
-  const settings = useFixtureOptions(true);
-  const catalog = useSupplierCatalog(true);
-  const suppliers = (catalog.data?.items ?? []).filter(supplier => supplier.countryCode === 'SG' && !supplier.isClosed);
-  const supplierOptions = suppliers.map(supplier => ({ value: supplier.id, label: supplierName(supplier),
-    keywords: [supplier.shortName, ...supplier.aliases].join(' ') }));
-  const [account, setAccount] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>(() => booking.requested.length ? booking.requested.map(product => ({
-    ...blankSupplyLine(product.grade, ''), quantity: exactQuantity(product.quantityText)?.toString() ?? '', requested: product.quantityText,
-  })) : [blankSupplyLine('VLSFO', '')]);
-  const [quantityReviewed, setQuantityReviewed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const submission = useSubmission();
-  const confirmed: FixtureSupplyLine[] = lines.flatMap(line => {
-    const quantity = exactQuantity(line.quantity);
-    const buyPrice = Number(line.price);
-    return quantity && line.supplierId && settings.options?.accounts.some(item => item.id === line.accountId) && buyPrice > 0 && buyPrice <= 1_000_000
-      ? [{ grade: line.grade, quantity, supplierId: line.supplierId, accountId: line.accountId, buyPrice }] : [];
-  });
-  const bands = settings.options?.quantityReview;
-  const unusual = bands && lines.some(line => {
-    const quantity = exactQuantity(line.quantity);
-    const band = bands[line.grade];
-    return quantity !== null && (quantity < band.min || quantity > band.max);
-  });
-  const duplicate = new Set(confirmed.map(line => JSON.stringify(line))).size !== confirmed.length;
-
-  function edit(index: number, patch: Partial<DraftLine>) {
-    setQuantityReviewed(false);
-    setLines(current => current.map((line, row) => row === index ? { ...line, ...patch } : line));
-  }
-  async function save() {
-    if (busy || confirmed.length !== lines.length || !settings.options || duplicate || (unusual && !quantityReviewed)) return;
-    setBusy(true); setError('');
-    const input = { action: 'confirm' as const, dataMode: 'live' as const, id: booking.id,
-      expectedRevision: booking.revision, lines: confirmed, quantityReviewed: Boolean(unusual && quantityReviewed) };
-    try { onConfirmed(await fixtureApi.confirm({ ...input, requestId: submission(input) })); }
-    catch (failure) { setError((failure as Error).message); }
-    finally { setBusy(false); }
-  }
-  return <form className="outcome-form" onSubmit={event => { event.preventDefault(); void save(); }}>
-    <fieldset disabled={busy}>
-      {(settings.error || catalog.error) && <p role="alert">{settings.error || catalog.error}
-        <button type="button" className="ui-button ui-button--secondary" onClick={() => { settings.retry(); catalog.refresh(); }}>RETRY</button></p>}
-      {error && <p className="record-sheet__error" role="alert">{error}</p>}
-      <Field label="ACCOUNT"><select aria-label="ACCOUNT" value={account} disabled={!settings.options} onChange={event => {
-        const initial = account; const next = event.target.value;
-        setAccount(next); setLines(current => current.map(line => !line.accountId || line.accountId === initial ? { ...line, accountId: next } : line));
-      }}><option value="">SELECT ACCOUNT</option>{settings.options?.accounts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-      {lines.map((line, index) => <section key={line.key} className="fixture-product">
-        <div className="form-grid">
-          <Field label="GRADE"><select aria-label={`Grade ${index + 1}`} value={line.grade}
-            onChange={event => edit(index, { grade: event.target.value as FixtureGrade, requested: undefined })}>
-            {fixtureGrades.map(grade => <option key={grade}>{grade}</option>)}
-          </select></Field>
-          <Field label="QUANTITY (MT)" hint={line.requested && !exactQuantity(line.requested) ? line.requested : undefined}>
-            <input required value={line.quantity} aria-label={`Quantity ${index + 1}`} inputMode="decimal"
-              onChange={event => edit(index, { quantity: event.target.value })} />
-          </Field>
-          <Field label="SUPPLIER"><SearchableSelect label={`Supplier ${index + 1}`} options={supplierOptions}
-            disabled={catalog.loading || Boolean(catalog.error)} value={line.supplierId} onChange={supplierId => edit(index, { supplierId })} /></Field>
-          <Field label="ACCOUNT"><select required value={line.accountId} aria-label={`Account ${index + 1}`}
-            onChange={event => edit(index, { accountId: event.target.value })}>
-            <option value="">SELECT ACCOUNT</option>{settings.options?.accounts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select></Field>
-          <Field label="BUY PRICE (USD/MT)"><input required type="number" step="any" min="0.000001" value={line.price}
-            aria-label={`Buy price ${index + 1}`} onChange={event => edit(index, { price: event.target.value })} /></Field>
-        </div>
-        {lines.length > 1 && <button type="button" className="ui-button ui-button--secondary" onClick={() => {
-          setQuantityReviewed(false); setLines(current => current.filter(item => item.key !== line.key));
-        }}>REMOVE LINE</button>}
-      </section>)}
-      {duplicate && <p className="record-sheet__error" role="alert">REVIEW DUPLICATE SUPPLY LINES.</p>}
-      {unusual && <label className="fixture-dialog__check"><input type="checkbox" checked={quantityReviewed}
-        onChange={event => setQuantityReviewed(event.target.checked)} /> CONFIRM UNUSUAL QUANTITIES</label>}
-      <footer className="modal-actions">
-        <button type="button" className="ui-button ui-button--secondary" disabled={lines.length >= 30}
-          onClick={() => { setQuantityReviewed(false); setLines(current => [...current, blankSupplyLine('VLSFO', account)]); }}>ADD LINE</button>
-        <button className="ui-button ui-button--primary" disabled={confirmed.length !== lines.length || !settings.options || duplicate || Boolean(unusual && !quantityReviewed)}>
-          {busy ? 'SAVING…' : 'CONFIRM'}
-        </button>
-      </footer>
-    </fieldset>
-  </form>;
-}
-
 function FixtureCancellation({ booking, onCancelled }: { booking: FixtureBooking; onCancelled: (booking: FixtureBooking) => void }) {
   const [editing, setEditing] = useState(false);
   const [reason, setReason] = useState('');
@@ -254,8 +155,8 @@ function SupplyDetails({ grade, quantity, supplier, account, price, barging, can
     {barging && <div><dt>BARGING</dt><dd>{barging}</dd></div>}
   </dl>;
 }
-export function FixtureDetails({ item, onOpen, onClose, onChanged }: {
-  item: FixtureHistoryItem; onOpen: OpenWorkspace; onClose: () => void; onChanged: () => void;
+export function FixtureDetails({ item, onOpen, onClose, onChanged, onEdit }: {
+  item: FixtureHistoryItem; onOpen: OpenWorkspace; onClose: () => void; onChanged: () => void; onEdit?: () => void;
 }) {
   const [booking, setBooking] = useState<FixtureBooking>();
   const [error, setError] = useState('');
@@ -271,29 +172,32 @@ export function FixtureDetails({ item, onOpen, onClose, onChanged }: {
   }, [attempt, item.id, item.status]);
   const openSupplier = (supplierId: string) => { onClose(); onOpen('suppliers', { supplierId }); };
   const saveBooking = (value: FixtureBooking) => { setBooking(value); onChanged(); };
-  return <Modal title={item.vessel} onClose={onClose} wide={item.status === 'pending'}>
+  const cancellation = booking?.cancellation ?? item.cancellation;
+  return <Modal title={item.imo ? `${item.vessel} (${item.imo})` : item.vessel} onClose={onClose}>
     <div className="fixture-dialog">
       <dl className="form-grid fixture-dialog__record">
         <div><dt>DATE</dt><dd>{asDate(item.date)}</dd></div>
         <div><dt>ETA</dt><dd>{fixtureEta(item.eta, item.etaKind, item.etaEnd)}</dd></div>
         {item.imo && <div><dt>IMO</dt><dd>{item.imo}</dd></div>}
         {!item.status && item.barging !== null && <div><dt>BARGING</dt><dd>{item.barging}</dd></div>}
-        {(item.cancelled || booking) && <div><dt>STATUS</dt><dd>{item.cancelled ? 'CANCELLED' : booking?.status}</dd></div>}
-        {booking?.cancellation && <>
-          <div><dt>CANCELLED BY</dt><dd>{booking.cancellation.by}</dd></div>
-          <div><dt>CANCELLED AT</dt><dd>{hongKongTime.format(new Date(booking.cancellation.at))} HKT</dd></div>
-          <div><dt>REASON</dt><dd>{booking.cancellation.reason}</dd></div>
+        <div><dt>SUPPLIER TRADER</dt><dd>{item.supplierTrader} ({item.supplierOfficeCode ?? item.supplierOffice})</dd></div>
+        <div><dt>BUYER TRADER</dt><dd>{item.buyerTrader} ({item.buyerOfficeCode ?? item.buyerOffice})</dd></div>
+        {booking?.reference && <div><dt>REFERENCE</dt><dd>{booking.reference}</dd></div>}
+        {(item.cancelled || booking) && <div><dt>STATUS</dt><dd>{item.cancelled ? 'CANCELLED' : booking?.status.toUpperCase()}</dd></div>}
+        {cancellation && <>
+          <div><dt>CANCELLED BY</dt><dd>{cancellation.by}</dd></div>
+          <div><dt>CANCELLED AT</dt><dd>{fixtureCancellationDate(cancellation.at)}</dd></div>
+          <div><dt>REASON</dt><dd>{cancellation.reason}</dd></div>
         </>}
       </dl>
       {error && <p role="alert">{error} <button type="button" className="ui-button ui-button--secondary" onClick={() => setAttempt(value => value + 1)}>RETRY</button></p>}
       {item.status && !booking && !error && <p role="status">LOADING…</p>}
-      {booking?.canConfirm && <FixtureSupplyForm key={booking.revision} booking={booking} onConfirmed={saveBooking} />}
-      {booking && !booking.canConfirm && !booking.lines.length && booking.requested.map((line, index) =>
+      {booking && !booking.lines.length && booking.requested.map((line, index) =>
         <dl className="form-grid fixture-dialog__record" key={index}>
           <div><dt>GRADE</dt><dd>{line.grade}</dd></div><div><dt>QUANTITY (MT)</dt><dd>{line.quantityText}</dd></div>
         </dl>)}
       {booking?.lines.map((line, index) => <SupplyDetails key={index} grade={line.grade} quantity={amount.format(line.quantity)} supplier={line.supplier}
-        account={line.account} price={`USD ${amount.format(line.buyPrice)}/MT`}
+        account={line.account} price={`USD ${amount.format(line.buyPrice)}/MT`} barging={line.barging}
         onSupplier={line.supplierAvailable ? () => openSupplier(line.supplierId) : undefined} />)}
       {!item.status && (item.supplyRows ?? [item]).map((row, index) => fixtureGrades.map(grade => {
         const quantity = row[grade.toLowerCase() as 'hsfo' | 'vlsfo' | 'lsmgo'];
@@ -301,7 +205,8 @@ export function FixtureDetails({ item, onOpen, onClose, onChanged }: {
           account={row.account} price={row.price} barging={item.supplyRows ? row.barging : undefined} cancelled={!item.cancelled && row.cancelled}
           onSupplier={row.supplierAvailable ? () => openSupplier(row.supplierId) : undefined} />;
       }))}
-      {booking?.canCancel && <FixtureCancellation key={booking.revision} booking={booking} onCancelled={saveBooking} />}
+      {onEdit && <footer className="modal-actions"><button type="button" className="ui-button ui-button--primary" onClick={onEdit}>EDIT</button></footer>}
+      {booking?.canCancel && !onEdit && <FixtureCancellation key={booking.revision} booking={booking} onCancelled={saveBooking} />}
     </div>
   </Modal>;
 }

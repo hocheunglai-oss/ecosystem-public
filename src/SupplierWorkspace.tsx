@@ -29,11 +29,12 @@ export default function SupplierWorkspace({ onOpen, context, singapore = false, 
   const location = port ?? state.ports.find(item => item.id === context?.portId);
   const scope = location ? supplierPortForLocation(location) : undefined;
   const scopeKey = scoped ? scope?.id ?? 'unmapped' : 'all';
-  const defaultSpcView = Boolean(embedded && scope?.countryCode === 'SG');
+  const lockedSpcView = Boolean(embedded && scope?.countryCode === 'SG');
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState(initialSearch);
   const [singaporeOnly, setSingaporeOnly] = useState(singapore);
-  const [spcView, setSpcView] = useState(defaultSpcView);
+  const [selectedSpcView, setSpcView] = useState(false);
+  const spcView = lockedSpcView || selectedSpcView;
   const createPort = scope ?? (spcView || singaporeOnly ? supplierPortById('port-singapore') : undefined);
   const canManage = Boolean(realUser?.isActive && !preview && dataMode === 'live' && (!scoped || scope) && (createPort?.countryCode !== 'SG' || realUser.isAdmin || realUser.isSpcTrader));
   const [traderFilter, setTraderFilter] = useState('');
@@ -54,8 +55,8 @@ export default function SupplierWorkspace({ onOpen, context, singapore = false, 
   const pages = Math.max(1, Math.ceil((rows.data?.total ?? 0) / limit));
   useEffect(() => {
     setSelected(context?.supplierId ? { id: context.supplierId, tab: context.supplierTab ?? 'information' } : null);
-    setSearch(initialSearch); setSingaporeOnly(singapore); setSpcView(defaultSpcView); setTraderFilter(''); setGradeFilter(''); setPage(1); setCreating(false); setSelectedPic(null); setQuickView(null); scroll.current = 0;
-  }, [context?.supplierId, context?.supplierTab, singapore, scopeKey, defaultSpcView, initialSearch, namespace]);
+    setSearch(initialSearch); setSingaporeOnly(singapore); setSpcView(false); setTraderFilter(''); setGradeFilter(''); setPage(1); setCreating(false); setSelectedPic(null); setQuickView(null); scroll.current = 0;
+  }, [context?.supplierId, context?.supplierTab, singapore, scopeKey, lockedSpcView, initialSearch, namespace]);
   useLayoutEffect(() => {
     if (selected || rows.loading || !table.current) return;
     table.current.scrollTop = scroll.current;
@@ -74,9 +75,9 @@ export default function SupplierWorkspace({ onOpen, context, singapore = false, 
     onBack={() => setSelected(null)} backLabel="Supplier results" />;
   return <div className={`shared-suppliers ${embedded ? 'shared-suppliers--embedded' : ''} ${spcView ? 'has-spc-view' : 'has-name-view'}`}>
     <div className="shared-supplier-toolbar">
-      {(!scoped || scope?.countryCode === 'SG') && <button type="button" className={`button ${spcView ? 'primary' : 'secondary'}`} aria-pressed={spcView} onClick={() => { setSpcView(value => !value); reset(); }}>SPC VIEW</button>}
+      {!lockedSpcView && (!scoped || scope?.countryCode === 'SG') && <button type="button" className={`button ${spcView ? 'primary' : 'secondary'}`} aria-pressed={spcView} onClick={() => { setSpcView(value => !value); reset(); }}>SPC VIEW</button>}
       <label className="shared-supplier-search"><Search size={16} aria-hidden="true" /><input ref={searchInput} type="search" aria-label="Search suppliers" maxLength={160} placeholder="Search suppliers" value={search} onChange={event => { setSearch(event.target.value); reset(); }} />{search && <button className="icon-button" aria-label="Clear supplier search" onClick={() => { setSearch(''); reset(); searchInput.current?.focus(); }}><X size={15} /></button>}</label>
-      {canManage && <button className="button primary" onClick={() => setCreating(true)}><Plus size={14} />Add supplier</button>}
+      {canManage && !lockedSpcView && <button className="button primary" onClick={() => setCreating(true)}><Plus size={14} />Add supplier</button>}
       {origin && onOpen && <button className="button secondary" onClick={() => onOpen(origin, { portId: context?.portId })}><ArrowLeft size={14} />{origin === 'enquiry' ? 'Enquiries' : 'Countries & Ports'}</button>}
     </div>
     {spcView && picOptions.error && <div className="shared-supplier-message" role="alert">{picOptions.error}<button className="button secondary" onClick={picOptions.refresh}>RETRY</button></div>}

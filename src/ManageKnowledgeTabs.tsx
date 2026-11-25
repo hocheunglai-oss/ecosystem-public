@@ -22,9 +22,10 @@ type DraftTab = ProfileTabDescriptor & { sources: KnowledgeTabSource[]; role?: K
 const sourceKey = (target: KnowledgeTarget) => `${target.kind}:${target.id}`;
 
 /** One manager, with separate persistence for shared knowledge and owner-only tabs. */
-export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClose, privateTabs, countryPrivateTabs }: {
+export function ManageKnowledgeTabs({ tabs, primary, embeddedSources = [], activeTabId, onSaved, onClose, privateTabs, countryPrivateTabs }: {
   tabs: ManagedKnowledgeTab[];
   primary: { target: KnowledgeTarget; document: KnowledgeDocument };
+  embeddedSources?: KnowledgeTabSource[];
   activeTabId?: string;
   onSaved: (id: string) => void;
   onClose: () => void;
@@ -33,7 +34,7 @@ export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClo
 }) {
   const { runKnowledge } = useDemo();
   const { realUser, preview } = useAccess();
-  const [base] = useState(() => structuredClone({ tabs, primary }));
+  const [base] = useState(() => structuredClone({ tabs, primary, embeddedSources }));
   const privateBase = useRef<ProfileTabCollection | null>(privateTabs?.data ? structuredClone(privateTabs.data) : null);
   const countryPrivateBase = useRef<ProfileTabCollection | null>(countryPrivateTabs?.data ? structuredClone(countryPrivateTabs.data) : null);
   const canManageShared = Boolean(realUser?.isActive && realUser.activated && !preview);
@@ -44,7 +45,8 @@ export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClo
     ...(countryPrivateTabs?.tabs ?? []).map(tab => ({ ...tab, id: `private-country:${tab.id}`, sources: [], entryCount: tab.content?.trim() ? 1 : 0, reorderGroup: 'private-country' })),
     ...tabs.map(tab => ({ ...tab, visibility: 'shared' as const, entryCount: tab.blockCount, builtin: tab.role, reorderGroup: own(tab) ? 'primary' : 'inherited' })),
   ]);
-  const defaults = defaultKnowledgeSections(base.primary.target.kind).map(section => ({ title: section.title, builtin: section.role }));
+  const defaults = defaultKnowledgeSections(base.primary.target.kind)
+    .filter(section => section.role !== "refineries" || base.primary.target.kind !== "port").map(section => ({ title: section.title, builtin: section.role }));
   async function save(draft: DraftTab[]) {
     // Save only the private scope first. Retain its acknowledged revision if a shared save fails.
     const records: ProfileTab[] = draft.filter(tab => tab.visibility === 'private' && tab.id.startsWith('private:')).map(tab => ({
@@ -68,6 +70,7 @@ export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClo
     const documents = new Map<string, { target: KnowledgeTarget; document: KnowledgeDocument }>();
     documents.set(sourceKey(base.primary.target), base.primary);
     for (const tab of base.tabs) for (const source of tab.sources) documents.set(sourceKey(source.target), source);
+    for (const source of base.embeddedSources) documents.set(sourceKey(source.target), source);
     const changes: KnowledgeChange[] = [];
     for (const [key, source] of documents) {
       const sections: KnowledgeSection[] = [];
@@ -80,6 +83,12 @@ export function ManageKnowledgeTabs({ tabs, primary, activeTabId, onSaved, onClo
           if (sourceKey(owner.target) !== key) continue;
           const section = source.document.sections.find(item => item.id === owner.sectionId);
           if (section) sections.push({ ...structuredClone(section), title: tab.title.trim() });
+        }
+      }
+      // Embedded refinery tables keep their saved IDs, attachment scopes and layout.
+      for (const [index, section] of source.document.sections.entries()) {
+        if (base.embeddedSources.some(owner => sourceKey(owner.target) === key && owner.sectionId === section.id)) {
+          sections.splice(index, 0, structuredClone(section));
         }
       }
       const document: KnowledgeDocument = { ...structuredClone(source.document), sections };

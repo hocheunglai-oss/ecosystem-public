@@ -12,7 +12,7 @@ Port headings show the local clock using a recorded IANA zone, including dayligh
 
 ## Tabs and editing
 
-Country defaults include Suppliers, Refineries, Grades and delivery modes, Tax and regulations, Trader's Remarks, and Uploaded Documents. Port profiles also include Port Information and Price History. Stable semantic roles keep renamed defaults functional; a similar title does not grant a custom tab that role. Saved layout versions preserve removed defaults and existing blocks on reload.
+Country defaults include Suppliers, Refineries, Grades and delivery modes, Tax and regulations, Trader's Remarks, and Uploaded Documents. Port profiles also include Port Information and Price History. Port Information displays KEY INFO, TOP SUPPLIERS and REFINERIES in one equal-height desktop row, stacked on phones. The refinery records retain their original attachment and edit scopes in this panel. The shared Uploaded Documents tab lists files for the current location and its combined country profile. Stable semantic roles keep renamed defaults functional; a similar title does not grant a custom tab that role. Saved layout versions preserve removed defaults and existing blocks on reload.
 
 Use the shared profile tab strip and one Manage Tabs dialog. Private tabs appear first with a lock and PRIVATE label; + PRIVATE TAB creates a draft in the same manager. Reorder only within a visibility/source group and show the exact drop destination before dropping. Combined profiles retain both original owner-private collections and route each save to its original target. New private tabs use the selected primary profile scope.
 

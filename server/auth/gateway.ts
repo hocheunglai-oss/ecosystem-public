@@ -3,6 +3,7 @@ import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@s
 import { createClient, isAuthSessionMissingError } from '@supabase/supabase-js';
 import type { AccessOffice, AccessUser, UserAccessUpdate, UserAccessCreate, UserPasswordReset, UserAccessDelete, RolePreview, PreviewInput, PhoneChangeRequest, PhoneChangeInput, PhoneChangeReview } from '../../shared/access.ts';
 import type { FixtureHistoryPage, FixtureHistoryQuery } from '../../shared/fixtureHistory.ts';
+import type { PortFixtureQuery, PortFixtureReports } from '../../shared/portFixtureReports.ts';
 import type { AuthConfig } from './config.ts';
 import { ApiError, password } from './validation.ts';
 
@@ -20,6 +21,7 @@ export interface AuthGateway {
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
   listFixtureHistory(query: FixtureHistoryQuery): Promise<FixtureHistoryPage>;
+  readPortFixtures(query: PortFixtureQuery): Promise<PortFixtureReports[PortFixtureQuery['view']]>;
   listUsers(): Promise<{ users: AccessUser[]; offices: AccessOffice[] }>;
   updateUser(input: UserAccessUpdate): Promise<AccessUser>;
   createUser(actor: AccessUser, input: UserAccessCreate): Promise<AccessUser>;
@@ -237,6 +239,7 @@ export function createAuthGateway(request: Request, config: AuthConfig): AuthGat
       if (error) throw new ApiError(503, 'Sign-out could not be confirmed. Try again.');
     },
     listFixtureHistory: query => rpc('eco_list_fixture_register', { p_query: query }),
+    readPortFixtures: query => rpc('eco_read_port_fixtures', { p_mode: query.view, p_port_id: query.portId, p_search: query.search, p_page: query.page }),
     listUsers: () => rpc('eco_list_users'),
     listPhoneRequests: () => rpc('eco_list_phone_requests'),
     requestPhoneChange: input => rpc('eco_request_phone_change', {p_request_id: input.requestId, p_phone: input.phone}),

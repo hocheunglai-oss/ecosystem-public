@@ -91,6 +91,9 @@ async function seed(page) {
     const ids = ['port-singapore', 'port-hong-kong', 'port-gibraltar', 'port-rotterdam', 'port-chiba', 'port-tokyo'];
     value.ports = value.ports.filter(port => ids.includes(port.id));
     value.locationCountries = ['Singapore', 'Hong Kong', 'Gibraltar', 'Netherlands', 'Japan', 'Canada'].map(name => ({ id: name, name }));
+    port.sections.push({ id: 'refineries', title: 'Refineries', role: 'refineries', blocks: [
+      { id: 'retained-refinery', type: 'text', title: 'REFINERY RECORD', text: 'RETAINED REFINERY INFORMATION' },
+    ] });
     value.knowledgeRecords = {
       ...value.knowledgeRecords, 'country:Netherlands': country, 'port:port-rotterdam': port,
       'country:Japan': { version: 2, layoutVersion: 2, sections: [{ id: 'location-ports', title: 'SAVED PORT NOTES', blocks: [{ id: 'japan-original-note', type: 'text', title: 'SAVED NOTE', text: 'PRESERVE ORIGINAL COUNTRY SECTION' }] }] },
@@ -118,6 +121,13 @@ async function verifyCombinedSources(page, workspace, state, shot) {
   for (const title of privateTitles) await expect(profile.getByRole('tab').filter({ hasText: title })).toBeVisible();
   const tabNames = await profile.getByRole('tab').allTextContents();
   assert.ok(tabNames.slice(0, 4).every(text => /COUNTRY OWNER NOTE|PORT OWNER NOTE|DUPLICATE OWNER NOTE/.test(text)), 'Both original private scopes precede shared tabs');
+  await expect(profile.getByRole('tab', { name: 'Port Information', exact: true })).toHaveCount(0);
+  await chooseTab(profile, 'Refineries');
+  await expect(profile).toContainText('RETAINED REFINERY INFORMATION');
+  await profile.getByRole('textbox', { name: 'Search all tabs', exact: true }).fill('RETAINED REFINERY INFORMATION');
+  await expect(profile.getByRole('region', { name: 'Search all tabs', exact: true })).toContainText('RETAINED REFINERY INFORMATION');
+  await btn(profile.locator('.knowledge-search-section-head'), 'Refineries').click();
+  await expect(profile.getByRole('tab', { name: 'Refineries', exact: true })).toHaveAttribute('aria-selected', 'true');
   await chooseTab(profile, 'OPERATIONS');
   await expect(profile).toContainText('ORIGINAL COUNTRY SHARED BODY');
   await expect(profile).toContainText('ORIGINAL PORT SHARED BODY');

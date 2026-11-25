@@ -3,6 +3,6 @@
   "maxJavaScriptGzipBytes": 305000,
   "maxOptionalPdfJavaScriptGzipBytes": 700000,
   "maxOptionalPdfAssetBytes": 5000000,
-  "maxCssGzipBytes": 65600,
+  "maxCssGzipBytes": 66200,
   "maxTotalBuildBytes": 150000000
 }

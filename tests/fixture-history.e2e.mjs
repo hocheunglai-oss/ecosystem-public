@@ -14,6 +14,7 @@ const member = {
 const supplierId = '60000000-0000-4000-8000-000000000002';
 const secondSupplierId = '60000000-0000-4000-8000-000000000003';
 const seller = { ...member, id: '60000000-0000-4000-8000-000000000004', displayName: 'LANA TEST', isSpcTrader: true };
+const administrator = { ...member, id: '60000000-0000-4000-8000-000000000009', isAdmin: true };
 const enquiryId = '60000000-0000-4000-8000-000000000005';
 const bookingId = '60000000-0000-4000-8000-000000000006';
 const enquiry = {
@@ -32,6 +33,10 @@ const records = Array.from({ length: 101 }, (_, index) => ({
   vessel: index === 100 ? 'SYNTHETIC OSPREY' : 'SYNTHETIC TERN', imo: index === 100 ? '9876543' : null,
   vlsfo: '160–220', cancelled: index === 100,
 }));
+const heldLine = {
+  id: '60000000-0000-4000-8000-000000000010', vessel: 'SYNTHETIC HELD VESSEL', date: '2025-05-13', eta: '2025-05-15',
+  reviewHold: { field: 'quantity', grade: 'VLSFO', workbook: 'fixture_review_workbook', tab: 1, row: 45 },
+};
 
 const results = [];
 await mkdir(output, { recursive: true });
@@ -61,6 +66,7 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         const request = route.request();
         const url = new URL(request.url());
         if (url.pathname === '/api/access/session') return route.fulfill({ status: signedIn ? 200 : 401, json: { user: signedIn ? actor : null } });
+        if (url.pathname === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
         if (url.pathname === '/api/access/login') {
           signedIn = true;
           return route.fulfill({ json: { user: member } });
@@ -73,6 +79,8 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
           const [year, month, page] = ['year', 'month', 'page'].map(key => Number(url.searchParams.get(key)));
           const search = url.searchParams.get('search').toUpperCase();
           const deleted = url.searchParams.has('deleted');
+          const missingOnly = url.searchParams.has('missing');
+          if (missingOnly && !actor.isAdmin) return route.fulfill({ status: 403, json: { message: 'Access denied' } });
           assert.equal(url.searchParams.get('view'), 'register');
           const rows = booking && (!booking.deleted || actor.id === seller.id) ? [{
             id: booking.id, vessel: booking.vessel, imo: booking.imo, date: booking.date, eta: booking.eta, etaEnd: booking.etaEnd,
@@ -80,16 +88,21 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
             cancelled: booking.cancelled, canEdit: actor.id === seller.id, vlsfo: booking.status === 'pending'
               ? enquiry.products[0].quantityText : String(booking.lines.reduce((sum, line) => sum + line.quantity, 0)),
           }, ...records] : records;
-          const visible = rows.filter(row => Boolean(row.deleted) === deleted);
+          const visible = rows.filter(row => Boolean(row.deleted) === deleted).map(row =>
+            actor.isAdmin && row.id === records[0].id ? { ...row, missingBuyPrice: true } : row);
           const parties = column => [...new Set(visible.map(row => row[column + 'TraderId']))].map(id => directory.get(id));
-          const matches = visible.filter(row => (!year || Number(row.date.slice(0, 4)) === year) &&
-            (!month || Number(row.date.slice(5, 7)) === month) && row.vessel.includes(search) &&
+          const dateMatches = row => (!year || Number(row.date.slice(0, 4)) === year) && (!month || Number(row.date.slice(5, 7)) === month);
+          const matches = visible.filter(row => (!missingOnly || row.missingBuyPrice) && dateMatches(row) && search.split(/\s+/).every(term =>
+            (row.missingBuyPrice ? row.vessel + ' MISSING RECORD BUY PRICE' : row.vessel).includes(term)) &&
             ['supplier', 'buyer'].every(column => {
               const office = url.searchParams.get(column + 'Office');
               const trader = url.searchParams.get(column + 'Trader');
               const party = directory.get(row[column + 'TraderId']);
               return (!office || party.code === office) && (!trader || party.id === trader);
             }));
+          if (actor.isAdmin && !deleted && (search || missingOnly) && dateMatches(heldLine) &&
+              !['supplierOffice', 'supplierTrader', 'buyerOffice', 'buyerTrader'].some(key => url.searchParams.has(key)) &&
+              search.split(/\s+/).every(term => `MISSING RECORD ${heldLine.vessel} VLSFO QUANTITY`.includes(term))) matches.push(heldLine);
           return route.fulfill({ json: { items: matches.slice(page * 100, page * 100 + 100), total: matches.length,
             filters: { supplier: parties('supplier'), buyer: parties('buyer'), canSeeDeleted: Boolean(booking?.deleted) } } });
         }
@@ -250,6 +263,33 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
           await nav.getByRole('button', { name, exact: true }).click();
           return page.getByRole('dialog', { name, exact: true });
         }
+        await dialog.getByLabel('Fixture month').selectOption('0');
+        await dialog.getByRole('searchbox').fill('missing record');
+        await expect(dialog.getByText('NO MATCHING FIXTURES.')).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'MISSING RECORD', exact: true })).toHaveCount(0);
+        actor = administrator;
+        await page.reload();
+        const reviews = await openTrading('Fixtures');
+        await expect(reviews.getByRole('status')).toHaveText('1–100 OF 101');
+        const shortlist = reviews.getByRole('button', { name: 'MISSING RECORD', exact: true });
+        await shortlist.click();
+        await expect(shortlist).toHaveAttribute('aria-pressed', 'true');
+        await expect(reviews.getByRole('status')).toHaveText('1–2 OF 2');
+        await shortlist.click();
+        await expect(reviews.getByRole('status')).toHaveText('1–100 OF 101');
+        await reviews.getByRole('searchbox').fill('missing record');
+        const hold = reviews.getByRole('link', { name: 'MISSING RECORD · VLSFO QUANTITY' });
+        await expect(reviews.getByRole('status')).toHaveText('1–2 OF 2');
+        await expect(reviews.getByText('MISSING RECORD · BUY PRICE', { exact: true })).toBeVisible();
+        await expect(hold).toHaveAttribute('href', 'https://docs.google.com/spreadsheets/d/fixture_review_workbook/edit#gid=1&range=K45');
+        await expect(hold).toBeVisible();
+        await reviews.getByText(heldLine.vessel, { exact: true }).dblclick();
+        await expect(page.getByRole('dialog', { name: 'EDIT FIXTURE', exact: true })).toHaveCount(0);
+        await reviews.getByRole('searchbox').fill('held vessel');
+        await expect(hold).toBeVisible();
+        await hold.scrollIntoViewIfNeeded();
+        await shot('fixture-missing-record');
+        actor = member;
         await page.reload();
         const enquiries = await openTrading('Enquiries');
         await enquiries.getByRole('button', { name: 'STEM', exact: true }).click();
@@ -359,8 +399,9 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         assert.equal(removedPreviewRequests, 0);
         assert.deepEqual(errors, []);
         results.push({ engine, width, theme, ok: true });
-        console.log(`PASS ${engine} ${width} ${theme}: sign-in, fixture grid, filters, direct editing, buyer handoff, cancellation, reinstatement and restoration`);
+        console.log(`PASS ${engine} ${width} ${theme}: fixture search and filters, missing-record access, editing, handoff, cancellation, reinstatement and restoration`);
       } catch (error) {
+        if (errors.length) console.error(errors);
         await shot('failure').catch(() => {});
         throw error;
       } finally { await context.close(); }

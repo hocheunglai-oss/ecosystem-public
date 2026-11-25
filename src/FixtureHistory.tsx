@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ListFilter, Search } from 'lucide-react';
-import { fixtureHistoryPageSize, fixtureHistoryYears, type FixtureHistoryItem, type FixtureHistoryPage, type FixtureTraderFilter } from '../shared/fixtureHistory';
+import { fixtureHistoryPageSize, fixtureHistoryYears, type FixtureHistoryItem, type FixtureHistoryPage, type FixtureImportHold, type FixtureTraderFilter } from '../shared/fixtureHistory';
 import { useAccess } from './auth';
 import { useTestWorkspace } from './TestWorkspace';
 import { canTrade } from './lib/model';
@@ -14,29 +14,46 @@ const columns = ['DATE', 'SUPPLIER TRADER', 'BUYER TRADER', 'VESSEL', 'ETA', 'HS
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
 const presentDate = (value?: string | null) => value ? dateFormatter.format(new Date(value)) : '—';
 const emptyTraderFilter = { office: '', trader: '' };
-const emptyFilters = { year: 0, month: 0, page: 0, supplier: emptyTraderFilter, buyer: emptyTraderFilter, deleted: false };
+const emptyFilters = { year: 0, month: 0, page: 0, supplier: emptyTraderFilter, buyer: emptyTraderFilter, deleted: false, missing: false };
 const traderColumns = { supplier: 'SUPPLIER TRADER', buyer: 'BUYER TRADER' } as const;
 type TraderColumn = keyof typeof traderColumns;
 type TraderFilter = typeof emptyTraderFilter;
 const shortTrader = (name: string, office: string) => [name.trim().split(/\s+/)[0], office && `(${office})`].filter(Boolean).join(' ');
+const holdCells = { supplier: 'M', buyer_trader: 'E', quantity: '' } as const;
+const gradeCells = { HSFO: 'J', VLSFO: 'K', LSMGO: 'L' } as const;
+function FixtureHoldLink({ hold }: { hold: FixtureImportHold['reviewHold'] }) {
+  const cell = hold.field === 'quantity' && hold.grade ? gradeCells[hold.grade] : holdCells[hold.field];
+  const range = cell ? cell + hold.row : `J${hold.row}:L${hold.row}`;
+  const field = hold.field === 'supplier' ? 'SUPPLIER' : hold.field === 'buyer_trader' ? 'BUYER TRADER'
+    : [hold.grade, 'QUANTITY'].filter(Boolean).join(' ');
+  const href = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(hold.workbook)}/edit#gid=${hold.tab}&range=${range}`;
+  return <a href={href} target="_blank" rel="noreferrer">MISSING RECORD · {field}</a>;
+}
 function FixtureRow({ item, supplier, buyer, onEdit }: {
-  item: FixtureHistoryItem; supplier?: FixtureTraderFilter; buyer?: FixtureTraderFilter; onEdit: () => void;
+  item: FixtureHistoryItem | FixtureImportHold; supplier?: FixtureTraderFilter; buyer?: FixtureTraderFilter; onEdit?: () => void;
 }) {
   const number = (value?: string | null) => <td className="record-sheet__number">{value ?? '—'}</td>;
   const status = item.deleted ? 'DELETED' : item.cancelled ? 'CANCELLED' : item.status === 'pending' ? 'PENDING' : '';
+  const hold = 'reviewHold' in item ? item.reviewHold : undefined;
+  const missingPrice = 'missingBuyPrice' in item && item.missingBuyPrice;
+  const vesselClass = hold || missingPrice ? 'fixture-vessel fixture-review-vessel' : 'fixture-vessel';
   const vessel = <>
     <span>{item.vessel}</span>
     {item.imo && <span className="fixture-imo">{item.imo}</span>}
     {status && <span className={item.cancelled && !item.deleted ? 'fixture-cancelled' : undefined}>{status}</span>}
+    {missingPrice && <span className="fixture-missing-price">MISSING RECORD · BUY PRICE</span>}
   </>;
   const trader = (party?: FixtureTraderFilter) => <td title={party && [party.name, party.office].filter(Boolean).join(' · ')}>
     {party ? shortTrader(party.name, party.code) : '—'}
   </td>;
-  return <tr data-record-id={item.id} onDoubleClick={item.canEdit ? onEdit : undefined}>
+  const edit = item.canEdit ? onEdit : undefined;
+  return <tr data-record-id={item.id} onDoubleClick={edit}>
     <td className="record-sheet__date">{presentDate(item.date)}</td>
     {trader(supplier)}{trader(buyer)}
-    <td>{item.canEdit ? <button type="button" className="text-button fixture-vessel" title={item.vessel}
-      aria-label={`EDIT ${item.vessel}`} onClick={onEdit}>{vessel}</button> : <span className="fixture-vessel" title={item.vessel}>{vessel}</span>}</td>
+    <td>{hold ? <span className={vesselClass}>{vessel}<FixtureHoldLink hold={hold} /></span>
+      : edit ? <button type="button" className={`text-button ${vesselClass}`} title={item.vessel}
+        aria-label={`EDIT ${item.vessel}`} onClick={edit}>{vessel}</button>
+      : <span className={vesselClass} title={item.vessel}>{vessel}</span>}</td>
     <td>{presentDate(item.eta)}{item.eta && item.etaEnd ? ` – ${presentDate(item.etaEnd)}` : ''}</td>
     {number(item.hsfo)}{number(item.vlsfo)}{number(item.lsmgo)}
   </tr>;
@@ -65,7 +82,7 @@ function TraderFilters({ column, options, value, onChange, onClose }: {
   </div>;
 }
 
-function HistoryTable() {
+function HistoryTable({ canReview }: { canReview: boolean }) {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
   const [filter, setFilter] = useState(emptyFilters);
@@ -80,6 +97,7 @@ function HistoryTable() {
     ...(filter.buyer.office && { buyerOffice: filter.buyer.office }),
     ...(filter.buyer.trader && { buyerTrader: filter.buyer.trader }),
     ...(filter.deleted && { deleted: '1' }),
+    ...(filter.missing && { missing: '1' }),
   }).toString();
   const requestKey = query + '#' + attempt;
   const [result, setResult] = useState<{ key: string; data: FixtureHistoryPage | null } | null>(null);
@@ -138,9 +156,15 @@ function HistoryTable() {
           setFilter(current => ({ ...current, month, page: 0 }));
         }}><option value={0}>ALL MONTHS</option>{months.map((label, i) => <option key={label} value={i + 1}>{label}</option>)}</select>
         <button type="button" className="ui-button ui-button--secondary" disabled={busy} onClick={() => setAttempt(value => value + 1)}>REFRESH</button>
+        {canReview && <button type="button" className="ui-button ui-button--secondary" aria-pressed={filter.missing} onClick={() => {
+          setTraderFilter(undefined);
+          setSearch('');
+          setFilter(current => ({ ...emptyFilters, missing: !current.missing }));
+        }}>MISSING RECORD</button>}
         {(filter.deleted || traderOptions?.canSeeDeleted) && <button type="button" className="ui-button ui-button--secondary" aria-pressed={filter.deleted} onClick={() => {
           setTraderFilter(undefined);
-          setFilter(current => ({ ...current, supplier: emptyTraderFilter, buyer: emptyTraderFilter, deleted: !current.deleted, page: 0 }));
+          setFilter(current => ({ ...current, supplier: emptyTraderFilter, buyer: emptyTraderFilter,
+            deleted: !current.deleted, missing: false, page: 0 }));
         }}>DELETED</button>}
       </div>
       {traderFilter && <TraderFilters column={traderFilter} options={traderOptions?.[traderFilter] ?? []} value={filter[traderFilter]}
@@ -156,8 +180,9 @@ function HistoryTable() {
                   if (traderFilter === column) closeFilter(); else setTraderFilter(column);
                 }}>{label} <ListFilter size={14} aria-hidden="true" /></button> : label}</th>;
           })}</tr></thead>
-          <tbody>{!busy && data?.items.map(item => <FixtureRow key={item.id} item={item} supplier={suppliers.get(item.supplierTraderId)}
-            buyer={buyers.get(item.buyerTraderId)} onEdit={() => setSelected(item)} />)}</tbody>
+          <tbody>{!busy && data?.items.map(item => 'reviewHold' in item ? <FixtureRow key={item.id} item={item} />
+            : <FixtureRow key={item.id} item={item} supplier={suppliers.get(item.supplierTraderId)}
+              buyer={buyers.get(item.buyerTraderId)} onEdit={() => setSelected(item)} />)}</tbody>
         </table>
         {!busy && settled && !data && <p className="record-sheet__empty" role="alert">FIXTURES UNAVAILABLE. TRY REFRESH.</p>}
         {!busy && data && data.items.length === 0 && <p className="record-sheet__empty">NO MATCHING FIXTURES.</p>}
@@ -184,7 +209,7 @@ export default function FixtureHistory({ open }: { open: OpenModal }) {
   if (!user) return null;
   const hasLegacy = state.outcomes.some(outcome => outcome.kind === 'fixture' && (!canTrade(actor) || outcome.owner === actor.id));
   return <div className="fixture-history-layout">
-    <HistoryTable key={namespace} />
+    <HistoryTable key={namespace} canReview={user.isAdmin} />
     {hasLegacy && <details className="fixture-history__legacy">
       <summary>BROWSER FIXTURES</summary>
       <RecordsPage open={open} kind="fixture" />

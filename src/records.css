@@ -82,7 +82,9 @@
 .fixture-vessel { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; text-align: left; }
 .fixture-vessel span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .fixture-vessel span + span { flex: none; font-size: var(--ui-text-meta); }
-.fixture-imo { color: var(--ui-muted); }
+.fixture-review-vessel { flex-wrap: wrap; }
+.fixture-review-vessel a { font-size: var(--ui-text-meta); }
+.fixture-imo, .fixture-missing-price { color: var(--ui-muted); }
 #root .fixture-cancelled { color: var(--ui-danger); font-weight: 700; }
 .fixture-history .record-sheet__pagination > div { width: auto; margin-left: auto; }
 .fixture-dialog { padding: 16px; overflow-wrap: anywhere; }
@@ -106,7 +108,7 @@
 @media (max-width: 700px) {
  .fixture-history :is(th,td) { min-height: 44px; padding-block: 0; }
  .fixture-history th.record-sheet__date { left: auto; }
- .fixture-history :is(th button,.fixture-vessel) { min-height: 44px; }
+ .fixture-history :is(th button,.fixture-vessel,.fixture-review-vessel a) { min-height: 44px; }
  .fixture-editor__booking { grid-template-columns: repeat(2,minmax(0,1fr)); }
  .fixture-editor__booking .field:first-child { grid-column: 1 / -1; }
  .fixture-editor__lines, .fixture-editor__lines :is(thead,tbody,td) { display: block; }

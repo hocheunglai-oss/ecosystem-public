@@ -237,6 +237,76 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
     await assert.rejects(as(2,`select * from eco_private.${table}`),/permission denied/);
    }
   });
+  await t.test('only live administrators can search for held imported lines until publication', async () => {
+   await seed();
+   const holds = 'eco_private.fixture_import_holds';
+   const workbook = 'fixture_review_workbook';
+   const payload = {year:0,month:0,search:'missing record',page:0,view:'register'};
+   const register = (actor, filters = {}) => call(actor,'eco_list_fixture_register',{...payload,...filters});
+   await query(`insert into ${holds} (source_workbook,source_tab,source_row,fixture_date,vessel,eta,missing_field,grade,source_evidence)
+    values ('${workbook}',1,2,'2025-05-13','SYNTHETIC HOLD ALPHA','2025-05-15','supplier',null,'{"private":"SYNTHETIC AUDIT"}'),
+           ('${workbook}',1,3,'2026-01-25','SYNTHETIC HOLD BETA',null,'quantity','VLSFO','{}')`);
+   for (const role of ['anon','authenticated','service_role']) {
+    await assert.rejects(query(`set role ${role};select * from ${holds}`),/permission denied/);
+   }
+   const found = await register(0);
+   assert.equal(found.total,2);
+   assert.deepEqual((await register(0,{search:'',missing:true})).items,found.items);
+   assert.deepEqual(found.items.map(item=>[item.vessel,item.reviewHold]),[
+    ['SYNTHETIC HOLD BETA',{field:'quantity',grade:'VLSFO',workbook,tab:1,row:3}],
+    ['SYNTHETIC HOLD ALPHA',{field:'supplier',workbook,tab:1,row:2}],
+   ]);
+   assert.doesNotMatch(JSON.stringify(found),/SYNTHETIC AUDIT|source_evidence|canEdit|supplierTraderId|buyerTraderId/);
+   assert.equal((await register(0,{year:2025,month:5,search:'hold alpha'})).items[0].reviewHold.row,2);
+   for(const filter of [{search:''},{search:'\t'},{year:2027},{month:6},{deleted:true},
+    {supplierOffice:'SG'},{buyerTrader:users[1]},{view:undefined}]) {
+    assert.equal((await register(0,filter)).total,0);
+   }
+   assert.deepEqual((await register(0,{page:1})).items,[]);
+   for (const actor of [1,2]) {
+    assert.equal((await register(actor)).total,0);
+    await assert.rejects(register(actor,{search:'',missing:true}),/Access denied/);
+   }
+   await assert.rejects(register(0,{deleted:true,missing:true}),/Invalid fixture filters/);
+   await as(0,"select public.eco_set_preview('trader','hk')");
+   await assert.rejects(register(0),/unavailable in preview/);
+   await as(0,"select public.eco_set_preview(null,null)");
+   const supplier = randomUUID();
+   await query(`insert into eco_private.suppliers (id,source_key,record) values
+     (${lit(supplier)},'synthetic-hold-publication','{"countryCode":"SG","legalName":"Synthetic Hold Supplier","shortName":"SYNTHETIC"}');
+     insert into eco_private.fixture_history(fixture_date,supplier_trader_id,buyer_trader_id,supplier_id,vessel,vlsfo,account,
+       source_workbook,source_tab,source_row,source_digest,source_labels)
+     values ('2025-05-13',${lit(users[2])},${lit(users[1])},${lit(supplier)},'SYNTHETIC HOLD ALPHA','150','HONG KONG',
+       '${workbook}',1,2,repeat('a',64),'{"ownerReview":{"price":{"status":"missing"}}}')`);
+   const afterPublication=await register(0,{search:'hold alpha'});
+   assert.equal(afterPublication.total,1);
+   assert.equal(afterPublication.items[0].vlsfo,'150');
+   assert.equal(afterPublication.items[0].reviewHold,undefined);
+   assert.equal(afterPublication.items[0].missingBuyPrice,true);
+   assert.equal((await register(0,{search:'missing record buy price'})).items[0].id,afterPublication.items[0].id);
+   assert.equal((await register(1,{search:'hold alpha'})).items[0].missingBuyPrice,undefined);
+   assert.equal((await register(1,{search:'missing record buy price'})).total,0);
+   const fixtureId=afterPublication.items[0].id;
+   const countsInStatistics = () => query(`select include_in_statistics
+     from eco_private.users u cross join lateral eco_private.fixture_register_with_review(u) r
+     where u.id=${lit(users[0])} and r.id=${lit(fixtureId)}`);
+   assert.equal(await countsInStatistics(),'f');
+   const editor=JSON.parse(await as(0,`select public.eco_get_fixture_editor(${lit(fixtureId)})`));
+   await call(0,'eco_mutate_fixture_register',{dataMode:'live',id:fixtureId,action:'update',requestId:randomUUID(),
+    version:editor.version,quantityReviewed:true,fields:{...editor.fields,lines:editor.fields.lines.map(line=>({...line,price:'501'}))}});
+   assert.equal((await register(0)).total,1);
+   assert.equal((await register(0,{search:'hold alpha'})).items[0].missingBuyPrice,undefined);
+   assert.equal(await countsInStatistics(),'t');
+   await query(`update ${holds} set related_fixture_id=${lit(fixtureId)} where source_row=3`);
+   assert.equal(await countsInStatistics(),'f');
+   await query(`insert into eco_private.fixture_history(fixture_date,supplier_trader_id,buyer_trader_id,supplier_id,
+     vessel,vlsfo,price,source_workbook,source_tab,source_row,source_digest,source_labels)
+     values ('2026-01-25',${lit(users[2])},${lit(users[1])},${lit(supplier)},'SYNTHETIC HOLD BETA','155','501',
+       '${workbook}',1,3,repeat('b',64),'{}')`);
+   assert.equal(await countsInStatistics(),'t');
+   assert.equal((await register(0,{search:'',missing:true})).total,0);
+   assert.equal(await query(`select count(*) from ${holds}`),'2');
+  });
   await t.test('fixture history links canonical records and limits reads to authorised live members', async () => {
    await seed();
    const supplier = randomUUID();

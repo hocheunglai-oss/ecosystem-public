@@ -6,7 +6,7 @@ export function fixtureHistoryQuery(url: URL): FixtureHistoryQuery {
   const parties = ['supplierOffice', 'supplierTrader', 'buyerOffice', 'buyerTrader'] as const;
   const invalid = () => new ApiError(400, 'Invalid fixture filters.');
   for (const key of params.keys()) {
-    if (!['year', 'month', 'search', 'page', 'deleted', 'view', ...parties].includes(key) || params.getAll(key).length !== 1) throw invalid();
+    if (!['year', 'month', 'search', 'page', 'deleted', 'view', 'missing', ...parties].includes(key) || params.getAll(key).length !== 1) throw invalid();
   }
   function boundedInteger(key: string, max: number) {
     const value = params.get(key) ?? '0';
@@ -34,6 +34,10 @@ export function fixtureHistoryQuery(url: URL): FixtureHistoryQuery {
   if (params.has('view')) {
     if (params.get('view') !== 'register') throw invalid();
     filters.view = 'register';
+  }
+  if (params.has('missing')) {
+    if (params.get('missing') !== '1' || filters.view !== 'register' || filters.deleted) throw invalid();
+    filters.missing = true;
   }
   return filters;
 }

@@ -13,6 +13,7 @@ export interface FixtureHistoryQuery {
   buyerOffice?: string;
   buyerTrader?: string;
   deleted?: true;
+  missing?: true;
   view?: 'register';
 }
 
@@ -37,10 +38,21 @@ interface FixtureSummary {
 export interface FixtureHistoryItem extends FixtureSummary {
   supplierTraderId: string;
   buyerTraderId: string;
+  missingBuyPrice?: boolean;
+}
+
+export interface FixtureImportHold extends FixtureSummary {
+  reviewHold: {
+    field: 'supplier' | 'buyer_trader' | 'quantity';
+    grade?: FixtureGrade;
+    workbook: string;
+    tab: number;
+    row: number;
+  };
 }
 
 export interface FixtureHistoryPage {
-  items: FixtureHistoryItem[];
+  items: (FixtureHistoryItem | FixtureImportHold)[];
   total: number;
   filters?: { supplier: FixtureTraderFilter[]; buyer: FixtureTraderFilter[]; canSeeDeleted: boolean };
 }

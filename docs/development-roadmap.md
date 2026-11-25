@@ -22,6 +22,8 @@ Use one summary row per vessel booking, with agreed quantities aggregated by gra
 
 The historical fixture view shows the recorded quantities and ranges. Use confirmed quantities for actual-volume statistics. New fixture confirmation requires exact MT on each supply line and explicit review when a quantity falls outside the grade’s review limits.
 
+Use the SPC Google Sheet as the source of truth for imported fixture records. Apply verified sheet amendments and retain the earlier values and source evidence in the private audit.
+
 For reviewed SPC imports, keep the original row and source digest. An order crossed out in the sheet appears as CANCELLED in ECO with its original commercial details. For individual crossed-out values followed by a replacement, show the current vessel or quantity and retain the source evidence privately. Display both in plain text in FIXTURES. Count cancelled orders separately when fixture statistics are built.
 
 Let the buyer trader cancel a pending STEM. After supplier confirmation, the assigned supplier trader or an administrator can cancel it. Record the reason, actor and time and retain the booking and its original supply details. Associate verified split bookings in legacy imports with one fixture row and keep each supplier, quantity, account and price in the details window.

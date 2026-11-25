@@ -345,6 +345,33 @@ test('OAuth adapter sends refresh credential only to token endpoint and bearer o
     ['https://www.googleapis.com/drive/v3/about',{redirect:'follow'}],['https://www.googleapis.com/drive/v3/about',{redirect:'error',headers:{Authorization:'caller'}}]])await assert.rejects(auth(url,options));
   assert.equal(calls.length,before);
 });
+test('the OAuth adapter exposes redirect status only to a pinned resumable PUT', async () => {
+  const requests = [];
+  const auth = createGoogleAuthorizedFetch({
+    clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh',
+    fetchImpl: async (url, options) => {
+      if (url === 'https://oauth2.googleapis.com/token') {
+        return jsonResponse({ access_token: 'token', token_type: 'Bearer', expires_in: 3600, scope: 'https://www.googleapis.com/auth/drive.file' });
+      }
+      requests.push({ url, redirect: options.redirect, authorization: options.headers.get('authorization') });
+      return new Response(null, { status: 308 });
+    },
+  });
+  const session = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=synthetic';
+  for (const [url, method, redirect] of [
+    [session, 'GET', 'manual'],
+    [session, 'PUT', 'follow'],
+    [session.replace('&upload_id=synthetic', ''), 'PUT', 'manual'],
+    [session.replace('/upload/drive', '/drive'), 'PUT', 'manual'],
+    [session.replace('www.googleapis.com', 'example.invalid'), 'PUT', 'manual'],
+  ]) {
+    await assert.rejects(auth(url, { method, redirect }));
+  }
+  assert.deepEqual(requests, []);
+  assert.equal((await auth(session, { method: 'PUT', redirect: 'manual' })).status, 308);
+  assert.deepEqual(requests, [{ url: session, redirect: 'manual', authorization: 'Bearer token' }]);
+});
+
 test('OAuth errors and broader Drive scope fail without provider secret leakage',async()=>{
   for(const result of [{access_token:'token',token_type:'Bearer',expires_in:3600,scope:'https://www.googleapis.com/auth/drive'},
     {access_token:'bad\nsecret',token_type:'Bearer',expires_in:3600},{access_token:'token',token_type:'Bearer',expires_in:1},

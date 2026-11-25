@@ -4,6 +4,7 @@ import { lstat, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:f
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { createDriveBackupClient, DriveBackupError, DRIVE_BACKUP_DIAGNOSTIC_CODES, classifyDriveBackupError, hongKongNight } from './drive-backups.mjs';
 
 const EMAIL = 'backup@example.invalid', FOLDER = 'expected_folder', NOW = '2026-10-21T00:00:00.000Z';
@@ -32,7 +33,8 @@ class FakeDrive {
   cleanProps(input) { return Object.fromEntries(Object.entries(input || {}).filter(([, value]) => value !== null)); }
   async fetch(value, options = {}) {
     const url = new URL(value), method = options.method || 'GET';
-    assert.equal(url.origin, 'https://www.googleapis.com'); assert.equal(options.redirect, 'error');
+    assert.equal(url.origin, 'https://www.googleapis.com');
+    assert.equal(options.redirect, method === 'PUT' && url.searchParams.has('upload_id') ? 'manual' : 'error');
     this.calls.push({ url: value, method });
     if (this.transportFailure) throw new Error('Bearer synthetic-secret; private failure body');
     if (url.pathname === '/drive/v3/about') return json({ user: { emailAddress: this.aboutEmail }, storageQuota: { usage: '1', limit: this.quota } });
@@ -574,6 +576,42 @@ test('a lost final upload response is recovered by querying the same resumable s
   const input = await fixture(t), drive = new FakeDrive(); drive.failAfterComplete = true;
   const receipt = await client(drive).uploadAndVerify(input);
   assert.equal(receipt.verified, true); assert.equal(drive.generated, 1); assert.equal(drive.files.size, 1); assert.equal(drive.started, 1);
+});
+test('a lost chunk response resumes at the offset reported by a native fetch 308 response', async t => {
+  const drive = new FakeDrive(), input = await fixture(t, Buffer.concat([bytesFor('interrupted'), Buffer.alloc(300_000)]));
+  const server = createServer((_, response) => response.writeHead(308, { Range: 'bytes=0-262143' }).end());
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => { server.close(); server.closeAllConnections(); });
+
+  const fakeFetch = drive.fetch.bind(drive);
+  let queryRequests = 0;
+  drive.fetch = async (url, options) => {
+    const response = await fakeFetch(url, options);
+    if (response.status !== 308) return response;
+    if (!options.headers['Content-Range'].startsWith('bytes */')) throw new Error('Synthetic lost chunk response');
+    queryRequests++;
+    const status = await fetch(`http://127.0.0.1:${server.address().port}`, {
+      method: 'PUT', redirect: options.redirect, signal: options.signal,
+    });
+    return noBody(status.status, status.headers);
+  };
+
+  const receipt = await client(drive).uploadAndVerify(input);
+  assert.equal(receipt.sha256, input.expectedSha256);
+  assert.equal(queryRequests, 1);
+  assert.deepEqual(drive.writes.map(({ kind }) => kind), ['start', 'chunk', 'chunk', 'complete']);
+});
+test('a resumable response with a redirect destination cannot complete the archive', async t => {
+  const drive = new FakeDrive(), input = await fixture(t);
+  const fakeFetch = drive.fetch.bind(drive);
+  drive.fetch = (url, options) => options.method === 'PUT'
+    ? noBody(308, { Location: 'https://redirect.example.invalid/upload' })
+    : fakeFetch(url, options);
+  await assert.rejects(client(drive).uploadAndVerify(input), { code: 'REDIRECT_REJECTED' });
+  assert.deepEqual(drive.writes.map(({ kind }) => kind), ['start']);
 });
 test('expired sessions restart with the same pre-generated file ID', async t => {
   const input = await fixture(t), drive = new FakeDrive(); drive.expireFirst = true;

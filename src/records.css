@@ -82,11 +82,11 @@
 .fixture-vessel { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; text-align: left; }
 .fixture-vessel span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .fixture-vessel span + span { flex: none; font-size: var(--ui-text-meta); }
+.fixture-imo { color: var(--ui-muted); }
 #root .fixture-cancelled { color: var(--ui-danger); font-weight: 700; }
 .fixture-history .record-sheet__pagination > div { width: auto; margin-left: auto; }
 .fixture-dialog { padding: 16px; overflow-wrap: anywhere; }
 .fixture-dialog fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-.fixture-dialog__record dd { margin: 0; }
 .fixture-dialog__check { display: flex; align-items: center; gap: 8px; }
 .fixture-editor__booking { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px 16px; max-width: 760px; }
 .fixture-editor__booking .field, .fixture-editor__lines .field { min-width: 0; margin: 0; }
@@ -99,7 +99,10 @@
 .fixture-editor__lines th:nth-child(3) { width: 23%; }
 .fixture-editor__lines th:last-child { width: 56px; }
 .fixture-editor__lines :is(input,select), .fixture-editor__booking :is(input,select) { width: 100%; min-width: 0; }
-@media (min-width: 701px) { .fixture-editor__lines .field > span { display: none; } }
+@media (min-width: 701px) {
+ .fixture-editor__lines { border-bottom: 1px solid var(--ui-line); }
+ .fixture-editor__lines .field > span { display: none; }
+}
 @media (max-width: 700px) {
  .fixture-history :is(th,td) { min-height: 44px; padding-block: 0; }
  .fixture-history th.record-sheet__date { left: auto; }

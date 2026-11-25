@@ -66,7 +66,7 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
       content = <EnquiryPage open={open} onOpen={onOpen} context={context} />;
       break;
     case "fixtures":
-      content = <FixtureHistory open={open} onOpen={onOpen} />;
+      content = <FixtureHistory open={open} />;
       break;
     case "lost":
       content = <RecordsPage open={open} kind="lost" />;

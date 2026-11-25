@@ -7,13 +7,13 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 const base = process.env.ECO_COMMERCIAL_UI_ORIGIN || 'http://127.0.0.1:4396';
 const output = resolve(process.env.ECO_FIXTURE_UI_OUTPUT || 'output/fixture-history-ui');
 const member = {
-  id: '60000000-0000-4000-8000-000000000001', email: 'fixture-trader@example.test', displayName: 'FIXTURE TRADER',
+  id: '60000000-0000-4000-8000-000000000001', email: 'fixture-trader@example.test', displayName: 'LONG TEST',
   officeId: 'HONG KONG', officeName: 'Hong Kong', isAdmin: false, isSpcTrader: false, isManager: false,
   isActive: true, activated: true, passwordChangeSuggested: false, revision: 1,
 };
 const supplierId = '60000000-0000-4000-8000-000000000002';
 const secondSupplierId = '60000000-0000-4000-8000-000000000003';
-const seller = { ...member, id: '60000000-0000-4000-8000-000000000004', displayName: 'ASSIGNED TRADER', isSpcTrader: true };
+const seller = { ...member, id: '60000000-0000-4000-8000-000000000004', displayName: 'LANA TEST', isSpcTrader: true };
 const enquiryId = '60000000-0000-4000-8000-000000000005';
 const bookingId = '60000000-0000-4000-8000-000000000006';
 const enquiry = {
@@ -22,22 +22,15 @@ const enquiry = {
   port: { id: 'port-singapore', countryCode: 'SG', countryName: 'Singapore', portName: 'Singapore' },
   createdAt: '2026-10-10T00:00:00Z', updatedAt: '2026-10-10T00:00:00Z', confirmedAt: '2026-10-10T00:00:00Z', queue: null,
 };
-const records = Array.from({ length: 51 }, (_, index) => ({
-  id: `60000001-0000-4000-8000-${String(index).padStart(12, '0')}`, date: index === 50 ? '2025-03-09' : '2026-10-10',
-  supplierTrader: index === 50 ? 'SECOND SELLER' : 'LANA TEST', supplierOffice: index === 50 ? 'GENOA' : 'SINGAPORE',
-  supplierOfficeCode: index === 50 ? 'IT' : 'SG', supplierTraderId: index === 50 ? member.id : seller.id,
-  buyerTrader: 'LONG TEST', buyerOffice: index === 50 ? 'GENOA' : 'HONG KONG',
-  buyerOfficeCode: index === 50 ? 'IT' : 'HK', buyerTraderId: member.id,
-  account: 'SINGAPORE', eta: null, vessel: index === 50 ? 'SYNTHETIC OSPREY' : 'SYNTHETIC TERN', imo: index === 50 ? '9876543' : null,
-  hsfo: null, vlsfo: '160–220', lsmgo: null, supplierId, supplier: 'SYNTHETIC SUPPLIER', supplierAvailable: true,
-  price: 'USD 455/MT', barging: null,
-  cancelled: index === 50, canEdit: false,
-  ...(index === 50 ? { lsmgo: '60–70', supplyRows: [
-    { hsfo: null, vlsfo: '160–220', lsmgo: null, supplierId, supplier: 'SYNTHETIC SUPPLIER',
-      supplierAvailable: true, account: 'SINGAPORE', price: 'USD 455/MT', barging: null, cancelled: true },
-    { hsfo: null, vlsfo: null, lsmgo: '60–70', supplierId: secondSupplierId, supplier: 'SYNTHETIC SUPPLIER TWO',
-      supplierAvailable: true, account: 'ITALY', price: 'USD 490/MT', barging: null, cancelled: true },
-  ] } : {}),
+const italianTrader = { id: '60000000-0000-4000-8000-000000000007', name: 'SECOND TRADER', code: 'IT', office: 'ITALY' };
+const directory = new Map([[member.id, { id: member.id, name: member.displayName, code: 'HK', office: 'HONG KONG' }],
+  [seller.id, { id: seller.id, name: seller.displayName, code: 'SG', office: 'SINGAPORE' }], [italianTrader.id, italianTrader]]);
+const records = Array.from({ length: 101 }, (_, index) => ({
+  id: `60000001-0000-4000-8000-${String(index).padStart(12, '0')}`, date: index === 100 ? '2025-03-09' : '2026-10-10',
+  supplierTraderId: index === 100 ? italianTrader.id : seller.id,
+  buyerTraderId: index === 100 ? italianTrader.id : member.id,
+  vessel: index === 100 ? 'SYNTHETIC OSPREY' : 'SYNTHETIC TERN', imo: index === 100 ? '9876543' : null,
+  vlsfo: '160–220', cancelled: index === 100,
 }));
 
 const results = [];
@@ -62,6 +55,7 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
       const quantityReview = { HSFO: { min: 75, max: 6000 }, VLSFO: { min: 70, max: 3500 }, LSMGO: { min: 15, max: 1000 } };
       const bookingVersion = () => String(booking.revision).padStart(32, '0');
       let fail = false;
+      let removedPreviewRequests = 0;
       const errors = [];
       await context.route('**/api/**', async route => {
         const request = route.request();
@@ -79,24 +73,24 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
           const [year, month, page] = ['year', 'month', 'page'].map(key => Number(url.searchParams.get(key)));
           const search = url.searchParams.get('search').toUpperCase();
           const deleted = url.searchParams.has('deleted');
-          const rows = booking ? [{ ...records[0], ...booking, supplierOffice: 'SINGAPORE', supplierOfficeCode: 'SG',
-            buyerOffice: 'HONG KONG', buyerOfficeCode: 'HK', canEdit: actor.id === seller.id,
-            account: null, supplier: '', supplierId: '', supplierAvailable: false, price: null, vlsfo: booking.status === 'pending'
-              ? enquiry.products[0].quantityText : String(booking.lines.reduce((sum, line) => sum + line.quantity, 0)) }, ...records] : records;
+          assert.equal(url.searchParams.get('view'), 'register');
+          const rows = booking && (!booking.deleted || actor.id === seller.id) ? [{
+            id: booking.id, vessel: booking.vessel, imo: booking.imo, date: booking.date, eta: booking.eta, etaEnd: booking.etaEnd,
+            buyerTraderId: member.id, supplierTraderId: seller.id, status: booking.status, deleted: booking.deleted,
+            cancelled: booking.cancelled, canEdit: actor.id === seller.id, vlsfo: booking.status === 'pending'
+              ? enquiry.products[0].quantityText : String(booking.lines.reduce((sum, line) => sum + line.quantity, 0)),
+          }, ...records] : records;
           const visible = rows.filter(row => Boolean(row.deleted) === deleted);
-          const parties = column => [...new Map(visible.map(row => {
-            const id = row[column + 'TraderId'];
-            const code = row[column + 'OfficeCode'];
-            return [id + code, { id, name: row[column + 'Trader'], code, office: row[column + 'Office'] }];
-          })).values()];
+          const parties = column => [...new Set(visible.map(row => row[column + 'TraderId']))].map(id => directory.get(id));
           const matches = visible.filter(row => (!year || Number(row.date.slice(0, 4)) === year) &&
             (!month || Number(row.date.slice(5, 7)) === month) && row.vessel.includes(search) &&
             ['supplier', 'buyer'].every(column => {
               const office = url.searchParams.get(column + 'Office');
               const trader = url.searchParams.get(column + 'Trader');
-              return (!office || row[column + 'OfficeCode'] === office) && (!trader || row[column + 'TraderId'] === trader);
+              const party = directory.get(row[column + 'TraderId']);
+              return (!office || party.code === office) && (!trader || party.id === trader);
             }));
-          return route.fulfill({ json: { items: matches.slice(page * 50, page * 50 + 50), total: matches.length,
+          return route.fulfill({ json: { items: matches.slice(page * 100, page * 100 + 100), total: matches.length,
             filters: { supplier: parties('supplier'), buyer: parties('buyer'), canSeeDeleted: Boolean(booking?.deleted) } } });
         }
         if (url.pathname === '/api/enquiries/records') {
@@ -119,12 +113,11 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
                 lines: [{ grade: 'VLSFO', quantity: '200-300', supplierId: '', accountId: '', price: '', barging: '', cancelled: false }],
               };
               return route.fulfill({ json: { item: booking, fields, version: bookingVersion(), accounts, suppliers, quantityReview, reference: booking.reference,
-                canConfirm: booking.status === 'pending' && !booking.deleted, canCancel: booking.status === 'confirmed' && !booking.cancelled && !booking.deleted } });
+                canConfirm: booking.status === 'pending' && !booking.deleted && !booking.cancelled,
+                canCancel: booking.status === 'confirmed' && !booking.cancelled && !booking.deleted, canReinstate: booking.cancelled && !booking.deleted } });
             }
-            return route.fulfill({ json: { ...booking,
-              canConfirm: !booking.cancelled && actor.id === seller.id && booking.status === 'pending',
-              canCancel: !booking.cancelled && (booking.status === 'pending' ? actor.id === member.id : actor.id === seller.id),
-            } });
+            removedPreviewRequests++;
+            return route.fulfill({ status: 404, json: { message: 'Fixture preview is unavailable' } });
           }
           const body = request.postDataJSON();
           if (body.action === 'assign') {
@@ -137,6 +130,14 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
               supplierTrader: seller.displayName, supplierOffice: 'SINGAPORE', supplierOfficeCode: 'SG',
               buyerTrader: member.displayName, buyerOffice: 'HONG KONG', buyerOfficeCode: 'HK', reference: enquiry.reference,
               confirmedAt: null, requested: enquiry.products, lines: [], cancellation: null };
+          } else if ('expectedRevision' in body) {
+            assert.equal(actor.id, member.id);
+            assert.equal(body.expectedRevision, booking.revision);
+            assert.equal(booking.status, 'pending');
+            assert.ok(['cancel', 'reinstate'].includes(body.action));
+            assert.ok(!('reason' in body));
+            booking = { ...booking, revision: booking.revision + 1, cancelled: body.action === 'cancel' };
+            return route.fulfill({ json: { id: booking.id, assignment: booking } });
           } else {
             assert.equal(actor.id, seller.id);
             assert.equal(body.version, bookingVersion());
@@ -158,10 +159,14 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
                     account: line.accountId, supplierAvailable: true, supplier: suppliers.find(supplier => supplier.id === line.supplierId).name })) };
                 break;
               }
-              case 'void':
-                assert.equal(body.reason, 'SYNTHETIC WITHDRAWAL');
+              case 'cancel':
+                assert.ok(!('reason' in body));
                 booking = { ...booking, cancelled: true,
-                  cancellation: { at: '2026-10-10T05:00:00Z', by: seller.displayName, reason: body.reason } };
+                  cancellation: { at: '2026-10-10T05:00:00Z', by: seller.displayName, reason: null } };
+                break;
+              case 'reinstate':
+                assert.ok(!('reason' in body));
+                booking = { ...booking, cancelled: false, cancellation: null };
                 break;
               case 'delete':
               case 'restore':
@@ -173,25 +178,7 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
           }
           return route.fulfill({ json: booking });
         }
-        if (url.pathname === '/api/suppliers/list') return route.fulfill({ json: {
-          items: [
-            { id: supplierId, legalName: 'SYNTHETIC SUPPLIER', shortName: 'SYNTHETIC SUPPLIER', countryCode: 'SG', aliases: [] },
-            { id: secondSupplierId, legalName: 'SYNTHETIC SUPPLIER TWO', shortName: 'SYNTHETIC SUPPLIER TWO', countryCode: 'SG', aliases: [] },
-          ], total: 2, page: 1, pageSize: 100,
-        } });
-        if (url.pathname === '/api/suppliers/detail') {
-          assert.equal(url.searchParams.get('id'), supplierId);
-          return route.fulfill({ json: { item: {
-            id: supplierId, sourceKey: 'test-supplier', legacyIds: [], aliases: [], legalName: 'SYNTHETIC SUPPLIER LTD', shortName: 'SYNTHETIC SUPPLIER',
-            countryCode: 'SG', portName: 'Singapore', countryName: 'Singapore', revision: 1, updatedAt: '2026-10-10T00:00:00Z',
-            nameStatus: 'verified', info: { paymentTerms: '', qualityClaimBar: '', supplierTrader: '', availableGrade: 'VLSFO', foBdn: '', goBdn: '' },
-            contacts: [], barges: [], sources: [], facts: [], legalNameSourceId: null, background: '',
-          } } });
-        }
         if (url.pathname === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
-        if (url.pathname === '/api/profile-tabs/list') return route.fulfill({ json: {
-          target: { kind: url.searchParams.get('kind'), id: url.searchParams.get('id') }, shared: { revision: 0, tabs: [] }, private: { revision: 0, tabs: [] },
-        } });
         return route.fulfill({ json: { items: [], count: 0, total: 0, unreadCount: 0, nextCursor: null } });
       });
       const page = await context.newPage();
@@ -215,53 +202,48 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         const dialog = page.getByRole('dialog', { name: 'Fixtures', exact: true });
         const grid = dialog.getByRole('region', { name: 'Fixture table', exact: true });
         await expect(grid.getByRole('columnheader')).toHaveText(['DATE', 'SUPPLIER TRADER', 'BUYER TRADER', 'VESSEL', 'ETA', 'HSFO', 'VLSFO', 'LSMGO']);
-        await expect(dialog.getByRole('status')).toHaveText('1–50 OF 51');
-        await expect(grid.locator('tbody tr')).toHaveCount(50);
+        await expect(dialog.getByRole('status')).toHaveText('1–100 OF 101');
+        await expect(grid.locator('tbody tr')).toHaveCount(100);
         assert.ok(await grid.evaluate(node => node.scrollWidth > node.clientWidth || innerWidth > 760), 'Narrow table scrolls inside its window');
-        await expect(grid.getByText('LANA (SG)', { exact: true })).toHaveCount(50);
-        await expect(grid.getByText('LONG (HK)', { exact: true })).toHaveCount(50);
+        await expect(grid.getByText('LANA (SG)', { exact: true })).toHaveCount(100);
+        await expect(grid.getByText('LONG (HK)', { exact: true })).toHaveCount(100);
+        await expect(dialog.getByText('YEAR', { exact: true })).toHaveCount(0);
+        await expect(dialog.getByText('MONTH', { exact: true })).toHaveCount(0);
         await shot('fixtures');
-        for (const [column, id] of [['SUPPLIER TRADER', member.id], ['BUYER TRADER', member.id]]) {
+        for (const [column, id] of [['SUPPLIER TRADER', italianTrader.id], ['BUYER TRADER', italianTrader.id]]) {
           await grid.getByRole('button', { name: 'FILTER ' + column }).click();
+          await expect(dialog.getByLabel(column + ' NAME', { exact: true }).locator('option')).toHaveCount(3);
+          await expect(dialog.getByLabel(column + ' NAME', { exact: true })).not.toContainText(' / ');
           await dialog.getByLabel(column + ' OFFICE', { exact: true }).selectOption('IT');
           await dialog.getByLabel(column + ' NAME', { exact: true }).selectOption(id);
           await expect(dialog.getByRole('status')).toHaveText('1–1 OF 1');
           await dialog.getByLabel(column + ' OFFICE', { exact: true }).selectOption('');
           await dialog.getByLabel(column + ' NAME', { exact: true }).selectOption('');
           await dialog.getByRole('button', { name: 'DONE', exact: true }).click();
-          await expect(dialog.getByRole('status')).toHaveText('1–50 OF 51');
+          await expect(dialog.getByRole('status')).toHaveText('1–100 OF 101');
         }
         await dialog.getByRole('button', { name: 'Next fixtures page' }).click();
-        await expect(grid.getByText('SYNTHETIC OSPREY (9876543)', { exact: true })).toBeVisible();
+        await expect(grid.getByText('SYNTHETIC OSPREY', { exact: true })).toBeVisible();
         await expect(grid.getByText('CANCELLED', { exact: true })).toBeVisible();
         await expect(grid.locator('s, del')).toHaveCount(0);
-        await expect(dialog.getByRole('status')).toHaveText('51–51 OF 51');
+        await expect(dialog.getByRole('status')).toHaveText('101–101 OF 101');
         await dialog.getByRole('button', { name: 'Previous fixtures page' }).click();
-        await expect(dialog.getByRole('status')).toHaveText('1–50 OF 51');
+        await expect(dialog.getByRole('status')).toHaveText('1–100 OF 101');
         await dialog.getByLabel('Fixture year').selectOption('2025');
         await dialog.getByLabel('Fixture month').selectOption('3');
         await dialog.getByRole('searchbox', { name: 'Search fixtures' }).fill('OSPREY');
-        await expect(grid.getByText('SYNTHETIC OSPREY (9876543)', { exact: true })).toBeVisible();
-        await expect(grid.getByText('LONG (IT)', { exact: true })).toBeVisible();
+        await expect(grid.getByText('SYNTHETIC OSPREY', { exact: true })).toBeVisible();
+        await expect(grid.locator('.fixture-imo')).toHaveText('9876543');
         fail = true;
         await dialog.getByRole('button', { name: 'REFRESH', exact: true }).click();
         await expect(grid.getByRole('alert')).toContainText('FIXTURES UNAVAILABLE');
         fail = false;
         await dialog.getByRole('button', { name: 'REFRESH', exact: true }).click();
-        await grid.getByRole('button', { name: 'SYNTHETIC OSPREY' }).click();
-        const archived = page.getByRole('dialog', { name: 'SYNTHETIC OSPREY (9876543)', exact: true });
-        await expect(archived.getByRole('button', { name: 'EDIT', exact: true })).toHaveCount(0);
-        await expect(archived).toContainText('160–220');
-        await expect(archived).toContainText('60–70');
-        await expect(archived).toContainText('USD 455/MT');
-        await expect(archived.getByText('CANCELLED', { exact: true })).toBeVisible();
-        await shot('fixture-history-details');
-        const [detail] = await Promise.all([
-          page.waitForResponse(response => new URL(response.url()).pathname === '/api/suppliers/detail'),
-          archived.getByRole('button', { name: 'SYNTHETIC SUPPLIER', exact: true }).click(),
-        ]);
-        assert.equal(detail.status(), 200);
-        await expect(page.getByRole('dialog', { name: 'Supplier Profiles', exact: true })).toContainText('SYNTHETIC SUPPLIER');
+        const archived = grid.getByText('SYNTHETIC OSPREY', { exact: true });
+        await archived.click();
+        await expect(page.getByRole('dialog', { name: /SYNTHETIC OSPREY/ })).toHaveCount(0);
+        await expect(grid.getByRole('button', { name: /SYNTHETIC OSPREY/ })).toHaveCount(0);
+        await shot('fixture-history');
         async function openTrading(name) {
           const group = nav.getByRole('button', { name: 'Trading', exact: true });
           if (await group.getAttribute('aria-expanded') !== 'true') await group.click();
@@ -274,28 +256,37 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         const stem = page.getByRole('dialog', { name: 'STEM', exact: true });
         await stem.getByLabel('SUPPLIER TRADER', { exact: true }).selectOption(seller.id);
         await stem.getByLabel('DATE', { exact: true }).fill('2026-10-10');
-        await stem.getByLabel('ETA', { exact: true }).selectOption('range');
-        await stem.getByLabel(/LATEST ETA/).fill('2026-10-14');
+        await expect(stem.getByLabel('ETA FROM', { exact: true })).toHaveValue('2026-10-12');
+        await expect(stem.getByLabel('ETA', { exact: true })).toHaveCount(0);
+        await stem.getByLabel('ETA TO', { exact: true }).fill('2026-10-14');
         await shot('fixture-handoff');
         await stem.getByRole('button', { name: 'SAVE', exact: true }).click();
-        await expect(enquiries).toContainText(/pending.*assigned trader/i);
+        await expect(enquiries).toContainText(/pending.*lana test/i);
+        await enquiries.getByRole('button', { name: 'CANCEL STEM', exact: true }).click();
+        const pendingCancel = page.getByRole('dialog', { name: 'CANCEL STEM', exact: true });
+        await expect(pendingCancel.getByLabel('REASON')).toHaveCount(0);
+        await pendingCancel.getByRole('button', { name: 'CONFIRM CANCELLATION' }).click();
+        await expect(enquiries).toContainText(/cancelled.*lana test/i);
+        await enquiries.getByRole('button', { name: 'REINSTATE', exact: true }).click();
+        await page.getByRole('dialog', { name: 'REINSTATE', exact: true }).getByRole('button', { name: 'REINSTATE', exact: true }).click();
+        await expect(enquiries).toContainText(/pending.*lana test/i);
         actor = seller;
         await page.reload();
         const ledger = await openTrading('Fixtures');
         const bookingRow = ledger.locator('tr[data-record-id="' + bookingId + '"]');
         async function openEditor() {
-          const vessel = bookingRow.getByRole('button', { name: /SYNTHETIC SPLIT/ });
-          if (width >= 760) await vessel.dblclick();
-          else {
-            await vessel.tap();
-            await page.getByRole('dialog', { name: /SYNTHETIC SPLIT/ }).getByRole('button', { name: 'EDIT', exact: true }).tap();
-          }
+          const vessel = bookingRow.getByRole('button', { name: 'EDIT SYNTHETIC SPLIT', exact: true });
+          if (width >= 760) await bookingRow.locator('td').first().dblclick();
+          else await vessel.tap();
           const editor = page.getByRole('dialog', { name: 'EDIT FIXTURE', exact: true });
           await expect(editor.getByLabel('ETA FROM')).toBeVisible();
           return editor;
         }
         let supply = await openEditor();
         await expect(supply.getByLabel('Quantity 1')).toHaveValue('200-300');
+        await expect(supply.getByLabel('ETA', { exact: true })).toHaveCount(0);
+        await expect(supply.getByLabel('ETA FROM', { exact: true })).toHaveValue('2026-10-12');
+        if (width >= 760) await expect(supply.getByRole('table', { name: 'SUPPLY LINES' })).toHaveCSS('border-bottom-width', '1px');
         await supply.getByLabel('IMO', { exact: true }).fill('9876543');
         await supply.getByLabel('ETA TO', { exact: true }).fill('2026-10-15');
         await supply.getByLabel('Quantity 1').fill('250');
@@ -326,7 +317,7 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         await shot('fixture-editor');
         await supply.getByRole('button', { name: 'SAVE', exact: true }).click();
         await expect(supply).toBeHidden();
-        await expect(bookingRow).toContainText('SYNTHETIC SPLIT (9876543)');
+        await expect(bookingRow.locator('.fixture-imo')).toHaveText('9876543');
         await expect(bookingRow).toContainText('12 Oct 2026 – 15 Oct 2026');
         await expect(bookingRow).not.toContainText('FROM');
 
@@ -340,8 +331,8 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
 
         supply = await openEditor();
         await supply.getByRole('button', { name: 'FIXTURE CANCELLED', exact: true }).click();
-        await expect(supply.getByRole('button', { name: 'CONFIRM CANCELLATION' })).toBeDisabled();
-        await supply.getByRole('textbox', { name: 'REASON' }).fill('SYNTHETIC WITHDRAWAL');
+        await expect(supply.getByRole('button', { name: 'CONFIRM CANCELLATION' })).toBeEnabled();
+        await expect(supply.getByLabel('REASON')).toHaveCount(0);
         await supply.getByRole('button', { name: 'CONFIRM CANCELLATION' }).click();
         await expect(supply).toBeHidden();
         await expect(bookingRow.locator('button .fixture-cancelled')).toHaveText('CANCELLED');
@@ -349,7 +340,7 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         await shot('cancelled-stem');
 
         supply = await openEditor();
-        await expect(supply).toContainText('SYNTHETIC WITHDRAWAL');
+        await expect(supply.getByRole('button', { name: 'REINSTATE', exact: true })).toBeVisible();
         await expect(supply.getByLabel('Buy price 2')).toHaveValue('490');
         await supply.getByRole('button', { name: 'DELETE', exact: true }).click();
         await supply.getByRole('button', { name: 'CONFIRM DELETE', exact: true }).click();
@@ -360,9 +351,15 @@ for (const [engine, driver] of [['chromium', chromium], ['webkit', webkit]]) {
         await expect(supply).toBeHidden();
         await ledger.getByRole('button', { name: 'DELETED', exact: true }).click();
         await expect(bookingRow).toContainText('CANCELLED');
+        supply = await openEditor();
+        await supply.getByRole('button', { name: 'REINSTATE', exact: true }).click();
+        await expect(supply).toBeHidden();
+        await expect(bookingRow).not.toContainText('CANCELLED');
+        await expect(bookingRow).toContainText('275');
+        assert.equal(removedPreviewRequests, 0);
         assert.deepEqual(errors, []);
         results.push({ engine, width, theme, ok: true });
-        console.log(`PASS ${engine} ${width} ${theme}: sign-in, fixture grid, filters, historical details, buyer handoff, fixture editing, cancellation and restoration`);
+        console.log(`PASS ${engine} ${width} ${theme}: sign-in, fixture grid, filters, direct editing, buyer handoff, cancellation, reinstatement and restoration`);
       } catch (error) {
         await shot('failure').catch(() => {});
         throw error;

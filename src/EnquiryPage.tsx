@@ -9,7 +9,7 @@ import { useAccess } from './auth';
 import { useTestWorkspace } from './TestWorkspace';
 import { commercialEnquiryApi } from './lib/commercialEnquiryApi';
 import { useCommercialEnquiries } from './useCommercialEnquiries';
-import { FixtureHandoff } from './FixtureDialogs';
+import { FixtureHandoff, PendingFixtureCancellation } from './FixtureDialogs';
 import type { FixtureAssignment } from '../shared/fixtureWorkflow';
 import type { CommercialEnquiry, CommercialEnquiryMutation, CommercialEnquirySummary } from '../shared/commercialEnquiries';
 import { supplierPortForLocation } from '../shared/supplierPorts';
@@ -121,6 +121,7 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   const liveEnabled = live && !preview && Boolean(realUser?.isActive && realUser.activated);
   const commercial = useCommercialEnquiries(actor.id, liveEnabled);
   const [handoff, setHandoff] = useState<CommercialEnquirySummary>();
+  const [pendingCancellation, setPendingCancellation] = useState<{ enquiry: CommercialEnquirySummary; fixture: FixtureAssignment }>();
   const [assignments, setAssignments] = useState<Record<string, FixtureAssignment>>({});
   const [remote, setRemote] = useState<{ key: string; item: CommercialEnquiry | null } | null>(null);
   const [detailError, setDetailError] = useState('');
@@ -287,7 +288,9 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
     const own = item.ownerId === actor.id;
     const assigned = assignments[item.id];
     const fixture = assigned && assigned.revision > (item.fixture?.revision ?? 0) ? assigned : item.fixture;
-    const canAssign = own && liveEnabled && commercial.scope === 'mine' && item.status === 'confirmed' && item.port?.countryCode === 'SG' && (!fixture || fixture.status === 'pending');
+    const canManage = own && liveEnabled && commercial.scope === 'mine' && item.status === 'confirmed' && item.port?.countryCode === 'SG';
+    const canAssign = canManage && (!fixture || fixture.status === 'pending');
+    const canCancel = canManage && fixture && !fixture.confirmed && (fixture.status === 'pending' || fixture.status === 'cancelled');
     return <article key={item.id} className={`center-incoming-row${selection.kind === 'record' && selection.id === item.id ? ' is-selected' : ''}`} data-commercial-id={item.id}>
       {own ? <button className="center-incoming-open" aria-label={`Open ${item.vessel || item.reference}`} onClick={() => chooseRecord(item.id)}>
         <span><strong>{item.vessel || item.reference}</strong><br />
@@ -299,9 +302,12 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
           <span>{item.products.map(product => `${product.grade} ${product.quantityText}${/\b(?:MTS?|metric tonnes?)\b/i.test(product.quantityText) ? '' : ' MT'}`).join(' / ')}</span><br />
           <span>{item.eta} · Awaiting connection</span></span>
       </div>}
-      {canAssign && <div className="center-lifecycle"><button type="button" onClick={() => setHandoff({ ...item, fixture })}>
-        {fixture ? 'EDIT' : 'STEM'}
-      </button></div>}
+      {(canAssign || canCancel) && <div className="center-lifecycle">
+        {canAssign && <button type="button" onClick={() => setHandoff({ ...item, fixture })}>{fixture ? 'EDIT' : 'STEM'}</button>}
+        {canCancel && <button type="button" onClick={() => setPendingCancellation({ enquiry: item, fixture })}>
+          {fixture.status === 'cancelled' ? 'REINSTATE' : 'CANCEL STEM'}
+        </button>}
+      </div>}
     </article>;
   }
   function amend(enquiry: Enquiry) {
@@ -358,6 +364,12 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
         setHandoff(undefined);
         void commercial.reload();
       }} />}
+      {pendingCancellation && <PendingFixtureCancellation fixture={pendingCancellation.fixture} vessel={pendingCancellation.enquiry.vessel}
+        onClose={() => setPendingCancellation(undefined)} onSaved={fixture => {
+          setAssignments(current => ({ ...current, [pendingCancellation.enquiry.id]: fixture }));
+          setPendingCancellation(undefined);
+          void commercial.reload();
+        }} />}
       <div className="center-main">
         <div className="center-tabs" role="tablist" aria-label="Enquiries">
           {(["Enquiry", "Intelligence", "Credit"] as Tab[]).map((item) => (

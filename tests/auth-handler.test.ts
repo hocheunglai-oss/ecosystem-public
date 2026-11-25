@@ -53,13 +53,13 @@ test('fixture history is authenticated, private and bounded to live filters', as
   assert.deepEqual(await result.json(), { items: [], total: 0 });
   assert.deepEqual(f.calls, ['fixtures:{"year":2025,"month":9,"page":2,"search":"SYNTHETIC"}']);
   f.calls.length = 0;
-  const filtered = await handleAuth(request(`${table}?supplierOffice=SG&supplierTrader=${user.id}&buyerOffice=HK&buyerTrader=${user.id}&deleted=1`, undefined, live), config, f.gateway);
+  const filtered = await handleAuth(request(`${table}?view=register&supplierOffice=SG&supplierTrader=${user.id}&buyerOffice=HK&buyerTrader=${user.id}&deleted=1`, undefined, live), config, f.gateway);
   assert.equal(filtered.status, 200);
   assert.deepEqual(JSON.parse(f.calls[0].slice('fixtures:'.length)), { year: 0, month: 0, page: 0, search: '',
-    supplierOffice: 'SG', supplierTrader: user.id, buyerOffice: 'HK', buyerTrader: user.id, deleted: true });
+    supplierOffice: 'SG', supplierTrader: user.id, buyerOffice: 'HK', buyerTrader: user.id, deleted: true, view: 'register' });
   f.calls.length = 0;
   for (const filter of ['year=2024', 'year=2025&year=2026', 'month=13', 'page=-1', 'page=201', 'supplierId=x', 'search=%00',
-    'supplierOffice=%00', 'buyerTrader=arbitrary', 'buyerOffice=HK&buyerOffice=IT', 'deleted=0']) {
+    'supplierOffice=%00', 'buyerTrader=arbitrary', 'buyerOffice=HK&buyerOffice=IT', 'deleted=0', 'view=all']) {
     assert.equal((await handleAuth(request(`${table}?${filter}`, undefined, live), config, f.gateway)).status, 400, filter);
   }
   const forbiddenHeaders: Record<string, string>[] = [{}, { 'x-eco-data-mode': 'test' }, { ...live, 'sec-fetch-site': 'cross-site' }];

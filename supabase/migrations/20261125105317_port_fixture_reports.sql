@@ -162,3 +162,5 @@ revoke all on function eco_private.port_fixture_lines(eco_private.users,jsonb,da
   eco_private.spc_port_statistics(eco_private.users,jsonb,date),
   public.eco_read_port_fixtures(text,text,text,integer) from public,anon,authenticated,service_role;
 grant execute on function public.eco_read_port_fixtures(text,text,text,integer) to authenticated;
+
+insert into eco_private.platform_versions(component,migration_head) values('port-fixture-reports','20261125105317');

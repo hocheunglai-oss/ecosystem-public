@@ -1,0 +1,7 @@
+# ECO WhatsApp Dispatcher
+
+Load this unpacked extension in the designated Chrome profile and keep its English WhatsApp Web session open. Use the **CONNECT DISPATCHER** action in **SETTINGS → PERSONAL DETAILS** on the live ECO site. Copy the connection code into the extension popup. The first successful connection enables the assigned pilot group for future Singapore confirmations. Your assigned group is shown in Personal Details. The code is a private 90-day dispatcher credential. It can be replaced using the same ECO action. Pause dispatch from the extension popup.
+
+The ECO device reads its own purchasing-centre queue. It has no access to legacy SPC accounts or queues. The browser closes a search only when it still matches the job. It verifies a unique group, the exact group composer and the staged message before requesting a one-use server reservation. It sends one click and checks WhatsApp's outgoing acknowledgement. Drafts and uncertain sends require review. Delivery records distinguish a WhatsApp acknowledgement from group members reading the message.
+
+The extension uses Chrome's debugger permission for the checked search and send controls in WhatsApp Web. It connects only to live ECO and keeps the local credential in extension-only storage. An asleep device, closed tab or logged-out WhatsApp Web session delays dispatch. Compare held deliveries with WhatsApp before authorizing any manual send. Keep the legacy dispatcher in place through the pilot.

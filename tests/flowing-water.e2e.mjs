@@ -80,6 +80,7 @@ async function mocks(context) {
     if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
     if (path === '/api/access/users') return route.fulfill({ json: { users: [state.user], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
     if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
+    if (path === '/api/enquiries/dispatcher') return route.fulfill({ json: { routes: [] } });
     if (path === '/api/enquiries/inbox') return route.fulfill({ json: { items: [], nextCursor: null, unreadCount: 0 } });
     if (path === '/api/enquiries/records' && request.method() === 'GET') return route.fulfill({ json: { items: [], nextCursor: null } });
     if (path === '/api/attachments/list' && request.method() === 'GET') return route.fulfill({ json: { items: [], folders: [], retainedIds: [], targetKeys: [] } });

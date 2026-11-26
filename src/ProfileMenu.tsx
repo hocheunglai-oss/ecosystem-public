@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { normalizeAccessPhone } from "../shared/access";
 import { useAccess } from "./auth";
 import { usePhoneChangeRequests } from "./PhoneChangeRequests";
+import { WhatsAppRouteDetails } from "./WhatsAppRouteDetails";
 import "./personal-details.css";
 
 export type AccountPanel = {
@@ -67,6 +68,7 @@ export function PersonalDetails() {
         {notice && <p className="personal-phone-status" role="status">{notice}</p>}
       </dd></div>
       <div><dt>Office</dt><dd>{realUser.officeName}</dd></div>
+      {!preview && <WhatsAppRouteDetails key={realUser.id} />}
     </dl>
   </section>;
 }

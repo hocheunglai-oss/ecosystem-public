@@ -1,3 +1,4 @@
+import { deliveryLabel } from '../shared/commercialEnquiries';
 import { ReleaseNotice, useBuyerCreditAvailable } from './ReleaseGate';
 import { CreditUsage } from "./CreditUsage";
 import { parserApi } from './lib/parserApi';
@@ -115,7 +116,7 @@ export default function EnquiryPage({ open, onOpen, context }: { open: OpenModal
 
 function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: OpenWorkspace; context?: WorkspaceNavigationContext }) {
   const { state, actor, run } = useDemo();
-  const { realUser, preview } = useAccess();
+  const { user, realUser, preview } = useAccess();
   const { dataMode } = useTestWorkspace();
   const live = dataMode === 'live';
   const liveEnabled = live && !preview && Boolean(realUser?.isActive && realUser.activated);
@@ -295,12 +296,12 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
       {own ? <button className="center-incoming-open" aria-label={`Open ${item.vessel || item.reference}`} onClick={() => chooseRecord(item.id)}>
         <span><strong>{item.vessel || item.reference}</strong><br />
           <span>{item.reference} · {item.port?.portName || '—'}</span><br />
-          <span>{fixture ? `${fixture.status} · ${fixture.supplierTrader}` : item.queue ? 'Awaiting connection' : item.status} · {date(item.updatedAt)}</span></span>
+          <span>{fixture ? `${fixture.status} · ${fixture.supplierTrader}` : item.queue ? deliveryLabel(item.queue) : item.status} · {date(item.updatedAt)}</span></span>
       </button> : <div className="center-incoming-open">
         <span><strong>{item.vessel || item.reference}</strong><br />
           <span>{item.reference} · {item.ownerName}</span><br />
           <span>{item.products.map(product => `${product.grade} ${product.quantityText}${/\b(?:MTS?|metric tonnes?)\b/i.test(product.quantityText) ? '' : ' MT'}`).join(' / ')}</span><br />
-          <span>{item.eta} · Awaiting connection</span></span>
+          <span>{item.eta}{item.queue && ` · ${deliveryLabel(item.queue)}`}</span></span>
       </div>}
       {(canAssign || canCancel) && <div className="center-lifecycle">
         {canAssign && <button type="button" onClick={() => setHandoff({ ...item, fixture })}>{fixture ? 'EDIT' : 'STEM'}</button>}
@@ -410,9 +411,9 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
           <header>
             <h3>{commercial.scope === 'singapore' && live ? 'Singapore queue' : 'Incoming Enquiries'}</h3>
           </header>
-          {liveEnabled && (realUser?.isAdmin || realUser?.isSpcTrader) && <div className="enquiry-terms" aria-label="Enquiry lists">
-            <button type="button" aria-pressed={commercial.scope === 'mine'} onClick={() => commercial.setScope('mine')}>My enquiries</button>
-            <button type="button" aria-pressed={commercial.scope === 'singapore'} onClick={() => commercial.setScope('singapore')}>Singapore queue</button>
+          {live && (user?.isAdmin || user?.isSpcTrader) && <div className="enquiry-terms" aria-label="Enquiry lists">
+            <button type="button" aria-pressed={commercial.scope === 'mine'} disabled={Boolean(preview)} onClick={() => commercial.setScope('mine')}>My enquiries</button>
+            <button type="button" aria-pressed={commercial.scope === 'singapore'} disabled={Boolean(preview)} onClick={() => commercial.setScope('singapore')}>Singapore queue</button>
           </div>}
           {live && <div aria-busy={commercial.busy}>
             {commercial.error && <div role="alert"><p>{commercial.error}</p><button className="button secondary" onClick={() => void commercial.reload()}>Retry</button></div>}
@@ -754,7 +755,7 @@ function Composer({
       setDraft(current => ({ ...current, shared: result.item, sharedId: result.item.id, pendingSave: undefined, savedId: result.item.id, preview: result.item.reviewed.formattedText }));
       saveRequest.current = null;
       onSaved(result.item);
-      notify(result.item.queue ? 'Awaiting connection.' : action === 'save' ? 'Draft saved.' : 'Enquiry confirmed.');
+      notify(result.item.queue ? `${deliveryLabel(result.item.queue)}.` : action === 'save' ? 'Draft saved.' : 'Enquiry confirmed.');
     } catch (error) {
       if (epoch !== saveEpoch.current || controller.signal.aborted) return;
       setSaveError(error instanceof Error ? error.message : 'Enquiry could not be saved. Try again.');

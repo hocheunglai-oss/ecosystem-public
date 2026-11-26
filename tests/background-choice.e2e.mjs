@@ -35,6 +35,7 @@ async function mocks(context) {
     if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
     if (path === '/api/access/users') return route.fulfill({ json: { users: [member], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
     if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
+    if (path === '/api/enquiries/dispatcher') return route.fulfill({ json: { routes: [] } });
     if (path === '/api/enquiries/inbox') return route.fulfill({ json: { items: [], nextCursor: null, unreadCount: 0 } });
     if (path === '/api/enquiries/records') return route.fulfill({ json: { items: [], nextCursor: null } });
     if (path === '/api/intelligence/snapshot') return route.fulfill({ json: { available: false, snapshot: null } });

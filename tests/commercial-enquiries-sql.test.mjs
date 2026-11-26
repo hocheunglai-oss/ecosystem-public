@@ -20,7 +20,7 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
  const call=async(i,name,input)=>JSON.parse(await as(i,`select public.${name}(${json(input)})`));
  const mutate=(i,input)=>call(i,'eco_mutate_commercial_enquiry',input),get=(i,extra={})=>call(i,'eco_get_commercial_enquiries',{dataMode:'live',...extra});
  const seed=async()=>{
-  await query(`truncate eco_private.fixture_supply_lines,eco_private.fixture_bookings,eco_private.commercial_enquiry_mutations,eco_private.commercial_enquiry_history,eco_private.commercial_enquiry_queue,eco_private.commercial_enquiries restart identity;truncate eco_private.administration_events,eco_private.administration_requests;truncate eco_private.inbox_mutations,eco_private.inbox_messages,eco_private.inbox_sender_bindings,eco_private.inbox_sources;truncate auth.users cascade;
+  await query(`truncate eco_private.whatsapp_deliveries,eco_private.whatsapp_dispatchers,eco_private.whatsapp_routes,eco_private.fixture_supply_lines,eco_private.fixture_bookings,eco_private.commercial_enquiry_mutations,eco_private.commercial_enquiry_history,eco_private.commercial_enquiry_queue,eco_private.commercial_enquiries restart identity;truncate eco_private.administration_events,eco_private.administration_requests;truncate eco_private.inbox_mutations,eco_private.inbox_messages,eco_private.inbox_sender_bindings,eco_private.inbox_sources;truncate auth.users cascade;
    insert into auth.users(id,email,email_confirmed_at,encrypted_password) values ${users.map((id,i)=>`(${lit(id)},${lit(`commercial-fixture-${i}@example.test`)},now(),'synthetic')`).join(',')};
    update eco_private.users set office_id='hk',display_name='Synthetic Trader',is_active=true,activated_at=now(),is_admin=id=${lit(users[0])},is_spc_trader=id=${lit(users[2])},is_manager=id=${lit(users[3])};
    insert into auth.sessions(id,user_id) values ${users.map((id,i)=>`(${lit(sessions[i])},${lit(id)})`).join(',')};
@@ -532,5 +532,66 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    await query(`insert into eco_private.revoked_sessions(session_id,user_id) values(${lit(sessions[1])},${lit(users[1])})`);
    await assert.rejects(list(1), /Unauthorized/);
   });
+  await t.test('local ECO dispatcher sees only new jobs for enabled routes and holds ambiguous attempts', async () => {
+    await seed();
+    const credential = 'a'.repeat(64), replacement = 'b'.repeat(64);
+    const op = (action, job, token = credential) => query(`set role service_role;select public.eco_whatsapp_dispatch(${lit(token)},${lit(action)},${job ? lit(job.id) : 'null'},${job ? lit(job.claimToken) : 'null'})`).then(JSON.parse);
+    const route = (user, centre, name, operator = false, enabled = false) => query(`insert into eco_private.whatsapp_routes(centre,owner_id,group_name,may_connect,enabled_at)
+      values(${lit(centre)},${lit(users[user])},${lit(name)},${operator},${enabled ? 'now()' : 'null'})`);
+    const confirm = (user, portId = 'port-singapore') => {
+      const input = payload({ action: 'confirm' }); input.reviewed.portId = portId;
+      return mutate(user, input);
+    };
+    await route(0,'singapore','Fixture Pilot',true);
+    await route(1,'singapore','Fixture Existing');
+    await assert.rejects(as(1,`select public.eco_connect_whatsapp_dispatcher(${lit(credential)})`),/denied/i);
+    await assert.rejects(op('claim'),/not connected/i);
+    const beforeConnect = await confirm(0);
+    assert.equal(beforeConnect.item.queue.delivery,undefined);
+    await as(0,`select public.eco_connect_whatsapp_dispatcher(${lit(credential)})`);
+    await op('heartbeat');
+    const visibleRoute = await as(0,'select public.eco_whatsapp_route()').then(JSON.parse);
+    assert.deepEqual(visibleRoute.routes,[{ centre:'singapore',groupName:'Fixture Pilot',enabled:true,canConnect:true,connected:true }]);
+    assert.equal((await as(1,'select public.eco_whatsapp_route()').then(JSON.parse)).routes[0].groupName,'Fixture Existing');
+    assert.equal((await as(2,'select public.eco_whatsapp_route()').then(JSON.parse)).routes.length,0);
+    await as(0,"select public.eco_set_preview('spc-trader','sg')");
+    await assert.rejects(as(0,'select public.eco_whatsapp_route()'),/read only/i);
+    await assert.rejects(as(0,`select public.eco_connect_whatsapp_dispatcher(${lit(replacement)})`),/read only/i);
+    await as(0,'select public.eco_set_preview(null,null)');
+    await assert.rejects(as(0,`select public.eco_whatsapp_dispatch(${lit(credential)},'claim')`),/permission denied/i);
+    await confirm(1); await confirm(0,'port-tokyo');
+    assert.deepEqual(await op('claim'),{job:null});
+    const own = await confirm(0);
+    assert.equal(own.item.queue.delivery,'queued');
+    const claims = await Promise.all([op('claim'),op('claim')]);
+    const [job] = claims.map(result=>result.job).filter(Boolean);
+    assert.equal(claims.filter(result=>result.job).length,1);
+    assert.equal(job.id,own.item.id);
+    assert.equal(job.groupName,'Fixture Pilot');
+    assert.doesNotMatch(JSON.stringify(job),/PRIVATE|rawText|buyer|source|remarks|formattedText|warnings/);
+    assert.deepEqual(await op('reserve',{...job,claimToken:randomUUID()}),{accepted:false});
+    assert.deepEqual(await op('sent',job),{accepted:false});
+    assert.deepEqual(await op('reserve',job),{accepted:true,sendWindowMs:10000});
+    assert.deepEqual(await op('reserve',job),{accepted:false});
+    assert.deepEqual(await op('sent',job),{accepted:true});
+    assert.deepEqual(await op('sent',job),{accepted:true});
+    assert.equal((await get(0,{id:job.id})).item.queue.delivery,'sent');
+    const waiting = await confirm(0);
+    const attempt = (await op('claim')).job;
+    assert.equal(attempt.id,waiting.item.id);
+    await op('reserve',attempt);
+    await query(`update eco_private.whatsapp_deliveries set lease_until=now()-interval '1 second' where enquiry_id=${lit(attempt.id)}`);
+    assert.deepEqual(await op('claim'),{job:null});
+    assert.equal((await get(0,{id:attempt.id})).item.queue.delivery,'manual_review');
+    await confirm(0);
+    const changed = (await op('claim')).job;
+    await query(`update eco_private.whatsapp_routes set group_name='Fixture Changed' where owner_id=${lit(users[0])}`);
+    assert.deepEqual(await op('reserve',changed),{accepted:false});
+    assert.equal((await get(0,{id:changed.id})).item.queue.delivery,'manual_review');
+    await as(0,`select public.eco_connect_whatsapp_dispatcher(${lit(replacement)})`);
+    await assert.rejects(op('heartbeat'),/not connected/i);
+    assert.deepEqual(await op('heartbeat',null,replacement),{centre:'singapore'});
+  });
+
  }finally{if(started)await exec(join(bin,'pg_ctl'),['-D',data,'-m','immediate','-w','stop'],{env}).catch(()=>{});await rm(root,{recursive:true,force:true});}
 });

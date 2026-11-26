@@ -13,7 +13,14 @@ export interface CommercialReviewed {
   viscosity: string[]; formattedText: string; warnings: string[];
 }
 export interface CommercialPort { id: string; countryCode: string; countryName: string; portName: string }
-export interface CommercialQueue { status: 'awaiting_connection'; queuedAt: string }
+export const deliveryStates = ['queued', 'claimed', 'sending', 'sent', 'manual_review'] as const;
+export interface CommercialQueue { status: 'awaiting_connection'; queuedAt: string; delivery?: typeof deliveryStates[number] }
+export function deliveryLabel(queue: CommercialQueue): string {
+  if (!queue.delivery) return 'Awaiting connection';
+  if (queue.delivery === 'sent') return 'Sent to WhatsApp';
+  if (queue.delivery === 'manual_review') return 'Delivery needs review';
+  return queue.delivery === 'queued' ? 'Queued for WhatsApp' : 'Sending to WhatsApp';
+}
 /** Safe projection used by both lists; never contains source, buyer or private notes. */
 export interface CommercialEnquirySummary {
   id: string; reference: string; ownerId: string; ownerName: string; revision: number;

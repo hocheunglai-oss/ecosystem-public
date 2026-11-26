@@ -23,7 +23,12 @@ type ImoCandidate = {
   line: string
   score: number
   valid: boolean
+  explicit: boolean
 }
+
+const IMO_LABEL_PATTERN = /\bIMO(?:\s*NO\.?|\s*NUMBER)?(?=\s|[:#.(\-]|\d|$)/i
+const IMO_ONLY_LABEL_PATTERN = /^\s*IMO(?:\s*(?:NO\.?|NUMBER))?\s*[:#.(\-]*\s*$/i
+const NON_IDENTITY_LABEL_PATTERN = /(?:^|[\s|;,])(?:(?:our|your)\s+)?(?:tel(?:ephone)?|fax|phone|mobile|ref(?:erence)?|contact|e-?mail|address)(?:\s+(?:no\.?|number))?(?:\s*[.:/#-]\s*|\s+(?=\+?\d))/gi
 
 const VESSEL_LABEL_PATTERN =
   /(?:\b(?:performing\s+vessel|vessel\s*\/\s*imo|vessel(?:\s+name)?|vsl(?:\s+name)?|ship(?:\s+name)?)\b|\bname\s*\(\s*imo(?:\s*no\.?)?\s*\)|船名)/i
@@ -38,7 +43,7 @@ const NON_BUYER_LABEL_PATTERN =
   /^(?:address|agent|bank|berth|date|delivery|eta|etd|ets|imo|location|payment|port|product|quantity|spec|terms|vessel)\b/i
 
 const PORT_LABEL_PATTERN =
-  /^\s*(?:[-•*=]\s*\.?\s*)?(?:\d+\s*[\).:-]\s*)?(?:port|position|location|bunker(?:ing)?\s*(?:port|location|place)|refuell?ing\s*(?:port|location|place)|port\s+of\s+(?:call|delivery|supply)|delivery\s+(?:port|place|location)|place\s+of\s+(?:supply|delivery)|supply\s+(?:port|place|location)|loading\s+port|discharging\s+port|加油港口|港口|地点|地點)\s*(?:[:：#\-\t]|\s{2,})?\s*(.*)$/i
+  /^\s*(?:[-•*=]\s*\.?\s*)?(?:\d+\s*[\).:-]\s*)?(?:port|position|location|demand\s+port|bunker(?:ing)?\s*(?:port|location|place)|refuell?ing\s*(?:port|location|place)|port\s+of\s+(?:call|delivery|supply)|delivery\s+(?:port|place|location)|place\s+of\s+(?:supply|delivery)|supply\s+(?:port|place|location)|loading\s+port|discharging\s+port|加油港口|港口|地点|地點)\s*(?:[:：#\-\t]|\s{2,})?\s*(.*)$/i
 
 const NON_PORT_CONTEXT_PATTERN =
   /^\s*(?:account|agent|buyer|buyer\s+address|business\s+address|email|mail|m\/whatsapp|payment|surveyor|tel|terms)\b/i
@@ -88,7 +93,7 @@ function scoreImoCandidate(candidate: string, line: string) {
   const valid = isValidImo(candidate)
   let score = valid ? 100 : -50
 
-  if (/\bIMO(?:\s*NO\.?|\s*NUMBER)?(?=\s|[:#.(\-]|\d|$)/i.test(line)) score += 70
+  if (IMO_LABEL_PATTERN.test(line)) score += 70
   if (VESSEL_LABEL_PATTERN.test(line)) score += 30
   if (new RegExp(`\\(\\s*${candidate}\\s*\\)`).test(line)) score += 20
   if (new RegExp(`\\/\\s*${candidate}\\s*\\/`).test(line)) score += 20
@@ -100,16 +105,25 @@ function scoreImoCandidate(candidate: string, line: string) {
 function findBestImo(lines: string[]) {
   const candidates: ImoCandidate[] = []
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     for (const match of line.matchAll(/(?<!\d)\d{7}(?!\d)/g)) {
+      const prefix = line.slice(0, match.index)
+      const identityLabel = Array.from(prefix.matchAll(new RegExp(IMO_LABEL_PATTERN.source, "gi"))).at(-1)
+      const otherLabel = Array.from(prefix.matchAll(NON_IDENTITY_LABEL_PATTERN)).at(-1)
+      if (otherLabel && (!identityLabel || (otherLabel.index ?? -1) > (identityLabel.index ?? -1))) continue
       const value = match[0]
       const { score, valid } = scoreImoCandidate(value, line)
-      candidates.push({ value, line, score, valid })
+      const explicit = Boolean(identityLabel) || IMO_ONLY_LABEL_PATTERN.test(lines[index - 1] || "")
+      candidates.push({ value, line, score, valid, explicit })
     }
   }
 
-  candidates.sort((a, b) => b.score - a.score)
-  return candidates[0] || null
+  // A clearly supplied invalid IMO must not be silently replaced by an
+  // unrelated checksum-valid seven-digit quantity/reference elsewhere.
+  const explicitCandidates = candidates.filter((candidate) => candidate.explicit)
+  const ranked = explicitCandidates.length ? explicitCandidates : candidates
+  ranked.sort((a, b) => b.score - a.score)
+  return ranked[0] || null
 }
 
 function removeVesselLabel(value: string) {
@@ -135,7 +149,7 @@ function cleanVesselName(value: string) {
   next = next.replace(/\(\s*(?:V|VOY|VOYAGE)\.?\s*[\w./-]+\s*\)/gi, "")
   next = next.replace(/\s+(?:in|at)\s+(?:the\s+)?dry\s*dock\b.*$/i, "")
   next = next.replace(/\s*\/+\s*$/, "")
-  next = next.replace(/\s*[-,(]\s*(?:general\s+cargo|bulk\s+carrier|oil\s+tanker|chemical\s+tanker|product\s+tanker|lpg\s+carrier|lng\s+carrier|gas\s+carrier)\s*\)?\.?\s*$/i, "")
+  next = next.replace(/\s*[-,(]\s*(?:general\s+cargo|bulk\s+carrier|oil\s+tanker|chemical\s+tanker|product\s+tanker|lpg\s+carrier|lng\s+carrier|gas\s+carrier)\s*\)?[.,]?\s*$/i, "")
   next = next.replace(/\s+(?:general\s+cargo|bulk\s+carrier|oil\s+tanker|chemical\s+tanker|product\s+tanker|lpg\s+carrier|lng\s+carrier|gas\s+carrier)\.?\s*$/i, "")
   next = next.replace(/\s*\/\/.*$/g, "")
   next = next.replace(/\s+(?:general\s+cargo|bulk\s+carrier|oil\s+tanker|chemical\s+tanker|product\s+tanker|lpg\s+carrier|lng\s+carrier|gas\s+carrier)\.?\s*$/i, "")
@@ -149,12 +163,16 @@ function isPlausibleVesselName(value: string) {
   if (!value) return false
   if (value.length < 2 || value.length > 60) return false
   if (!/[A-Z]/.test(value)) return false
+  if (/^(?:TEL(?:EPHONE)?|FAX|PHONE|MOBILE|REF(?:ERENCE)?|CONTACT|E-?MAIL|ADDRESS)$/i.test(value)) return false
+  if (Array.from(value.matchAll(NON_IDENTITY_LABEL_PATTERN)).some((match) => match.index === 0)) return false
   if (/^(?:NAME|PORT|LOCATION|ETA|ETB|ETD|ETS|DATE|DELIVERY|PRODUCT|SPEC|QUANTITY|BUYER|AGENT|ACCOUNT|CLIENT|TERMS|PAYMENT|REMARKS|SUPPLY RESTRICTIONS|BUNKER ONLY|VOYAGE|VOY)\b/i.test(value) || /^(?:\u822a\u6b21\u53f7?|\u8239\u540d)\s*[:：]?/i.test(value)) {
     return false
   }
   if (/\b\d{1,2}\s*(?:[./-]\s*\d{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|SEPT|OCT|NOV|DEC)\b/i.test(value)) return false
-  const compact = value.replace(/\s+/g, "")
-  if (/(?:LSMGO|LEMGO|LSGO|VLSFO|LSFO|MGO|HFO|IFO|RMG|DMA|DMB|MT|MTS)/i.test(compact)) return false
+  // Grade/unit tokens, including compact quantity suffixes, are not names;
+  // the same letters embedded in CALIFORNIA or SAMTONG are ordinary letters.
+  if (/(?:^|[^A-Z])(?:LSMGO|LEMGO|LSGO|VLSFO|LSFO|MGO|HFO|IFO|RMG|DMA|DMB|MTS?)(?=$|[^A-Z])/i.test(value)) return false
+  if (/^(?:LSMGO|LEMGO|LSGO|VLSFO|LSFO|MGO|HFO|IFO|RMG|DMA|DMB|MTS?)(?=\d|$)/i.test(value.replace(/\s+/g, ""))) return false
   return true
 }
 
@@ -200,7 +218,10 @@ function extractProseVessel(lines: string[]) {
     const unquoted = line.match(
       /\b(?:our\s+|the\s+)?vessel\s+((?:m\s*[./-]?\s*[vt]|mv|mt)?\.?\s*[A-Z0-9][A-Z0-9 .'"-]{1,60}?)(?=\s+(?:will|is|needs?|requires?|eta|at)\b)/i,
     )?.[1] || ""
-    const cleaned = cleanVesselName(quoted || unquoted)
+    const requested = line.match(
+      /^\s*(?:pls|please|kindly)\b[^:]{0,100}:\s*((?:m\s*[./-]?\s*[vt]|mv|mt)\.?\s+[A-Z0-9][A-Z0-9 .'"-]{1,60})\s*$/i,
+    )?.[1] || ""
+    const cleaned = cleanVesselName(quoted || unquoted || requested)
     if (isPlausibleVesselName(cleaned)) return cleaned
   }
 
@@ -240,6 +261,7 @@ function extractFallbackVessel(lines: string[], imo: string) {
 function extractSlashPrefixVessel(lines: string[]) {
   for (const line of lines) {
     if (!line.includes("/")) continue
+    if (/^\s*(?:brgds|best\s+regards|regards|thanks)\b/i.test(line)) continue
 
     const firstPart = line.split("/")[0]
     const cleaned = cleanVesselName(firstPart)
@@ -412,6 +434,13 @@ export function extractEnquiryPort(text: string, options: EnquiryWorksheetParseO
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
+    const atValue = line.match(/^\s*at\s*[:：]\s*(.+)$/i)?.[1] || ""
+    const atLabelledPort = cleanPortName(atValue, {
+      ...options,
+      includeShortAliases: true,
+    })
+    if (atLabelledPort) return atLabelledPort
+
     const simplePlaceValue = line.match(/^\s*place(?:\s*[:：#\-\t]\s*|\s+)(.+)$/i)?.[1] || ""
     const simplePlacePort = findKnownPort(simplePlaceValue, {
       ...options,
@@ -463,6 +492,9 @@ export function extractEnquiryPort(text: string, options: EnquiryWorksheetParseO
     if (etaAlternatives[0]) return etaAlternatives[0]
 
     const standalonePort = normalizeIndexedEnquiryPort(stripOuterNoise(line), {
+      portNames: options.portNames,
+      includeShortAliases: true,
+    }) || normalizeIndexedEnquiryPort(stripOuterNoise(line.replace(/\([^)]*\)/g, " ")), {
       portNames: options.portNames,
       includeShortAliases: true,
     })
@@ -548,7 +580,7 @@ export function parseEnquiryWorksheetGuess(
 
   const bestImo = findBestImo(lines)
   const imo = bestImo?.valid ? bestImo.value : ""
-  const imoLine = imo ? getCandidateLine(lines, imo) : ""
+  const imoLine = imo ? bestImo?.line || "" : ""
   const warnings: string[] = []
 
   if (bestImo && !bestImo.valid) {

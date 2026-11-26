@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ECO WhatsApp Dispatcher",
+  "version": "1.0.0",
+  "description": "Delivers confirmed ECO Singapore enquiries to their assigned WhatsApp groups.",
+  "permissions": ["storage", "debugger"],
+  "host_permissions": ["https://eco.fcuno.com/*", "https://web.whatsapp.com/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "connect.html" },
+  "content_scripts": [{
+    "matches": ["https://web.whatsapp.com/*"],
+    "js": ["whatsapp-page.js", "content.js"],
+    "run_at": "document_idle"
+  }]
+}

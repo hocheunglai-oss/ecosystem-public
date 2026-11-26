@@ -25,7 +25,10 @@ export function useCommercialEnquiries(owner: string, enabled: boolean) {
       setCursor(result.nextCursor);
     } catch (error) {
       if (request === epoch.current && !abort.signal.aborted) setError(error instanceof Error ? error.message : 'Enquiries are unavailable.');
-    } finally { if (request === epoch.current && !abort.signal.aborted) setBusy(false); }
+    } finally {
+      if (controller.current === abort) controller.current = null;
+      if (request === epoch.current && !abort.signal.aborted) setBusy(false);
+    }
   }, [enabled, owner, scope]);
   useEffect(() => {
     setRows([]); setCursor(null); setError('');
@@ -39,6 +42,12 @@ export function useCommercialEnquiries(owner: string, enabled: boolean) {
     window.addEventListener('online', refresh);
     return () => { window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh); };
   }, [enabled, load]);
+  const waitingForDelivery = rows.some(item => item.queue?.delivery && ['queued', 'claimed', 'sending'].includes(item.queue.delivery));
+  useEffect(() => {
+    if (!enabled || !waitingForDelivery) return;
+    const timer = setInterval(() => { if (!document.hidden && !controller.current && !cursor) void load(); }, 8000);
+    return () => clearInterval(timer);
+  }, [enabled, waitingForDelivery, load, cursor]);
   function accept(item: CommercialEnquiry) {
     if (!active.current.enabled || item.ownerId !== active.current.owner) return;
     if (active.current.scope === 'singapore' && !item.queue) return;

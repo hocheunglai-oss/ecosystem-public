@@ -54,7 +54,7 @@ export function enquirySourceWarnings(raw: string, nonMtQuantity = false): strin
 }
 
 function standaloneNonMtQuantity(line: string): boolean {
-  const unit = line.trim().replace(/^(?:quantit(?:y|ies)|qtty?|units?)\s*[:=]?\s*/i, '')
+  const unit = line.trim().replace(/^(?:quantit(?:y|ies)|qty|qtty|units?)\s*[:=]?\s*/i, '')
     .replace(/^[+-]?\d[\d,.]*(?:\s*(?:-|\/|to|~)\s*\d[\d,.]*)?\s*/i, '')
   return new RegExp(`^(?:${unsupportedUnitPattern.source})\\.?$`, 'i').test(unit)
 }
@@ -190,7 +190,7 @@ export function parseEnquiry(raw: string, companies: ParserCompany[], ports: Par
   const quantitySource = source.replace(/(\d[\d,.]*)\s+\/\s+(?=\d)/g, (match, value: string, index: number) =>
     (new RegExp(`${monthToken}\\s*$`, 'i').test(source.slice(0, index)) || /\b\d{4}[./-]\d{1,2}[./-]$/.test(source.slice(0, index))) ? match : `${value}-`)
   const quantitySegments = quantitySource.split(/\n|\s+\/\s+/)
-  const quantityLines = quantitySegments.filter(line => /\b(?:quantit(?:y|ies)|qtty?|VLSFO|VSLFO|LSMFO|LSFO|HSFO|HFO|IFO|RMK(?:\s*\d{2,3})?|LSMGO|MGO|DMA|DMB|MDO|LSGO)\b/i.test(line))
+  const quantityLines = quantitySegments.filter(line => /\b(?:quantit(?:y|ies)|qty|qtty|VLSFO|VSLFO|LSMFO|LSFO|HSFO|HFO|IFO|RMK(?:\s*\d{2,3})?|LSMGO|MGO|DMA|DMB|MDO|LSGO)\b/i.test(line))
   const unsupportedUnits = unsupportedUnitPattern.test(quantityLines.join('\n')) || quantitySegments.some(standaloneNonMtQuantity)
   warnings.unshift(...enquirySourceWarnings(source, unsupportedUnits))
 
@@ -204,7 +204,7 @@ export function parseEnquiry(raw: string, companies: ParserCompany[], ports: Par
       if (/\d$/.test(prefix)) return false
       const suffix = line.slice(match.index! + match[0].length).trim()
       return !prefix || /[:=]$/.test(prefix) || /\b(?:HSFO|HFO|IFO|RMK|VLSFO|VSLFO|LSFO|LSMGO|MGO|DMA|DMB|MDO|LSGO)(?:\s*\(?\d+(?:\.\d+)?%\)?)?$/i.test(prefix) || /^(?:MT|MTS)\b/i.test(suffix)
-    })) || quantityLines.some(line => /^\s*(?:quantit(?:y|ies)|qtty?)\s*[:=]\s*-\s*\d/i.test(line))
+    })) || quantityLines.some(line => /^\s*(?:quantit(?:y|ies)|qty|qtty)\s*[:=]\s*-\s*\d/i.test(line))
     const perLineValues = [...new Set(related.map(line => spcFuelInputValue(parseSpcEnquiryText(line)[key], key)).filter(Boolean))]
     const conflicting = perLineValues.length > 1
     // Explicit product segments take precedence: a viscosity suffix in a full SPC

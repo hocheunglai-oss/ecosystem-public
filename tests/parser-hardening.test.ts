@@ -128,8 +128,15 @@ test('current Worksheet rules handle nonstandard vessel labels, demand port and 
   assert.equal(actual.vlsfo, '600');
   assert.equal(parse(raw.replace('Demand port: Singapore','At: SG')).portId, 'sg');
   assert.equal(parse(raw + '\nAt: Rotterdam').portId, '');
-  assert.equal(parse(raw.replace('600 MT','-600 MT')).vlsfo, '');
-  assert.equal(parse(raw.replace('600 MT','600 CBM')).vlsfo, '');
+  for (const label of ['Qty:', 'Qtty:', 'Quantity:']) {
+    const source = raw.replace('Qtty:', label);
+    assert.equal(parse(source).vlsfo, '600', label);
+    for (const value of ['-600 MT', '600 CBM', '600 kg']) {
+      const result = parse(source.replace('600 MT', value));
+      assert.equal(result.vlsfo, '', label + ' ' + value);
+      assert.ok(result.warnings.some(warning => /positive|non-MT quantity unit/.test(warning)), label + ' ' + value);
+    }
+  }
   const invalid = parse(raw.replace('9074729', '9074728') + '\nRef: 9074729');
   assert.equal(invalid.imo, '');
   assert.equal(invalid.vessel, 'CALIFORNIA');

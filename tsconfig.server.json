@@ -5,11 +5,13 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["server", "api", "config", "shared", "tests/access-policy.test.ts", "tests/auth-handler.test.ts"]
+  "include": ["server", "api", "config", "shared", "tests/auth-handler.test.ts"]
 }

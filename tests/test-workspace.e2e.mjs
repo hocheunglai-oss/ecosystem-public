@@ -1,3 +1,4 @@
+import { activateDeveloperMode, activateTestWorkspace, developerModeControl } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
@@ -57,11 +58,12 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
     page.on('requestfailed', request => activityReads.delete(request));
     const shot = async name => { await expect(page.locator('.immersive-app')).toHaveAttribute('data-design', 'flowing-water'); await expect(page.locator('.flowing-water-background')).toBeVisible(); await page.evaluate(async () => { await Promise.all([...document.images].map(img => img.decode().catch(() => {}))); }); await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: horizontal overflow`); };
     try {
-      await page.goto(base); await expect(control(page)).toBeEnabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
+      await page.goto(base); await expect(developerModeControl(page)).toBeEnabled(); await expect(control(page)).toHaveCount(0);
       await expect.poll(async () => (await readState(page, liveKey))?.companies.length).toBe(0);
       const liveBefore = JSON.stringify(await readState(page, liveKey)); await shot('live');
       await page.getByRole('button', { name: 'Notifications', exact: true }).click(); await expect(page.locator('.inbox-arrivals')).toHaveCount(0); await page.getByRole('button', { name: 'Notifications', exact: true }).click();
-      await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'true');
+      await activateDeveloperMode(page); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
+      await activateTestWorkspace(page);
       await expect.poll(async () => (await readState(page, testKey(g1)))?.companies.length ?? 0).toBeGreaterThan(0);
       const data = await readState(page, testKey(g1)); assert.ok(data.enquiries.some(item => item.owner === otto.id)); assert.equal(data.enquiries.some(item => item.owner === 'otto'), false);
       await page.getByRole('button', { name: 'Notifications', exact: true }).click(); await page.getByRole('button', { name: 'WhatsApp (demo)', exact: true }).click(); await page.getByRole('button', { name: 'Normal enquiry', exact: true }).click();
@@ -71,27 +73,27 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true }).click();
       await page.locator('.home-display-controls').getByRole('button', { name: 'Normal trader', exact: true }).click();
       await expect(page.getByRole('status', { name: 'Role preview' }).first()).toBeVisible();
-      await expect(control(page)).toBeDisabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'true');
+      await expect(developerModeControl(page)).toHaveCount(0); await expect(control(page)).toHaveCount(0);
       await page.getByRole('button', { name: 'Notifications', exact: true }).click(); await expect(page.locator('.inbox-arrivals')).toHaveCount(0); await page.getByRole('button', { name: 'Notifications', exact: true }).click();
       assert.equal(await page.getByRole('button', { name: 'Buyer Profiles', exact: true }).count(), 0);
       await shot('test-preview');
       await page.getByRole('button', { name: 'Back to OWNER FIXTURE', exact: true }).first().click();
-      await expect(control(page)).toBeEnabled(); await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
+      await expect(developerModeControl(page)).toHaveAttribute('aria-pressed', 'false'); await expect(control(page)).toHaveCount(0);
       assert.equal(JSON.stringify(await readState(page, liveKey)), liveBefore);
       // This reload checks persisted LIVE data, not interruption of activity reads.
       await expect(page.locator('.contribution-tier')).toHaveAttribute('data-tier', 'inactive');
       await expect.poll(() => activityReads.size, { message: 'Activity reads finish before persistence reload' }).toBe(0);
-      await page.reload(); await expect(control(page)).toBeEnabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
-      await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'true');
-      state.policyError = true; await focus(page); await expect(control(page)).toBeDisabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
+      await page.reload(); await expect(developerModeControl(page)).toHaveAttribute('aria-pressed', 'false'); await expect(control(page)).toHaveCount(0);
+      await activateTestWorkspace(page);
+      state.policyError = true; await focus(page); await expect(developerModeControl(page)).toHaveCount(0); await expect(control(page)).toHaveCount(0);
       assert.ok(await readState(page, testKey(g1)), 'Network error preserves test edits without exposing them');
-      state.policyError = false; state.policy = { enabled: true, generation: g2 }; await focus(page); await expect(control(page)).toBeEnabled();
-      assert.equal(await readState(page, testKey(g1)), null); assert.equal(await readState(page, inboxKey), null); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
-      await control(page).click(); await expect.poll(async () => (await readState(page, testKey(g2)))?.companies.length ?? 0).toBeGreaterThan(0);
-      state.policy = { enabled: false, generation: '' }; await focus(page); await expect(control(page)).toBeDisabled(); await expect(control(page)).toHaveAttribute('aria-pressed', 'false');
+      state.policyError = false; state.policy = { enabled: true, generation: g2 }; await focus(page); await expect(developerModeControl(page)).toHaveAttribute('aria-pressed', 'false');
+      assert.equal(await readState(page, testKey(g1)), null); assert.equal(await readState(page, inboxKey), null); await expect(control(page)).toHaveCount(0);
+      await activateTestWorkspace(page); await expect.poll(async () => (await readState(page, testKey(g2)))?.companies.length ?? 0).toBeGreaterThan(0);
+      state.policy = { enabled: false, generation: '' }; await focus(page); await expect(developerModeControl(page)).toHaveCount(0); await expect(control(page)).toHaveCount(0);
       assert.equal(await readState(page, testKey(g2)), null);
-      state.policy = { enabled: true, generation: g2 }; await focus(page); await expect(control(page)).toBeEnabled();
-      await control(page).click(); await expect(control(page)).toHaveAttribute('aria-pressed', 'true');
+      state.policy = { enabled: true, generation: g2 }; await focus(page); await expect(developerModeControl(page)).toHaveAttribute('aria-pressed', 'false');
+      await activateTestWorkspace(page);
       state.user = { ...otto, capabilities: { appearancePreview: true, testWorkspace: false } }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview });
       await expect(control(page)).toHaveCount(0);
       assert.equal(JSON.stringify(await readState(page, liveKey)), liveBefore, 'Same-account capability revocation restores LIVE without touching its records');

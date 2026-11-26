@@ -33,7 +33,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   const contribution=page.getByRole('combobox',{name:'Contribution appearance preview',exact:true});
   const hats=page.getByRole('combobox',{name:'Hats appearance preview',exact:true});
-  const testControl=page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true});
+  const testControl=page.locator('.home-display-controls').getByRole('button',{name:'Developer mode',exact:true});
   async function shot(name,panel) {
    await expect(page.locator('.immersive-app')).toHaveAttribute('data-design','flowing-water');
    await expect(page.locator('.flowing-water-background')).toBeVisible();

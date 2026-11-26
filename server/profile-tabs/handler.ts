@@ -10,7 +10,7 @@ export async function handleProfileTabs(request:Request,config:AuthConfig,gatewa
   const url=new URL(request.url),actor=await gateway.currentUser();if(!actor?.isActive)throw new ApiError(401,'Sign in required.');
   if(request.method==='GET'&&url.pathname==='/api/profile-tabs/list'){
    const target=profileTabsQuery(url);
-   if(target.kind==='buyer'&&!canUseBuyerCredit(actor,await gateway.getPreview()))throw new ApiError(403,ECO_2_RELEASE_NOTICE);
+   if(target.kind==='buyer'&&!canUseBuyerCredit(actor,await gateway.getPreview(),config.localStaging))throw new ApiError(403,ECO_2_RELEASE_NOTICE);
    return respond(await gateway.authenticatedRpc('eco_list_profile_tabs',{p_target:target}));
   }
   if(request.method==='POST'){
@@ -21,7 +21,7 @@ export async function handleProfileTabs(request:Request,config:AuthConfig,gatewa
    const raw=await request.text();if(Buffer.byteLength(raw)>262144)throw new ApiError(413,'Request too large.');let body:unknown;try{body=JSON.parse(raw);}catch{throw new ApiError(400,'Invalid request.');}
    const parsers={'/api/profile-tabs/save':{parse:profileTabsSave,rpc:'eco_save_profile_tabs'},'/api/profile-tabs/delete':{parse:profileTabDelete,rpc:'eco_delete_profile_tab'},'/api/profile-tabs/reorder':{parse:profileTabsReorder,rpc:'eco_reorder_profile_tabs'}};
    const route=parsers[url.pathname as keyof typeof parsers];if(!route)return respond({message:'Not found.'},404);const input=route.parse(body);
-   if(input.target.kind==='buyer'&&!canUseBuyerCredit(actor))throw new ApiError(403,ECO_2_RELEASE_NOTICE);
+   if(input.target.kind==='buyer'&&!canUseBuyerCredit(actor,null,config.localStaging))throw new ApiError(403,ECO_2_RELEASE_NOTICE);
    if(input.visibility==='shared'&&input.target.kind==='supplier'&&!actor.isAdmin&&!actor.isSpcTrader){const item=await gateway.authenticatedRpc('eco_supplier_detail',{p_id:input.target.id}) as {countryCode?:unknown}|null;if(!item||typeof item.countryCode!=='string'||!/^[A-Z]{2}$/.test(item.countryCode)||item.countryCode==='SG')throw new ApiError(403,'Access denied.');}
    return respond(await gateway.authenticatedRpc(route.rpc,{p_input:input}));
   }

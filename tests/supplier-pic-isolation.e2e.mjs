@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installProfileTabMocks } from './fixtures/profile-tabs.mjs';
-import { installTestWorkspacePolicy, activateTestWorkspace } from './fixtures/test-workspace.mjs';
+import { installTestWorkspacePolicy, activateDeveloperMode, activateTestWorkspace } from './fixtures/test-workspace.mjs';
 const base = process.env.ECO_SUPPLIER_GUARD_ORIGIN || 'http://127.0.0.1:4394';
 const output = process.env.ECO_SUPPLIER_GUARD_OUTPUT || '/private/tmp/eco-supplier-pic-isolation';
 await mkdir(output, { recursive: true });
@@ -71,7 +71,7 @@ for(const[engine,browserType]of[['chromium',chromium],['webkit',webkit]]){
     // The held detail/update races within each scenario remain on the same page below.
     async function resetPage(){
       await page.close();page=await context.newPage();page.setDefaultTimeout(10000);
-      page.on('pageerror',error=>errors.push(error.message));await page.goto(base);
+      page.on('pageerror',error=>errors.push(error.message));await page.goto(base);await activateDeveloperMode(page);
     }
     try{
       await page.goto(base);await activateTestWorkspace(page);

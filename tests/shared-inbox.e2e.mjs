@@ -1,3 +1,4 @@
+import { activateDeveloperMode } from './fixtures/test-workspace.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -154,7 +155,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
     try {
       // Keep initial lazy rendering live; verifyPolling freezes this fixed clock well ahead of setup time.
       await page.clock.install({ time: new Date('2026-10-16T08:00:00Z') });
-      await page.goto(base); await settled(page); await expect(control(page)).toBeEnabled(); const inbox = await openInbox(page);
+      await page.goto(base); await settled(page); await activateDeveloperMode(page); await expect(control(page)).toBeEnabled(); const inbox = await openInbox(page);
       await expect(inbox.getByRole('alert')).toContainText('Inbox unavailable'); await shot('offline');
       session.getError = false; await inbox.getByRole('button', { name: 'Retry', exact: true }).click(); await expect(inbox.locator('.inbox-notification-row')).toHaveCount(50);
       await expect(page.locator('.inbox-count')).toHaveText('53'); await expect(inbox).not.toContainText('(demo)'); await expect(inbox).not.toContainText('LEGACY PRIVATE MESSAGE');
@@ -169,7 +170,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       shared.items.unshift(record(54)); await inbox.getByRole('button', { name: 'Retry', exact: true }).click(); await expect(inbox.locator('.inbox-notification-row')).toHaveCount(1); await expect(inbox).toContainText('FIXTURE 54'); await expect(page.locator('.inbox-count')).toHaveText('1');
       const clearWrites = session.writes.filter(item => item.action === 'dismiss-all'); assert.equal(clearWrites.length, 2); assert.equal(clearWrites[0].requestId, clearWrites[1].requestId); assert.equal(shared.items.find(item => item.id === record(1).id).dismissed, true);
       await focus(page2); await expect(page2.locator('.inbox-count')).toHaveText('1');
-      await page.reload(); await settled(page); await expect(page.locator('.inbox-count')).toHaveText('1'); await expect(control(page)).toBeEnabled();
+      await page.reload(); await settled(page); await expect(page.locator('.inbox-count')).toHaveText('1'); await activateDeveloperMode(page); await expect(control(page)).toBeEnabled();
       let releaseWrite; let writeStarted; const pendingWrite = new Promise(resolve => { writeStarted = resolve; }); session.holdWrite = () => { writeStarted(); return new Promise(resolve => { releaseWrite = resolve; }); };
       await openInbox(page); await panel(page).getByRole('button', { name: 'Clear notification for FIXTURE 54', exact: true }).click(); await pendingWrite;
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();

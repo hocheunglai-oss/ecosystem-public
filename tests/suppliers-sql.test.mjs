@@ -240,22 +240,26 @@ test('suppliers SQL against isolated native PostgreSQL',async t=>{
   await query(`update eco_private.users set is_active=false where id=${lit(ids[1])}`);await assert.rejects(call(1,'eco_list_profile_tabs',target),/Unauthorized/);
  });
 
- await t.test('ECO 1.0 buyer tabs are admin-only even through direct RPC and non-admin preview',async()=>{
-  await seed();assert.equal(await query("select migration_head from eco_private.platform_versions where component='release-gates'"),'20261015075801');const target={kind:'buyer',id:'buyer-existing-id'},tab={id:randomUUID(),title:'PRIVATE',visibility:'private',content:'OWNER ONLY'};
+ await t.test('buyer tabs require staging authority through direct RPC and stay closed in all previews',async()=>{
+  await seed();assert.equal(await query("select migration_head from eco_private.platform_versions where component='release-gates'"),'20261126104504');const target={kind:'buyer',id:'buyer-existing-id'},tab={id:randomUUID(),title:'PRIVATE',visibility:'private',content:'OWNER ONLY'};
   const input={requestId:randomUUID(),target,visibility:'private',revision:0,tabs:[tab]};
+  await query(`insert into eco_private.owner_capabilities(singleton,owner_id,test_workspace) values(true,${lit(ids[0])},true)`);
+  await assert.rejects(call(0,'eco_list_profile_tabs',target),/UNDER CONSTRUCTION/);
+  await assert.rejects(call(0,'eco_save_profile_tabs',input),/UNDER CONSTRUCTION/);
+  await query('update eco_private.test_workspace_policy set enabled=true where singleton');
   assert.equal((await call(0,'eco_save_profile_tabs',input)).private.tabs[0].content,tab.content);
   for(const i of [1,2]){
    await assert.rejects(call(i,'eco_list_profile_tabs',target),/Forbidden/);
    for(const [rpc,value] of [['eco_save_profile_tabs',{...input,requestId:randomUUID()}],['eco_delete_profile_tab',{requestId:randomUUID(),target,visibility:'private',revision:1,id:tab.id}],['eco_reorder_profile_tabs',{requestId:randomUUID(),target,visibility:'private',revision:1,ids:[tab.id]}]])await assert.rejects(call(i,rpc,value),/Forbidden/);
   }
-  await query(`update eco_private.users set is_admin=true where id=${lit(ids[1])}`);assert.deepEqual((await call(1,'eco_list_profile_tabs',target)).private,{revision:0,tabs:[]});
-  for(const role of ['trader','spc-trader','manager','credit']){
+  await query(`update eco_private.users set is_admin=true where id=${lit(ids[1])}`);await assert.rejects(call(1,'eco_list_profile_tabs',target),/UNDER CONSTRUCTION/);
+  for(const role of ['admin','trader','spc-trader','manager','credit']){
    await as(0,`select public.eco_set_preview(${lit(role)},${lit(role==='credit'?'CREDIT':'hk')})`);
    await assert.rejects(call(0,'eco_list_profile_tabs',target),/UNDER CONSTRUCTION/);
    await assert.rejects(call(0,'eco_save_profile_tabs',{...input,requestId:randomUUID(),revision:1}),/read.only/);
   }
-  await as(0,"select public.eco_set_preview('admin','hk')");assert.deepEqual((await call(0,'eco_list_profile_tabs',target)).private,{revision:0,tabs:[]});
   await as(0,"select public.eco_set_preview(null,null)");assert.equal((await call(0,'eco_list_profile_tabs',target)).private.tabs[0].content,tab.content);
+  await query('update eco_private.test_workspace_policy set enabled=false where singleton');
  });
 
  await t.test('private report metadata is immutable, source-bound, active-member-readable and archived-supplier-hidden',async()=>{

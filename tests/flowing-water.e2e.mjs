@@ -37,7 +37,6 @@ const member = {
 const groups = {
   Trading: ['Enquiries', 'Fixtures', 'Lost Records'],
   'Ports & Suppliers': ['Countries & Ports', 'Supplier Profiles'],
-  'Buyers and Credit': ['Buyer Profiles', 'Credit Requests'],
 };
 async function mocks(context) {
   const state = { signedIn: false, rejectLogin: true, user: { ...member }, writes: [], unexpected: [], harbour: [], water: [] };
@@ -724,15 +723,18 @@ async function verifyNightContrast(page) {
     contrasts.push(contrast);
   };
   const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();
+  const deferred = page.locator('.world-launcher .launcher-group--deferred');
   const footer = await page.locator('.home-display-controls button:visible:not(.ecosystem-feedback)').all();
-  assert.equal(navigation.length, 2, 'Both secondary entry actions are checked');
+  assert.equal(navigation.length, Object.keys(groups).length - 1, 'All available secondary entry actions are checked');
   assert.ok(footer.length >= 2, 'Ordinary theme and account-view footer controls are checked');
   for (const action of [...navigation, ...footer]) {
     await page.mouse.move(0, 0); await inspect(action, 'normal');
     await action.hover(); await inspect(action, 'hover');
   }
   await page.mouse.move(0, 0);
-  assert.equal(contrasts.length, 3 + 2 * (navigation.length + footer.length), 'Unboxed labels and normal/hover entry and footer actions all retain readable contrast');
+  await inspect(deferred.getByRole('heading', { name: 'Buyers and Credit', exact: true }), 'normal');
+  await inspect(deferred.locator('.launcher-release-remark'), 'normal');
+  assert.equal(contrasts.length, 5 + 2 * (navigation.length + footer.length), 'Unboxed labels, the Stage 2 heading and notice, and normal/hover controls retain readable contrast');
   return Math.min(...contrasts);
 }
 async function verifyHiddenPause(page, background, waterImage) {
@@ -785,7 +787,10 @@ async function noOverflow(page, name) {
 }
 async function homepageGeometry(page, width) {
   const buttons = page.locator('.world-launcher button.launcher-toggle');
-  await expect(buttons).toHaveCount(3);
+  await expect(buttons).toHaveCount(Object.keys(groups).length);
+  const deferred = page.locator('.world-launcher .launcher-group--deferred');
+  await expect(deferred.getByRole('heading', { name: 'Buyers and Credit', exact: true })).toBeVisible();
+  await expect(deferred.locator('button, [aria-expanded]')).toHaveCount(0);
   const geometry = await buttons.evaluateAll(nodes => nodes.map(node => {
     const style = getComputedStyle(node), r = node.getBoundingClientRect();
     return { text: node.textContent.trim(), x: r.x, y: r.y, width: r.width, height: r.height,
@@ -801,6 +806,9 @@ async function homepageGeometry(page, width) {
   }
   assert.ok(geometry.every((b, i) => i === 0 || b.y >= geometry[i - 1].y + geometry[i - 1].height), 'Launchers stack without overlap at every screen width');
   assert.ok(Math.max(...geometry.map(b => b.x)) - Math.min(...geometry.map(b => b.x)) < 2, 'Stacked launchers share a left edge');
+  const parked = await deferred.boundingBox();
+  assert.ok(parked.y >= geometry.at(-1).y + geometry.at(-1).height && Math.abs(parked.x - geometry[0].x) < 2,
+    'The Stage 2 heading occupies its original slot without covering an active launcher');
   const logo = await page.locator('.world-identity .ecosystem-logo').boundingBox();
   const search = await page.locator('.main-search').boundingBox();
   assert.ok(Math.abs(logo.x - geometry[0].x) < 3 && Math.abs(search.x - geometry[0].x) < 3, 'Logo, search and navigation retain the original left alignment');

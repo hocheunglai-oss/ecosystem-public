@@ -7,7 +7,7 @@ import { chromium, webkit, expect } from '@playwright/test';
 import { installIntelligence, syntheticIntelligence } from './fixtures/intelligence.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import { installProfileTabMocks } from './fixtures/profile-tabs.mjs';
-import { createLiveFixtureBuyer } from './fixtures/test-workspace.mjs';
+import { activateDeveloperMode, createLiveFixtureBuyer } from './fixtures/test-workspace.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 
@@ -55,6 +55,7 @@ async function fixture(context) {
   return state;
 }
 async function profile(page) {
+  await activateDeveloperMode(page);
   const nav=page.getByRole('navigation',{name:'Workspace navigation'}), group=button(nav,'Buyers and Credit');
   if(await group.getAttribute('aria-expanded')!=='true')await group.click();
   await button(nav,'Buyer Profiles').click();

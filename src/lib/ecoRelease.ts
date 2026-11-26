@@ -18,6 +18,6 @@ export function isBuyerCreditAction(action: Action, state: Pick<DemoState, 'cont
   }
 }
 
-export function assertReleaseActionAvailable(action: Action, state: Pick<DemoState, 'contributions'>, user: AccessUser | null | undefined): void {
-  if (isBuyerCreditAction(action, state) && !canUseBuyerCredit(user)) throw new Error(ECO_2_RELEASE_NOTICE);
+export function assertReleaseActionAvailable(action: Action, state: Pick<DemoState, 'contributions'>, user: AccessUser | null | undefined, developerMode: boolean): void {
+  if (isBuyerCreditAction(action, state) && !canUseBuyerCredit(user, null, developerMode)) throw new Error(ECO_2_RELEASE_NOTICE);
 }

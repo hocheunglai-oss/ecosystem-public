@@ -34,6 +34,10 @@ export async function handleWhatsAppDispatch(request: Request, config: AuthConfi
     return new Response(JSON.stringify(value), { status, headers });
   };
   try {
+    if (config.localStaging) {
+      if (request.method === 'GET') return respond({ routes: [] });
+      throw new ApiError(403, 'Dispatch is unavailable in staging.');
+    }
     if (new URL(request.url).search) throw new ApiError(400, 'Invalid dispatcher request.');
     if (request.headers.get('sec-fetch-site') === 'cross-site' && !request.headers.has('authorization')) throw new ApiError(403, 'Access denied.');
     if (request.method === 'GET') return respond(await account.authenticatedRpc('eco_whatsapp_route'));

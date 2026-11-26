@@ -7,20 +7,15 @@ import { FeedbackPortal } from "./Administration";
 import { CreditRequestForm, DecisionForm, CompanyForm } from "./CreditForms";
 import "./credit-records.css";
 import { KnowledgeComparison } from "./KnowledgeEditor";
-import { knowledgeDocument } from "./lib/knowledge";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AlertTriangle,
-  Check,
-  Plus,
-  ShieldCheck,
   Download,
 } from "lucide-react";
 import { useDemo } from "./store";
 import {
   actors,
   canTrade,
-  isAdmin,
   parseProductQuantity,
   outcomeProfit,
   getOutcomePrivateNote,
@@ -41,9 +36,7 @@ import SearchableSelect from "./SearchableSelect";
 import { useSupplierCatalog } from "./lib/supplierApi";
 import { productSupplierName } from "./lib/fixtureSuppliers";
 import { lostReasonsFor } from "./lib/lostReasons";
-import { useMobileInterface } from "./mobile";
 import { IntelligenceAmendment } from "./IntelligenceEditor";
-import { emptyIntelligenceKeyInfo } from "./lib/intelligenceFields";
 type Close = () => void;
 function Frame({
   title,

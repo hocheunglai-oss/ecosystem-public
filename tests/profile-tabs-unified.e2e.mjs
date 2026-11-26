@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
-import { createLiveFixtureBuyer } from './fixtures/test-workspace.mjs';
+import { activateDeveloperMode, createLiveFixtureBuyer } from './fixtures/test-workspace.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 
 const base = process.env.ECO_PROFILE_TABS_ORIGIN || process.env.ECO_PRIVATE_UI_ORIGIN || 'http://127.0.0.1:4320';
@@ -469,6 +469,7 @@ async function verifyGates(page, state, shot) {
   state.user = structuredClone(user); await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('FIXTURE ADMIN');
   await closeWorkspace(page);
+  await activateDeveloperMode(page);
   const testToggle = page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true });
   await expect(testToggle).toBeEnabled(); await testToggle.click();
   await expect(testToggle).toHaveAttribute('aria-pressed', 'true');
@@ -523,6 +524,8 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         await createLiveFixtureBuyer(page, 'UNIFIED TAB TEST BUYER');
         // Retain the reload to verify that the newly created buyer persists.
         await page.reload();
+        await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('heading', { name: 'Buyers and Credit', exact: true })).toBeVisible();
+        await activateDeveloperMode(page);
         for (const kind of kinds) await verifyProfile(page, state, kind, width, shot);
         await verifySharedEditing(page, state, width, shot);
         await verifyPartialManagerRetry(page, state);

@@ -2,7 +2,7 @@
 
 ## ECO 1.0 — SPC ready
 
-Support the established SPC trading tasks with shared, authenticated persistence and verified access boundaries. Supplier profiles, Singapore comparison, country/port knowledge, enquiry parsing and review must remain consistent. Buyers and credit show `UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0` to non-administrators, including VIEW AS; real administrators retain access.
+Support the established SPC trading tasks with shared, authenticated persistence and verified access boundaries. Supplier profiles, Singapore comparison, country/port knowledge, enquiry parsing and review must remain consistent. Buyers and credit show `UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0` throughout Stage 1. The isolated staging owner can open these workspaces through Developer Mode.
 
 Keep countries and ports as the location model. Shared profile actions, tab management and private owner-only tabs use the same design language. Only administrators and SPC traders may change Singapore supplier information.
 
@@ -52,9 +52,9 @@ The owner approved automatic table updates from approved sources, starting with 
 
 ## SPC launch and Stage 2 isolation
 
-Stage 1 uses the existing reviewed production release process. Keep its live domain, Supabase project, incoming identity providers and dispatcher on their pinned production targets. Read-only VIEW AS models role and office. It retains the signed-in administrator and omits private records, live commercial data and writes. Exercise actual role capabilities with separate synthetic accounts in a test environment, including combined flags, assignment ownership and server-side permissions.
+Stage 1 uses the existing reviewed production release process. Keep its live domain, Supabase project, incoming identity providers and dispatcher on their pinned production targets. The owner's existing account can hold the administrator and SPC trader flags together. Read-only VIEW AS models role and office. It retains the signed-in administrator and omits private records, live commercial data and writes. Exercise actual role capabilities with separate authenticated staging accounts, including combined flags, assignment ownership and server-side permissions.
 
-Use a short-lived feature branch and a protected preview for each Stage 2 change. Use a dedicated staging database and synthetic accounts, separate storage and separate environment credentials. The current production target checks require explicit staging target configuration before a hosted preview can use another database. Keep external callbacks, email, WhatsApp dispatch and scheduled jobs pointed away from production during Stage 2 development. Use local Supabase and test fixtures while a hosted staging environment is unavailable. Stage 1 fixes can be reviewed and released independently. New production schemas remain backward-compatible until the previous app version is retired.
+Use a short-lived feature branch and [isolated local staging](local-staging.md) for Stage 2 changes. Keep authentication, the database, storage and credentials separate from production. The staging administrator starts in Stage 1 and opens Stage 2 through Developer Mode. TEST DATA is available within Developer Mode and is separate from authenticated role tests. A future hosted staging preview requires a verified isolated backend and its own protection. Stage 1 fixes can be reviewed and released independently. New production schemas remain backward-compatible until the previous app version is retired.
 
 ECO inherits the reviewed immutable Enquiry Worksheet parser revision, with its own directory and explicit port and buyer review. Compare newer rules against synthetic and approved private regression cases before changing the pin. The Worksheet port catalogue and ECO's canonical locations are separate sources.
 

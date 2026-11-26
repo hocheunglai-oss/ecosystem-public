@@ -26,7 +26,7 @@ export async function handleOfficialTableRefresh(request: Request, env = process
     (cookie !== null && (cookie.length > 4096 || !/^_vercel_jwt=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(cookie)))) return answer(400, { error: 'invalid_request' });
   try {
     const config = deps.configure(env); // Canonical ECO project/team/origin are checked before any service client is made.
-    if (env.ECO_OFFICIAL_TABLES_ENABLED !== 'true') return answer(200, { status: 'disabled' });
+    if (config.localStaging || env.ECO_OFFICIAL_TABLES_ENABLED !== 'true') return answer(200, { status: 'disabled' });
     return answer(200, await deps.refresh(deps.store(config)));
   } catch { return answer(503, { error: 'official_table_refresh_unavailable' }); }
 }

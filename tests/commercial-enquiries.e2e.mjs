@@ -1,3 +1,4 @@
+import { activateTestWorkspace } from './fixtures/test-workspace.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -251,7 +252,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await expect(dialog.getByLabel('Raw enquiry',{exact:true})).toBeDisabled();await expect(dialog.locator('[data-commercial-id]')).toHaveCount(0);
       assert.equal(state.calls.length,beforePreview);
       state.preview=null;await page.reload({waitUntil:'domcontentloaded'});
-      const test=page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true});await expect(test).toBeEnabled();await test.click();
+      await activateTestWorkspace(page);
       const beforeTest=state.calls.length;dialog=await openEnquiry(page);await expect(dialog.getByRole('button',{name:'Save draft',exact:true})).toHaveCount(0);
       await expect(dialog.locator('[data-commercial-id]')).toHaveCount(0);assert.equal(state.calls.length,beforeTest);
       await dialog.getByRole('button',{name:'Close workspace',exact:true}).click();

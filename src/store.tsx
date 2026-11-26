@@ -39,7 +39,7 @@ type Store = {
 const Context = createContext<Store | null>(null);
 export function DemoProvider({ children, user }: { children: ReactNode; user?: AccessUser | null }) {
   const { realUser } = useAccess();
-  const { namespace, dataMode, policy } = useTestWorkspace();
+  const { namespace, dataMode, policy, developerMode } = useTestWorkspace();
   // The original LIVE state remains untouched as a recovery source. New local
   // state excludes the authoritative location slice, which is loaded per session.
   const legacyKey = `${namespace}:state`;
@@ -99,7 +99,7 @@ export function DemoProvider({ children, user }: { children: ReactNode; user?: A
       if (!accessRef.current?.isActive || !accessRef.current.activated) throw new Error('Sign in with an active account.');
       assertLocalCommercialAction(action, dataMode);
       if (dataMode === 'live' && isLocationAction(action, ref.current)) throw new Error('Use the shared save for country and port information.');
-      assertReleaseActionAvailable(action, ref.current, accessRef.current);
+      assertReleaseActionAvailable(action, ref.current, accessRef.current, developerMode);
       const next = applyAction(ref.current, action, actor, undefined, references);
       // Persist requests and attachments before their forms report success.
       try {

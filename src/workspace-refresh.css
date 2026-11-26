@@ -34,7 +34,6 @@
     .search-box,
     .filter-select select,
     .directory-toolbar > select,
-    .team-performance-header input,
     .center-parser,
     .center-standard
   ) {
@@ -459,15 +458,4 @@
 }
 .workspace-window .center-details-column {
   border-color: #c5d5e5;
-}
-
-.workspace-window .team-performance-header input {
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 0.8rem;
-}
-.workspace-window .team-performance-table tbody th {
-  background: transparent;
-  color: var(--ink);
-  text-transform: none;
 }

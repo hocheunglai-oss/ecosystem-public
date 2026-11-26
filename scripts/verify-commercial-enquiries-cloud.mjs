@@ -88,16 +88,11 @@ async function browserWorkflow(identity, password, engine, width, theme, label) 
   try {
     await page.goto(manifest.base, { waitUntil: 'domcontentloaded' });
     let panel = await openEnquiries(page);
+    const savedResponse = page.waitForResponse(response => matchesDraftSave(response, {
+      base: manifest.base, rawText: draft.source.rawText, vessel: draft.reviewed.vessel,
+    }));
     await panel.getByLabel('Raw enquiry', { exact: true }).fill(draft.source.rawText);
-    await expect(panel.getByRole('button', { name: 'Send to SPC', exact: true })).toBeEnabled();
-    // Unsaved local drafts already expose the same Open <vessel> button. Wait
-    // for this exact save's response before testing durable server state.
-    const [response] = await Promise.all([
-      page.waitForResponse(response => matchesDraftSave(response, {
-        base: manifest.base, rawText: draft.source.rawText, vessel: draft.reviewed.vessel,
-      })),
-      panel.getByRole('button', { name: 'Save draft', exact: true }).click(),
-    ]);
+    const response = await savedResponse;
     const receipt = await result(response);
     assert.equal(receipt.item.id, response.request().postDataJSON().id);
     assert.equal(receipt.item.ownerId, identity.id);
@@ -110,7 +105,7 @@ async function browserWorkflow(identity, password, engine, width, theme, label) 
     await page.reload({ waitUntil: 'domcontentloaded' }); panel = await openEnquiries(page);
     await panel.getByRole('button', { name: `Open ${draft.reviewed.vessel}`, exact: true }).click();
     await expect(panel.getByLabel('Raw enquiry', { exact: true })).toHaveValue(draft.source.rawText);
-    await expect(panel.getByLabel('Raw enquiry', { exact: true })).toHaveAttribute('readonly', '');
+    await expect(panel.getByLabel('Raw enquiry', { exact: true })).toBeEditable();
     await panel.getByRole('button', { name: 'Send to SPC', exact: true }).click();
     await expect.poll(async () => (await result(await get(ctx, '?id=' + saved.id))).item.status).toBe('confirmed');
     await expect(panel.locator(`[data-commercial-id="${saved.id}"]`)).toContainText(/awaiting connection/i);

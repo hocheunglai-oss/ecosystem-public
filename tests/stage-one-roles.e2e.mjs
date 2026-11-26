@@ -16,6 +16,10 @@ const offices = [{id:'hk',name:'HONG KONG'}, {id:'sg',name:'SINGAPORE'}, {id:'CR
 const roles = [['trader','Normal trader'],['spc-trader','SPC Trader'],['manager','Manager'],['credit','Credit']];
 const group = 'Synthetic Route – Mixed Case And A Long Group Name For Mobile';
 const cases = [];
+const queueRow = { id:'10000000-0000-4000-8000-000000000099', ownerId:owner.id, ownerName:owner.displayName,
+  reference:'ECO-00001234', revision:1, status:'confirmed', vessel:'SHARED SYNTHETIC QUEUE', imo:'', eta:'3 DEC',
+  createdAt:'2026-11-26T00:00:00Z', updatedAt:'2026-11-26T00:00:00Z', confirmedAt:'2026-11-26T00:00:00Z',
+  products:[{grade:'VLSFO',quantityText:'300'}], port:null, queue:{status:'awaiting_connection',queuedAt:'2026-11-26T00:00:00Z'} };
 await mkdir(out,{recursive:true});
 
 for (const [engine, browserType] of [['chromium',chromium],['webkit',webkit]]) {
@@ -51,8 +55,11 @@ for (const [engine, browserType] of [['chromium',chromium],['webkit',webkit]]) {
         }
         if (path === '/api/enquiries/test-policy') return respond({enabled:false,generation:''});
         if (path === '/api/enquiries/records') {
-          if (url.searchParams.get('scope') === 'singapore') { assert.equal(preview,null); assert.ok(actor.isAdmin||actor.isSpcTrader); queueReads++; }
-          return respond({items:[],nextCursor:null});
+          assert.equal(preview,null);
+          assert.equal(url.searchParams.get('scope'),'workbench');
+          const eligible = actor.isAdmin || actor.isSpcTrader;
+          if (eligible) queueReads++;
+          return respond({items:eligible?[queueRow]:[],nextCursor:null});
         }
         if (path === '/api/enquiries/inbox') return respond({items:[],nextCursor:null,unreadCount:0});
         if (path.startsWith('/api/admin/')) return respond({items:[],count:0,nextCursor:null});
@@ -94,9 +101,9 @@ for (const [engine, browserType] of [['chromium',chromium],['webkit',webkit]]) {
           await footer.getByRole('button',{name:label,exact:true}).click();
           await expect(page.getByRole('status',{name:'Role preview'}).first()).toContainText(role==='credit'?'CREDIT':'SINGAPORE');
           const dialog=await enquiries();
-          const queue=dialog.getByRole('button',{name:'Singapore queue',exact:true});
-          if (role==='spc-trader') { await expect(queue).toBeDisabled(); await shot('spc-preview'); }
-          else await expect(queue).toHaveCount(0);
+          await expect(dialog.getByRole('button',{name:'NEW ENQUIRY',exact:true})).toBeDisabled();
+          await expect(dialog.locator('[data-commercial-id]')).toHaveCount(0);
+          if (role==='spc-trader') await shot('spc-preview');
           await close();
           const before=privateReads;
           const privateDetails=await details(); await expect(privateDetails.getByText(group,{exact:true})).toHaveCount(0);
@@ -111,17 +118,15 @@ for (const [engine, browserType] of [['chromium',chromium],['webkit',webkit]]) {
           await invalidateFixtureAuthority(page,{user:actor,preview});
           await expect(page.locator('.hud-identity')).toContainText(actor.displayName);
           await expect(page.getByRole('button',{name:'View as',exact:true})).toHaveCount(0);
-          const dialog=await enquiries();
-          const queue=dialog.getByRole('button',{name:'Singapore queue',exact:true});
-          if (role==='spc-trader') {
-            const observed=page.waitForResponse(response=>new URL(response.url()).searchParams.get('scope')==='singapore');
-            await queue.click(); await observed;
-          } else await expect(queue).toHaveCount(0);
+          const read=page.waitForResponse(response=>new URL(response.url()).searchParams.get('scope')==='workbench');
+          const dialog=await enquiries(); await read;
+          await expect(dialog.getByText('SHARED SYNTHETIC QUEUE',{exact:true})).toHaveCount(role==='spc-trader'?1:0);
+          await expect(dialog.getByRole('button',{name:'Singapore queue',exact:true})).toHaveCount(0);
           await close();
           const privateDetails=await details(); await expect(privateDetails.getByText('Synthetic Member Group',{exact:true})).toBeVisible();
           await expect(privateDetails.getByRole('button',{name:'Connect dispatcher',exact:true})).toHaveCount(0); await close();
         }
-        assert.equal(queueReads,1); assert.deepEqual(problems,[]);
+        assert.ok(queueReads>=1); assert.deepEqual(problems,[]);
         cases.push({engine,width,theme,passed:true}); console.log(`PASS ${engine} ${width} ${theme} · four roles and private groups`);
       } finally { await context.close(); }
     }

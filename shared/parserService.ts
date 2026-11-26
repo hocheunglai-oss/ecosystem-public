@@ -1,5 +1,5 @@
 /** Narrow parser contract: no account directory, financial values or application credentials. */
-export const PARSER_VERSION = 'eco-fcuno-2026-11-26-v3';
+export const PARSER_VERSION = 'eco-fcuno-2026-11-26-v4';
 export const PARSER_TEXT_LIMIT = 20_000;
 export const parserFieldKeys = ['vessel', 'imo', 'buyerText', 'portText', 'eta', 'hsfo', 'vlsfo', 'lsmgo', 'remarks'] as const;
 export type ParserField = typeof parserFieldKeys[number];

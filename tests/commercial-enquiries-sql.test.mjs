@@ -45,7 +45,7 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
     for(const role of ['anon','authenticated','service_role'])await assert.rejects(query(`set role ${role};select * from eco_private.${table}`),/permission denied/);
    }
    for(const name of ['eco_get_commercial_enquiries','eco_mutate_commercial_enquiry'])for(const role of ['anon','service_role'])await assert.rejects(query(`set role ${role};select public.${name}('{}')`),/permission denied/);
-   assert.equal(await query("select migration_head from eco_private.platform_versions where component='commercial-enquiries'"),'20261020075427');
+   assert.equal(await query("select migration_head from eco_private.platform_versions where component='commercial-enquiries'"),'20261126084045');
   });
   await t.test('own draft survives new sessions; admin cannot read private details; queue is a strict projection',async()=>{
    await seed();const input=payload();const saved=await mutate(1,input);assert.equal(saved.item.status,'draft');assert.equal(saved.item.revision,1);assert.equal(saved.item.source.rawText,input.source.rawText);assert.equal(saved.item.reference,'ECO-00000001');
@@ -532,6 +532,30 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
    await query(`insert into eco_private.revoked_sessions(session_id,user_id) values(${lit(sessions[1])},${lit(users[1])})`);
    await assert.rejects(list(1), /Unauthorized/);
   });
+  await t.test('working draft edits, merged list and cancellation preserve immutable receipt and boundaries',async()=>{
+    await seed();
+    const input=payload({workingText:'INITIAL WORKING TEXT'});
+    input.source.inboxId=inboxIds[1];
+    const saved=(await mutate(1,input)).item;
+    const revised=(await mutate(1,{...input,requestId:randomUUID(),expectedRevision:saved.revision,workingText:'UPDATED WORKING TEXT'})).item;
+    assert.equal(revised.workingText,'UPDATED WORKING TEXT');
+    assert.deepEqual(revised.source,saved.source);
+    const confirm=(await mutate(1,payload({action:'confirm'}))).item;
+    assert.equal((await get(2,{scope:'workbench'})).items.find(row=>row.id===confirm.id).ownerId,users[1]);
+    assert.equal((await get(2,{scope:'workbench'})).items.some(row=>row.id===saved.id),false);
+    assert.equal((await get(3,{scope:'workbench'})).items.some(row=>row.id===confirm.id),false);
+    const cancel={id:saved.id,requestId:randomUUID(),dataMode:'live',action:'cancel',expectedRevision:revised.revision};
+    await assert.rejects(mutate(0,cancel),/not found/);
+    await assert.rejects(mutate(1,{...cancel,expectedRevision:saved.revision}),/revision conflict/);
+    const closed=await mutate(1,cancel);
+    assert.equal(closed.item.outcome,'cancelled');
+    assert.deepEqual(await mutate(1,cancel),closed);
+    assert.deepEqual((await get(1,{inboxId:inboxIds[1]})).item,closed.item);
+    assert.equal((await call(1,'eco_list_enquiry_inbox',{dataMode:'live',limit:10})).items[0].enquiryId,saved.id);
+    assert.equal((await get(1,{scope:'workbench'})).items.some(row=>row.id===saved.id),false);
+    await assert.rejects(mutate(1,{...input,requestId:randomUUID(),action:'confirm',expectedRevision:closed.item.revision}),/revision conflict/);
+  });
+
   await t.test('local ECO dispatcher sees only new jobs for enabled routes and holds ambiguous attempts', async () => {
     await seed();
     const credential = 'a'.repeat(64), replacement = 'b'.repeat(64);
@@ -576,6 +600,32 @@ test('commercial enquiry isolation, atomic confirmation and durable retry on iso
     assert.deepEqual(await op('sent',job),{accepted:true});
     assert.deepEqual(await op('sent',job),{accepted:true});
     assert.equal((await get(0,{id:job.id})).item.queue.delivery,'sent');
+    const decision=(action,item,extra={})=>mutate(0,{action,id:item.id,requestId:randomUUID(),dataMode:'live',expectedRevision:item.revision,...extra});
+    const initial=(await get(0,{id:job.id})).item;
+    const amended=(await decision('amend',initial,{source:initial.source,workingText:'REVIEWED SOURCE',
+      reviewed:{...initial.reviewed,eta:'21 OCT',remarks:'COQ REQUIRED / PRIVATE NOTE'}})).item;
+    assert.equal(amended.confirmedAt,initial.confirmedAt);
+    assert.equal(amended.queue.delivery,'queued');
+    const amendment=(await op('claim')).job;
+    assert.equal(amendment.event,'amend');
+    assert.deepEqual(amendment.specialTerms,['COQ REQUIRED']);
+    assert.doesNotMatch(JSON.stringify(amendment),/PRIVATE NOTE/);
+    await op('reserve',amendment);
+    await assert.rejects(decision('cancel',amended),/finish/);
+    await op('sent',amendment);
+    const postponed=(await decision('postpone',amended)).item;
+    assert.equal(postponed.outcome,'postponed');
+    const reoffer=(await decision('reoffer',postponed,{source:postponed.source,reviewed:postponed.reviewed})).item;
+    assert.equal(reoffer.outcome,undefined);
+    const reofferJob=(await op('claim')).job;
+    assert.equal(reofferJob.event,'reoffer');
+    const lost=(await decision('lost',reoffer,{lostReason:'NOT TIMELY OFFERED'})).item;
+    assert.equal(lost.lostReason,'NOT TIMELY OFFERED');
+    assert.deepEqual(await op('reserve',reofferJob),{accepted:false});
+    assert.deepEqual(await op('claim'),{job:null});
+    assert.equal((await get(0,{scope:'workbench'})).items.some(row=>row.id===lost.id),false);
+    assert.equal((await get(2,{scope:'lost'})).items.find(row=>row.id===lost.id).lostReason,lost.lostReason);
+    assert.equal((await get(1,{scope:'lost'})).items.length,0);
     const waiting = await confirm(0);
     const attempt = (await op('claim')).job;
     assert.equal(attempt.id,waiting.item.id);

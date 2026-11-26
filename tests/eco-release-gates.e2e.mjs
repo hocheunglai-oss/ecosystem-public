@@ -99,7 +99,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
           if (role === 'trader') await shot(name === 'Buyer Profiles' ? 'buyer-gate' : 'credit-gate'); await close(page);
         }
         await search.fill('ECO20001'); await expect(page.getByRole('listbox', { name: 'Search results' }).getByRole('option')).toHaveCount(0); await expect(page.getByText('No results', { exact: true })).toBeVisible(); await search.fill('');
-        dialog = await open(page, 'Enquiries'); await expect(dialog.getByRole('region', { name: 'Client credit' }).locator('.release-notice:visible')).toHaveText(notice);
+        dialog = await open(page, 'Enquiries'); await expect(dialog.getByRole('region', { name: 'Client credit' })).toHaveCount(0);
         await dialog.getByRole('tab', { name: 'Buyers and Credit', exact: true }).click(); await expect(dialog.locator('#center-panel-Credit .release-notice')).toHaveText(notice); await expect(dialog.locator('.buyer-profile, .credit-usage')).toHaveCount(0);
         if (role === 'trader') await shot('enquiry-credit-gate'); await close(page);
         assert.equal(state.buyerFetches, before, `${role}: blocked screens must not fetch buyer profile data`);

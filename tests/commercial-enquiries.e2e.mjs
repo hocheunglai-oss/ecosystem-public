@@ -25,7 +25,10 @@ async function fixture(context, records=new Map(), operations=new Map()) {
     if(url.pathname==='/api/access/session')return route.fulfill(state.user?{json:{user:state.user,preview:state.preview}}:{status:401,json:{message:'Sign in required.'}});
     if(url.pathname==='/api/enquiries/test-policy')return route.fulfill({json:{enabled:true,generation}});
     if(url.pathname.startsWith('/api/profile-tabs/'))return route.fulfill({json:{target:{kind:url.searchParams.get('kind'),id:url.searchParams.get('id')},shared:{revision:0,tabs:[]},private:{revision:0,tabs:[]}}});
-    if(url.pathname==='/api/enquiries/inbox')return route.fulfill({json:{items:state.user?.id===owner.id&&!state.preview?[receipt]:[],nextCursor:null,unreadCount:0}});
+    if(url.pathname==='/api/enquiries/inbox') {
+      const link=[...records.values()].find(item=>item.source.inboxId===receipt.id&&item.ownerId===state.user?.id);
+      return route.fulfill({json:{items:state.user?.id===owner.id&&!state.preview?[{...receipt,...(link?{enquiryId:link.id}:{})}]:[],nextCursor:null,unreadCount:0}});
+    }
     if(url.pathname==='/api/enquiries/records') {
       assert.equal(req.headers()['x-eco-data-mode'],'live');state.calls.push(url.search);
       if(!state.user||state.preview)return route.fulfill({status:403,json:{message:'Unavailable in preview.'}});
@@ -36,15 +39,22 @@ async function fixture(context, records=new Map(), operations=new Map()) {
           const prior=records.get(body.id);
           if(state.conflictNext){state.conflictNext=false;prior.revision++;prior.reviewed.formattedText=prior.reviewed.formattedText.replace(prior.vessel,reviewedVessel);prior.reviewed.vessel=reviewedVessel;prior.vessel=reviewedVessel;}
           if((prior?.revision??0)!==body.expectedRevision)return route.fulfill({status:409,json:{message:'Enquiry changed. Load the latest revision.'}});
+          if (['cancel','lost','postpone'].includes(body.action)) {
+            const item={...prior,revision:prior.revision+1,outcome:{cancel:'cancelled',lost:'lost',postpone:'postponed'}[body.action],
+              ...(body.lostReason?{lostReason:body.lostReason}:{})};
+            records.set(item.id,item);
+            return route.fulfill({json:{requestId:body.requestId,item}});
+          }
           const duplicate=[...records.values()].find(item=>body.source.inboxId&&item.source.inboxId===body.source.inboxId&&item.id!==body.id);
           if(duplicate)return route.fulfill({status:409,json:{message:'Receipt already saved.'}});
           if(prior)assert.deepEqual(body.source,prior.source,'Source must remain immutable');
           const stamp='2026-10-20T05:00:00Z';
+          const confirmed=body.action!=='save';
           const item={id:body.id,reference:prior?.reference??'ECO-0001',ownerId:state.user.id,ownerName:state.user.displayName,
-            revision:body.expectedRevision+1,status:body.action==='confirm'?'confirmed':'draft',source:body.source,reviewed:body.reviewed,
+            revision:body.expectedRevision+1,status:confirmed?'confirmed':'draft',source:body.source,workingText:body.workingText,reviewed:body.reviewed,
             vessel:body.reviewed.vessel,imo:body.reviewed.imo,eta:body.reviewed.eta,products:body.reviewed.products,port:body.reviewed.portId===sg.id?sg:null,
-            queue:body.action==='confirm'&&body.reviewed.portId===sg.id?{status:'awaiting_connection',queuedAt:stamp}:null,
-            createdAt:prior?.createdAt??stamp,updatedAt:stamp,confirmedAt:body.action==='confirm'?stamp:null};
+            queue:confirmed&&body.reviewed.portId===sg.id?{status:'awaiting_connection',queuedAt:stamp}:null,
+            createdAt:prior?.createdAt??stamp,updatedAt:stamp,confirmedAt:confirmed?stamp:null};
           records.set(item.id,structuredClone(item));response={requestId:body.requestId,item:structuredClone(item)};operations.set(body.requestId,response);
         }
         if(state.failNext){state.failNext=false;return route.abort('failed');}
@@ -59,9 +69,10 @@ async function fixture(context, records=new Map(), operations=new Map()) {
       } else if(url.searchParams.has('inboxId')) {
         response={item:structuredClone([...records.values()].find(item=>item.ownerId===state.user.id&&item.source.inboxId===url.searchParams.get('inboxId'))??null)};
       } else {
-        const queue=url.searchParams.get('scope')==='singapore';
-        if(queue&&!state.user.isAdmin&&!state.user.isSpcTrader)return route.fulfill({status:403,json:{message:'Access denied.'}});
-        response={items:[...records.values()].filter(item=>queue?Boolean(item.queue):item.ownerId===state.user.id).map(summary),nextCursor:null};
+        const scope=url.searchParams.get('scope');
+        const shared=state.user.isAdmin||state.user.isSpcTrader;
+        const visible=[...records.values()].filter(item=>item.ownerId===state.user.id||shared&&item.queue);
+        response={items:visible.filter(item=>scope==='lost'?item.outcome==='lost':!['lost','cancelled'].includes(item.outcome)).map(summary),nextCursor:null};
       }
       if(state.hold){const hold=state.hold;state.hold=null;await hold();}
       return route.fulfill({json:response}).catch(()=>{});
@@ -103,7 +114,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await page.goto(base,{waitUntil:'domcontentloaded'});let dialog=await openEnquiry(page);
       await dialog.locator(`[data-incoming-id="${receipt.id}"]`).getByRole('button').click();
       const rawInput=dialog.getByLabel('Raw enquiry',{exact:true});
-      await expect(rawInput).toHaveValue(raw);await expect(rawInput).toHaveAttribute('readonly','');
+      await expect(rawInput).toHaveValue(raw);await expect(rawInput).toBeEditable();
       // Unsupported CBM keeps source cautions; the trader supplies reviewed MT.
       await dialog.getByLabel('VLSFO',{exact:true}).fill('450');
       // Keep the raw parse fixture stable; this is the trader-reviewed vessel name.
@@ -112,13 +123,19 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await expect(dialog.getByLabel('Buyer',{exact:true})).toHaveValue('');
       await expect(dialog.locator('.enquiry-review')).toContainText('CBM');
       await expect(dialog.locator('.enquiry-review')).not.toContainText('Select an entity');
+      const eta=dialog.getByLabel('ETA',{exact:true});
+      await eta.fill('25 OCT 2026 - 28');
+      await expect(eta).toHaveAttribute('aria-invalid','true');
+      await expect(dialog.locator('.enquiry-review')).toContainText('incomplete');
+      await expect(dialog.getByRole('button',{name:'Send to SPC',exact:true})).toBeDisabled();
+      await eta.fill('25 OCT 2026');
+      state.failNext=true;
       await dialog.getByRole('textbox',{name:'Remarks',exact:true}).fill('REVIEWED REMARK');
-      state.failNext=true;await dialog.getByRole('button',{name:'Save draft',exact:true}).click();
       await expect(dialog.getByRole('alert')).toContainText(/fetch|load|network|saved/i);
-      await dialog.getByRole('button',{name:'Save draft',exact:true}).click();
+      await dialog.getByRole('button',{name:'Retry',exact:true}).click();
       await expect.poll(()=>state.writes.length).toBe(2);assert.equal(state.writes[0].requestId,state.writes[1].requestId);
       assert.equal(state.records.size,1);const id=state.writes[0].id;
-      await expect(dialog.getByRole('button',{name:'Save draft',exact:true})).toBeEnabled();
+      await expect(dialog.getByRole('button',{name:'Save draft',exact:true})).toHaveCount(0);
       await expect(dialog.getByRole('alert')).toHaveCount(0);
       await assertCardText(dialog.locator(`[data-commercial-id="${id}"]`),longVessel);
       await dialog.locator(`[data-commercial-id="${id}"]`).scrollIntoViewIfNeeded();await shot('saved-draft');
@@ -128,12 +145,11 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       assert.ok(await page.evaluate(id=>!Object.keys(localStorage).some(key=>localStorage.getItem(key)?.includes(id)),id),'No LIVE record persisted locally');
 
       await page.reload({waitUntil:'domcontentloaded'});dialog=await openEnquiry(page);
-      await dialog.locator(`[data-incoming-id="${receipt.id}"]`).getByRole('button').click();
+      await dialog.locator('[data-commercial-id]').getByRole('button',{name:'Open '+longVessel,exact:true}).click();
       await expect(dialog.getByRole('textbox',{name:'Remarks',exact:true})).toHaveValue('REVIEWED REMARK');
       await expect(dialog.getByLabel('Raw enquiry',{exact:true})).toHaveValue(raw);
-      assert.ok(state.calls.some(query=>query.includes('inboxId=')),'Receipt lookup survives reload independently of paging');
+      await expect(dialog.locator('[data-incoming-id]')).toHaveCount(0);
       state.conflictNext=true;await dialog.getByLabel('Vessel',{exact:true}).fill('UNSAVED CHANGE');
-      await dialog.getByRole('button',{name:'Save draft',exact:true}).click();
       await expect(dialog.getByRole('alert')).toContainText('Enquiry changed');
       await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue('UNSAVED CHANGE');
       await dialog.getByRole('button',{name:'Load latest',exact:true}).click();
@@ -143,15 +159,15 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await dialog.getByRole('button',{name:'Discard and load latest',exact:true}).click();
       await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
       await dialog.getByRole('button',{name:'Send to SPC',exact:true}).click();
-      await expect(dialog.getByRole('button',{name:'Save draft',exact:true})).toBeDisabled();
+      await expect(dialog.getByRole('button',{name:'Save draft',exact:true})).toHaveCount(0);
       await expect(dialog).toContainText('Awaiting connection');
       await expect(dialog.getByLabel('Vessel',{exact:true})).toBeDisabled();
       assert.equal(state.records.get(id).status,'confirmed');assert.equal(state.records.size,1);
       await assertCardText(dialog.locator(`[data-commercial-id="${id}"]`),reviewedVessel);
       await dialog.locator(`[data-commercial-id="${id}"]`).scrollIntoViewIfNeeded();await shot('confirmed');
       const otherId='40000000-0000-4000-8000-000000000002';
-      state.records.set(otherId,{...structuredClone(state.records.get(id)),id:otherId,ownerId:other.id,ownerName:other.displayName,vessel:otherVessel,reviewed:{...state.records.get(id).reviewed,buyerText:'PRIVATE BUYER',remarks:'PRIVATE REMARK'},source:{...state.records.get(id).source,rawText:'PRIVATE SOURCE'}});
-      await dialog.getByRole('button',{name:'Singapore queue',exact:true}).click();
+      state.records.set(otherId,{...structuredClone(state.records.get(id)),id:otherId,ownerId:other.id,ownerName:other.displayName,vessel:otherVessel,reviewed:{...state.records.get(id).reviewed,buyerText:'PRIVATE BUYER',remarks:'PRIVATE REMARK'},source:{...state.records.get(id).source,inboxId:null,rawText:'PRIVATE SOURCE'}});
+      await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
       await expect(dialog.locator(`[data-commercial-id="${otherId}"]`)).toContainText(otherVessel);
       await expect(dialog.locator(`[data-commercial-id="${otherId}"]`).getByRole('button')).toHaveCount(0);
       await assertCardText(dialog.locator(`[data-commercial-id="${otherId}"]`),otherVessel);
@@ -178,27 +194,39 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       await expect(secondDialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
       await expect(secondDialog).toContainText('Awaiting connection');await device.close();
 
-      // A manual first save may commit before the response is lost. Selecting another
-      // enquiry and returning must preserve both the record and operation identities.
-      await dialog.getByRole('button',{name:'My enquiries',exact:true}).click();
-      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button',{name:/^Open /}).click();
-      await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
-      await dialog.getByRole('button',{name:'Clear parser',exact:true}).click();
-      const manualRaw='VESSEL: MANUAL RETRY\nPORT: SINGAPORE\nETA: 25 OCT 2026\nVLSFO: 600 MT';
+      const activeCard=dialog.locator('[data-commercial-id="'+id+'"]');
+      await activeCard.getByRole('button',{name:'AMEND',exact:true}).click();
+      await dialog.getByLabel('ETA',{exact:true}).fill('27 OCT 2026');
+      await dialog.getByRole('button',{name:'SEND AMENDMENT',exact:true}).click();
+      await expect.poll(()=>state.records.get(id).eta).toBe('27 OCT 2026');
+      await activeCard.getByRole('button',{name:'POSTPONE',exact:true}).click();
+      const postpone=page.getByRole('dialog',{name:'POSTPONE ENQUIRY',exact:true});
+      await postpone.getByRole('button',{name:'POSTPONE ENQUIRY',exact:true}).click();
+      await expect(activeCard).toContainText(/postponed/i);
+      await activeCard.getByRole('button',{name:'REOFFER',exact:true}).click();
+      await dialog.getByRole('button',{name:'SEND REOFFER',exact:true}).click();
+      await expect(activeCard.getByRole('button',{name:'LOST',exact:true})).toBeVisible();
+
+      // A manual autosave can commit before its response is lost. Retry the same receipt.
+      await dialog.getByRole('button',{name:'NEW ENQUIRY',exact:true}).click();
+      const manualRaw='MT SYNTHETIC RETRY / SINGAPORE / 3-10TH DEC / VLSFO 230 MTS / LSMGO 40 MTS';
+      state.failNext=true;
       await dialog.getByLabel('Raw enquiry',{exact:true}).fill(manualRaw);
-      await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue('MANUAL RETRY');
-      state.failNext=true;await dialog.getByRole('button',{name:'Save draft',exact:true}).click();
+      await expect(dialog.getByLabel('ETA',{exact:true})).toHaveValue(/3.*10\s+dec/i);
+      await expect(dialog.getByLabel('Standard format',{exact:true})).toHaveValue('SYNTHETIC RETRY / SG 3-10 DEC / VLSFO 230 MT / LSMGO 40 MT');
       await expect(dialog.getByRole('alert')).toContainText(/fetch|load|network|saved/i);
       const uncertain=structuredClone(state.writes.at(-1)),recordCount=state.records.size;
       assert.equal(uncertain.source.inboxId,null);
-      await dialog.locator(`[data-commercial-id="${id}"]`).getByRole('button',{name:/^Open /}).click();
-      await expect(dialog.getByLabel('Vessel',{exact:true})).toHaveValue(reviewedVessel);
-      await dialog.locator('[data-draft-id]').getByRole('button',{name:'Open MANUAL RETRY',exact:true}).click();
-      await expect(dialog.getByLabel('Raw enquiry',{exact:true})).toHaveValue(manualRaw);
-      await dialog.getByRole('button',{name:'Save draft',exact:true}).click();
-      await expect(dialog.locator(`[data-commercial-id="${uncertain.id}"]`)).toBeVisible();
-      assert.deepEqual(state.writes.at(-1),uncertain,'Retry after remount preserves the exact request body and identities');
+      await dialog.getByRole('button',{name:'Retry',exact:true}).click();
+      const savedDraft=dialog.locator('[data-commercial-id="'+uncertain.id+'"]');
+      await expect(savedDraft).toBeVisible();
+      assert.deepEqual(state.writes.at(-1),uncertain,'Retry preserves the exact request body and identities');
       assert.equal(state.records.size,recordCount,'An uncertain manual save cannot create a duplicate');
+      await savedDraft.getByRole('button',{name:'CANCEL',exact:true}).click();
+      const cancel=page.getByRole('dialog',{name:'CANCEL ENQUIRY',exact:true});
+      await cancel.getByRole('button',{name:'CANCEL ENQUIRY',exact:true}).click();
+      await expect(savedDraft).toHaveCount(0);
+      assert.equal(state.records.get(uncertain.id).outcome,'cancelled');
 
       // A late old-owner detail response must not repopulate the next account's UI.
       let releaseDetail,detailStarted=false;
@@ -226,9 +254,26 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       const test=page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true});await expect(test).toBeEnabled();await test.click();
       const beforeTest=state.calls.length;dialog=await openEnquiry(page);await expect(dialog.getByRole('button',{name:'Save draft',exact:true})).toHaveCount(0);
       await expect(dialog.locator('[data-commercial-id]')).toHaveCount(0);assert.equal(state.calls.length,beforeTest);
+      await dialog.getByRole('button',{name:'Close workspace',exact:true}).click();
+      await page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true}).click();
+      dialog=await openEnquiry(page);
+      await dialog.locator('[data-commercial-id="'+id+'"]').getByRole('button',{name:'LOST',exact:true}).click();
+      const loss=page.getByRole('dialog',{name:'LOST ENQUIRY',exact:true});
+      await loss.getByRole('combobox',{name:'LOST REASON',exact:true}).selectOption('NOT TIMELY OFFERED');
+      await loss.getByRole('button',{name:'SAVE',exact:true}).click();
+      await expect(dialog.locator('[data-commercial-id="'+id+'"]')).toHaveCount(0);
+      assert.equal(state.records.get(id).lostReason,'NOT TIMELY OFFERED');
+      await dialog.getByRole('button',{name:'Close workspace',exact:true}).click();
+      const navigation=page.getByRole('navigation',{name:'Workspace navigation'});
+      const trading=navigation.getByRole('button',{name:'Trading',exact:true});
+      if(await trading.getAttribute('aria-expanded')!=='true')await trading.click();
+      await navigation.getByRole('button',{name:'Lost Records',exact:true}).click();
+      const lostRecords=page.getByRole('dialog',{name:'Lost Records',exact:true});
+      await expect(lostRecords.locator('[data-record-id="'+id+'"]')).toContainText('NOT TIMELY OFFERED');
+
       state.user=null;await page.reload({waitUntil:'domcontentloaded'});await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
       assert.deepEqual(errors,[]);results.push({engine,width,theme,ok:true});console.log(`PASS ${engine} ${width} ${theme}`);
     }catch(error){await shot('failure').catch(()=>{});throw error;}finally{await context.close();}
   }}finally{await browser.close();}
 }
-await writeFile(resolve(out,'results.json'),JSON.stringify({base,results,scope:'Hosted/local UI with synthetic API fixture. Draft/exact manual retry after remount/conflict/reload/device/late account response/same-account permission revocation, long-name text bounds/non-overlap, Singapore queue projection and owner/TEST/VIEW AS boundaries. Actual API/database verification is separate.'},null,2));
+await writeFile(resolve(out,'results.json'),JSON.stringify({base,results,scope:'Hosted/local UI with synthetic API fixture. Automatic drafts/idempotent retry/conflict/reload/device/late account response/permission revocation, long-name text bounds, shared SPC summary and owner/TEST/VIEW AS boundaries. Actual API/database verification is separate.'},null,2));

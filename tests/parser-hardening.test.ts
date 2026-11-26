@@ -36,7 +36,7 @@ test('repeated conflicting port fields require selection while repeated aliases 
 });
 
 test('impossible leap dates and missing or ambiguous date parts cannot confirm an ETA', () => {
-  for (const eta of ['29 February 2026', '29 February 2100', '2026-02-29', '29/02/2026', '31-1 April 2026', '31/1 April 2026', 'April 30-31 2026', '31-02-2026', '29 February', '10/11/2026', '10-11-2026', '15th - 17th', '15-17']) {
+  for (const eta of ['25 OCT 2026 - 28', '10-3 DEC', 'DEC 10-3', '29 February 2026', '29 February 2100', '2026-02-29', '29/02/2026', '31-1 April 2026', '31/1 April 2026', 'April 30-31 2026', '31-02-2026', '29 February', '10/11/2026', '10-11-2026', '15th - 17th', '15-17']) {
     const actual = parse(source.replace('15-17 October', eta));
     assert.equal(actual.eta, '', eta);
     assert.notEqual(actual.confidence, 'high', eta);
@@ -141,4 +141,14 @@ test('current Worksheet rules handle nonstandard vessel labels, demand port and 
   assert.equal(invalid.imo, '');
   assert.equal(invalid.vessel, 'CALIFORNIA');
   assert.ok(invalid.warnings.some(warning => warning.includes('check digit')));
+});
+
+test('an ordinal on the second day of a compact range is a valid date window', () => {
+  const actual = parse('MT SYNTHETIC VESSEL / SINGAPORE / 3-10TH DEC / VLSFO 230 MTS / LSMGO 40 MTS');
+  assert.equal(actual.eta, '3 - 10 dec');
+  assert.equal(actual.vlsfo, '230');
+  assert.equal(actual.lsmgo, '40');
+  assert.equal(formatEnquiry({ ...actual, portName: 'Singapore', buyerName: '' }),
+    'SYNTHETIC VESSEL / SG 3-10 DEC / VLSFO 230 MT / LSMGO 40 MT');
+  assert.equal(parse('MT SYNTHETIC VESSEL / SINGAPORE / DEC 3-10 / VLSFO 230 MTS').eta, '3 - 10 dec');
 });

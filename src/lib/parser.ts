@@ -1,7 +1,7 @@
 import { parseEnquiryWorksheetGuess } from '../vendor/fcuno/lib/enquiryWorksheetParser.ts'
 import { normalizeIndexedEnquiryPort, normalizePortKey } from '../vendor/fcuno/lib/enquiryPortIndex.ts'
-import { buildSpcStandardEnquiry, parseSpcEnquiryText, spcFuelInputValue } from '../vendor/fcuno/lib/spcEnquiryText.ts'
-import { detectAttentionTerms, detectSpcCautionTerms, formatSpcCautionWarning, replaceHsfoWithRmk, type VlsfoMaxRemark } from '../vendor/fcuno/lib/enquiryShortener.ts'
+import { normalizeSpcPort, parseSpcEnquiryText, spcFuelInputValue } from '../vendor/fcuno/lib/spcEnquiryText.ts'
+import { detectAttentionTerms, detectSpcCautionTerms, formatSpcCautionWarning } from '../vendor/fcuno/lib/enquiryShortener.ts'
 import { parseProductQuantity } from '../../shared/productQuantity.ts'
 import type { EnquiryProduct } from './model.ts'
 
@@ -81,6 +81,8 @@ export function stripCommercialDetails(value: string): string {
 
 const buyerLabelPattern = /^\s*(?:\d+\s*[).:-]\s*)?(?:buyer|client|for\s+account(?:\s+of)?|account(?:\s+name)?|for\s+a\/?c(?:\s+of)?|a\/?c|acct|for\s+acct(?:\s+of)?)\b/i
 const portLabelPattern = /^\s*(?:[-•*=]\s*\.?\s*)?(?:\d+\s*[).:-]\s*)?(?:port|position|location|demand\s+port|at\s*[:：]|bunker(?:ing)?\s*(?:port|location|place)|refuell?ing\s*(?:port|location|place)|port\s+of\s+(?:call|delivery|supply)|delivery\s+(?:port|place|location)|place\s+of\s+(?:supply|delivery)|loading\s+port|discharging\s+port|加油港口|港口|地点|地點)/i
+export const specialEnquiryRemarks = ['COQ REQUIRED', '30D QUALITY TIME BAR', 'BIMCO TERMS'] as const
+export const enquiryViscosities = ['80cst min', '80cst max', '120cst max', '180cst max'] as const
 const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 const monthToken = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
 
@@ -90,7 +92,7 @@ function reviewedEta(source: string, parsedEta: string): { eta: string; warnings
   const labels = parts.filter(part => /^\s*(?:e\.?t\.?[abds]\.?|a\.?t\.?a\.?|delivery\s+(?:date|window)|laycan|date)\b\s*[:=]?/i.test(part))
   const context = (labels.length ? labels : parts.filter(part =>
     !/^(?:remarks?|notes?|buyer|client|a\/?c|acct|account|from|sent|subject|iso)\b/i.test(part) &&
-    (new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s*[-./ ]*${monthToken}\\b|\\b${monthToken}\\s+\\d{1,2}`, 'i').test(part) || /\b\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\b|\d\s*[月日号월일]/.test(part)))).join('\n')
+    (new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s*[-./ ]*${monthToken}\\b|\\b${monthToken}\\s+\\d{1,2}`, 'i').test(part) || /\b\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\b|\d\s*[月日号월일]/.test(part)))).join('\n').replace(/(?<=\d)(?:st|nd|rd|th)\b/gi, '')
   const warnings: string[] = []
   const namedMonth = new RegExp(`\\b${monthToken}\\b`, 'i').test(context)
   const explicitMonth = namedMonth || /\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b\d{1,2}-\d{1,2}-\d{4}\b|\d\s*[月월]/.test(context)
@@ -99,22 +101,35 @@ function reviewedEta(source: string, parsedEta: string): { eta: string; warnings
   const numeric = /(?<![\d./-])(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}))?(?![\d./])/g
   for (const match of context.matchAll(numeric)) {
     const after = context.slice((match.index ?? 0) + match[0].length)
-    if (new RegExp(`^\\s*(?:of\\s+)?${monthToken}\\b`, 'i').test(after)) continue // 1/5 AUG is a range.
+    if (new RegExp(`^\\s*(?:of\\s+)?${monthToken}\\b`, 'i').test(after)) continue
+    if (new RegExp('\\b' + monthToken + '\\s*$', 'i').test(context.slice(0, match.index))) continue
     const first = Number(match[1]), second = Number(match[2])
     if (first !== second && first >= 1 && first <= 12 && second >= 1 && second <= 12) {
       warnings.push('The numeric delivery date is ambiguous. Use a month name and confirm the dates.')
       break
     }
   }
-  const dates: { day: number; month: number; year?: number }[] = []
+  // A full starting date with a bare end day can conceal a missing month or year.
+  const incompleteEnd = new RegExp(
+    `\\b(?:\\d{1,2}\\s*(?:of\\s+)?${monthToken}|[1-9]\\d{3}[./-]\\d{1,2}[./-]\\d{1,2})(?:\\s*,?\\s*[1-9]\\d{3})?\\s*(?:-|/|\\bto\\b|~)\\s*(?:\\d{1,2}\\s*)?$`, 'im')
+  if (incompleteEnd.test(context)) warnings.push('The delivery date range is incomplete. Enter the month at both ends.')
   const named = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?(${monthToken})(?:\\s*,?\\s*([1-9]\\d{3}))?\\b`, 'gi')
-  for (const match of context.matchAll(named)) dates.push({ day: Number(match[1]), month: monthNames.indexOf(match[2].slice(0, 3).toLowerCase()) + 1, year: match[3] ? Number(match[3]) : undefined })
+  const namedEndpoints = Array.from(context.matchAll(named), match => ({
+    day: Number(match[1]), month: monthNames.indexOf(match[2].slice(0, 3).toLowerCase()) + 1, year: match[3] ? Number(match[3]) : undefined,
+  }))
+  const dates = [...namedEndpoints]
   const namedRange = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|/|to|~)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s*(${monthToken})(?:\\s*,?\\s*([1-9]\\d{3}))?\\b`, 'gi')
-  for (const match of context.matchAll(namedRange)) dates.push({ day: Number(match[1]), month: monthNames.indexOf(match[3].slice(0, 3).toLowerCase()) + 1, year: match[4] ? Number(match[4]) : undefined })
+  for (const match of context.matchAll(namedRange)) {
+    dates.push({ day: Number(match[1]), month: monthNames.indexOf(match[3].slice(0, 3).toLowerCase()) + 1, year: match[4] ? Number(match[4]) : undefined })
+    if (Number(match[1]) > Number(match[2])) warnings.push('The delivery date range ends before it starts.')
+  }
   const monthFirst = new RegExp(`\\b(${monthToken})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*([1-9]\\d{3}))?\\b`, 'gi')
   for (const match of context.matchAll(monthFirst)) dates.push({ day: Number(match[2]), month: monthNames.indexOf(match[1].slice(0, 3).toLowerCase()) + 1, year: match[3] ? Number(match[3]) : undefined })
   const monthFirstRange = new RegExp(`\\b(${monthToken})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|/|to|~)\\s*(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*([1-9]\\d{3}))?\\b`, 'gi')
-  for (const match of context.matchAll(monthFirstRange)) dates.push({ day: Number(match[3]), month: monthNames.indexOf(match[1].slice(0, 3).toLowerCase()) + 1, year: match[4] ? Number(match[4]) : undefined })
+  for (const match of context.matchAll(monthFirstRange)) {
+    dates.push({ day: Number(match[3]), month: monthNames.indexOf(match[1].slice(0, 3).toLowerCase()) + 1, year: match[4] ? Number(match[4]) : undefined })
+    if (Number(match[2]) > Number(match[3])) warnings.push('The delivery date range ends before it starts.')
+  }
   for (const match of context.matchAll(/\b([1-9]\d{3})[./-](\d{1,2})[./-](\d{1,2})\b/g)) dates.push({ year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) })
   for (const match of context.matchAll(/(?<![\d./-])(\d{1,2})[./-](\d{1,2})[./-]([1-9]\d{3})\b/g)) {
     const first = Number(match[1]), second = Number(match[2])
@@ -122,14 +137,11 @@ function reviewedEta(source: string, parsedEta: string): { eta: string; warnings
   }
   for (const match of context.matchAll(/(?:([1-9]\d{3})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/g)) dates.push({ year: match[1] ? Number(match[1]) : undefined, month: Number(match[2]), day: Number(match[3]) })
   const years = [...new Set(dates.flatMap(date => date.year ? [date.year] : []))]
-  const namedEndpoints = Array.from(context.matchAll(named), match => ({
-    day: Number(match[1]), month: monthNames.indexOf(match[2].slice(0, 3).toLowerCase()) + 1, year: match[3] ? Number(match[3]) : undefined,
-  }))
   if (namedEndpoints.length === 2 && !/\bor\b/i.test(context)) {
     const [first, last] = namedEndpoints
     if (first.year && last.year && Date.UTC(last.year, last.month - 1, last.day) < Date.UTC(first.year, first.month - 1, first.day)) {
       warnings.push('The delivery window ends before it starts. Confirm the full delivery dates.')
-    } else if (years.length && (!first.year || !last.year) && (last.month < first.month || last.month === first.month && last.day < first.day)) {
+    } else if ((!first.year || !last.year) && (last.month < first.month || last.month === first.month && last.day < first.day)) {
       warnings.push('The delivery window crosses a year boundary. Confirm the year at both ends.')
     }
   }
@@ -140,19 +152,36 @@ function reviewedEta(source: string, parsedEta: string): { eta: string; warnings
     return date.day < 1 || date.day > maxDay
   })
   if (invalid) warnings.push('The delivery date is invalid or needs a year. Confirm the full delivery dates.')
-  if (warnings.length) return { eta: '', warnings }
+  if (warnings.length) return { eta: '', warnings: [...new Set(warnings)] }
   if (!parsedEta) return { eta: '', warnings }
   if (years.length > 1) {
-    // Preserve explicit years in a cross-year schedule instead of rebuilding from a yearless shortener result.
+    // Preserve the two explicit calendar dates even on a combined port/ETA line.
+    if (namedEndpoints.length === 2 && namedEndpoints.every(endpoint => endpoint.year)) {
+      const eta = namedEndpoints.map(({ day, month, year }) => [day, monthNames[month - 1], year].join(' ')).join(' - ')
+      return { eta, warnings }
+    }
     const explicitWindow = context.replace(/^\s*(?:e\.?t\.?[abds]\.?|a\.?t\.?a\.?|delivery\s+(?:date|window)|laycan|date)\s*[:=]?\s*/i, '').trim()
     return { eta: explicitWindow, warnings }
   }
   return { eta: years.length === 1 && !new RegExp(`\\b${years[0]}\\b`).test(parsedEta) ? `${parsedEta} ${years[0]}` : parsedEta, warnings }
 }
 
+export function reviewEnquiryEta(value: string) {
+  const source = 'ETA: ' + value.trim().replace(/[–—−]/g, '-')
+  const result = reviewedEta(source, parseSpcEnquiryText(source).eta)
+  return !result.eta && !result.warnings.length && value.trim()
+    ? { eta: '', warnings: ['Enter a delivery date or a complete date range.'] }
+    : result
+}
+
+function compactEta(eta: string) {
+  return eta.replace(new RegExp('\\b' + monthToken + '\\b', 'gi'), term => term.slice(0, 3))
+    .replace(/\s*-\s*/g, '-').toUpperCase()
+}
+
 /** Uses the FCUNO/SPC parsers locally; it never sends enquiries or fetches credit. */
 export function parseEnquiry(raw: string, companies: ParserCompany[], ports: ParserPort[]): ParsedEnquiry {
-  const source = String(raw || '').replace(/[–—−]/g, '-').replace(/\r\n?/g, '\n')
+  const source = String(raw || '').replace(/[–—−]/g, '-').replace(/\r\n?/g, '\n').replace(/\*([^*\n]+)\*/g, '$1')
   const guess = parseEnquiryWorksheetGuess(source, { detectBuyer: true, portNames: ports.map(port => port.name) })
   const spc = parseSpcEnquiryText(source)
   const warnings = [...guess.warnings]
@@ -226,7 +255,7 @@ export function parseEnquiry(raw: string, companies: ParserCompany[], ports: Par
   warnings.push(...schedule.warnings)
   if (!schedule.eta && !schedule.warnings.length) warnings.push('Add the delivery window.')
   const explicitRemarks = Array.from(source.matchAll(/^\s*(?:remarks?|notes?)\s*[:=]\s*(.+)$/gim), match => match[1])
-  for (const term of ['COQ REQUIRED', '30D QUALITY TIME BAR', 'BIMCO TERMS']) {
+  for (const term of specialEnquiryRemarks) {
     if (source.toUpperCase().includes(term) && !explicitRemarks.join(' / ').toUpperCase().includes(term)) explicitRemarks.push(term)
   }
   const remarks = stripCommercialDetails(explicitRemarks.join(' / '))
@@ -280,9 +309,8 @@ export function compareEnquiryPreview(
   if ((expected.rmk !== undefined && actual.rmk !== expected.rmk) ||
     (expected.vlsfoMaxRemarks !== undefined && [...actual.vlsfoMaxRemarks].sort().join('|') !== [...expected.vlsfoMaxRemarks].sort().join('|'))) differences.push('Specs')
   if (expected.eta !== undefined) {
-    const expectedSource = `Vessel: DATE CHECK\nETA: ${stripCommercialDetails(expected.eta)}`
-    const expectedDate = reviewedEta(expectedSource, parseSpcEnquiryText(expectedSource).eta).eta
-    if (!actual.eta || !expectedDate || cleanKey(actual.eta) !== cleanKey(expectedDate)) differences.push('ETA')
+    const expectedDate = reviewEnquiryEta(expected.eta).eta
+    if (!actual.eta || !expectedDate || compactEta(actual.eta) !== compactEta(expectedDate)) differences.push('ETA')
   }
   return { matches: differences.length === 0, differences }
 }
@@ -303,26 +331,29 @@ export function formatEnquiry(fields: ProductFields & {
     const match = fields.grade.match(gradePattern)?.[0]
     if (match) quantities[canonicalGrade(match).toLowerCase() as keyof ProductFields] = String(fields.quantity)
   }
-  const remarks = stripCommercialDetails(fields.remarks || '')
-  const options = (fields.vlsfoMaxRemarks || []).filter((value): value is VlsfoMaxRemark => ['80cst min', '80cst max', '120cst max', '180cst max'].includes(value))
-  const enteredEta = stripCommercialDetails(fields.eta)
-  const etaSource = `Vessel: DATE CHECK\nETA: ${enteredEta}`
-  const reviewed = reviewedEta(etaSource, parseSpcEnquiryText(etaSource).eta)
-  // The upstream formatter spaces every dash; normalize ISO dates first so the
-  // outgoing day cannot be mistaken for the following product's quantity.
-  const eta = reviewed.eta ? (/\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b/.test(enteredEta) ? reviewed.eta : enteredEta) : ''
-  let standard = buildSpcStandardEnquiry({
-    vesselName: stripCommercialDetails(fields.vessel) || '[CONFIRM VESSEL]',
-    imo: stripCommercialDetails(fields.imo),
-    port: stripCommercialDetails(fields.portName) || '[CONFIRM PORT]',
-    eta: eta || '[CONFIRM DATES]',
-    ...quantities,
-    remarks: [remarks, fields.bimco && !/BIMCO TERMS/i.test(remarks) ? 'BIMCO TERMS' : ''].filter(Boolean).join(' / '),
-    vlsfoMaxRemarks: options,
+  const vessel = stripCommercialDetails(fields.vessel).replace(/\s+/g, ' ').toUpperCase() || '[CONFIRM VESSEL]'
+  const imo = stripCommercialDetails(fields.imo)
+  const port = stripCommercialDetails(fields.portName)
+  const eta = compactEta(reviewEnquiryEta(fields.eta).eta)
+  const fuel = fuelKeys.flatMap(key => {
+    const value = quantities[key]
+    if (!value) return []
+    const grade = key === 'hsfo' && fields.rmk ? 'RMK' : key.toUpperCase()
+    const amount = value.split('-').map(bound => Number(bound).toLocaleString('en-US', { maximumFractionDigits: 20 })).join('-')
+    const label = grade + ' ' + amount + ' MT'
+    return [key === 'hsfo' ? '*' + label + '*' : label]
   })
-  if (fields.rmk) standard = replaceHsfoWithRmk(standard).replace(/\bRMK\s+RMG380\s*\(3\.5%\)/gi, 'RMK')
-  if (!Object.values(quantities).some(Boolean)) standard += ' / [CONFIRM QUANTITY]'
-  return standard
+  const viscosity = enquiryViscosities.filter(option => fields.vlsfoMaxRemarks?.includes(option))
+  const remarks = stripCommercialDetails(fields.remarks || '').split(/\s+\/\s+|\n/).filter(Boolean).filter(term => !viscosity.some(option => option === term.trim().toLowerCase())).map(term => term.toUpperCase())
+  if (fields.bimco && !remarks.includes('BIMCO TERMS')) remarks.push('BIMCO TERMS')
+  const segments = [
+    imo ? vessel + ' (' + imo + ')' : vessel,
+    (port ? normalizeSpcPort(port) : '[CONFIRM PORT]') + ' ' + (eta || '[CONFIRM DATES]'),
+    ...(fuel.length ? fuel : ['[CONFIRM QUANTITY]']),
+    ...viscosity.map(term => '*' + term.toUpperCase() + '*'),
+    ...remarks.map(term => specialEnquiryRemarks.some(option => option === term) ? '*' + term + '*' : term),
+  ]
+  return segments.join(' / ')
 }
 
 /** Fictional enquiries contain no commercial price or margin assumptions. */

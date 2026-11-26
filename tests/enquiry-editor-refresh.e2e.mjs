@@ -64,7 +64,7 @@ try{for(const [width,height,theme] of layouts){
   await expect(button(center,'Confirm')).toBeEnabled();await button(center,'Confirm').click();
   await expect.poll(async()=>(await stateOf(page)).enquiries.find(item=>item.vessel==='LAYOUT TEST')?.status).toBe('sent');
   await expect(center.locator('.center-incoming-row').filter({hasText:'LAYOUT TEST'})).toContainText('Amend');
-  await button(center,'Clear parser').click();await expect(center.getByLabel('Raw enquiry',{exact:true})).toHaveValue('');
+  await button(center,'CLEAR').click();await expect(center.getByLabel('Raw enquiry',{exact:true})).toHaveValue('');
   await center.locator('.center-incoming-row').filter({hasText:'LAYOUT TEST'}).getByRole('button',{name:'Amend',exact:true}).click();
   await expect(center.getByLabel('Vessel',{exact:true})).toHaveValue('LAYOUT TEST');
   const row=center.locator('.center-incoming-row').first();if(await row.count()){const box=await row.boundingBox();assert.ok(box.height<110,'Compact incoming card');}

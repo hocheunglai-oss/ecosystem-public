@@ -1,4 +1,5 @@
-import type { CommercialEnquiryMutation, CommercialEnquiryQuery, CommercialProduct } from '../../shared/commercialEnquiries.ts';
+import { buyerLostReasons, type BuyerLostReason, type CommercialEnquiryDecision, type CommercialEnquiryMutation, type CommercialEnquiryQuery, type CommercialProduct } from '../../shared/commercialEnquiries.ts';
+import { reviewEnquiryEta } from '../../src/lib/parser.ts';
 import { parseProductQuantity } from '../../shared/productQuantity.ts';
 import { supplierPortById } from '../../shared/supplierPorts.ts';
 import { snapshot } from '../parser/validation.ts';
@@ -16,9 +17,10 @@ function text(value: unknown, max: number, min = 0): string {
 function uuid(value: unknown): string { return typeof value === 'string' && UUID.test(value) ? value : fail(); }
 function warnings(value: unknown): string[] { if (!Array.isArray(value) || value.length > 100) return fail(); return value.map(item => text(item, 2000)); }
 export function commercialMutation(value: unknown): CommercialEnquiryMutation {
-  const v = object(value, ['dataMode','requestId','id','expectedRevision','action','source','reviewed']);
+  const workingText = Boolean(value && typeof value === 'object' && 'workingText' in value);
+  const v = object(value, ['dataMode','requestId','id','expectedRevision','action','source','reviewed', ...(workingText ? ['workingText'] : [])]);
   if (v.dataMode !== 'live') throw new ApiError(403, 'Switch to LIVE to save shared enquiries.');
-  if (!Number.isSafeInteger(v.expectedRevision) || Number(v.expectedRevision) < 0 || Number(v.expectedRevision) > 2147483646 || !['save','confirm'].includes(String(v.action))) return fail();
+  if (!Number.isSafeInteger(v.expectedRevision) || Number(v.expectedRevision) < 0 || Number(v.expectedRevision) > 2147483646 || typeof v.action !== 'string' || !['save','confirm','amend','reoffer'].includes(v.action)) return fail();
   const source = object(v.source, ['rawText','parsed','parserVersion','inboxId']);
   const r = object(v.reviewed, ['vessel','imo','eta','portId','buyerText','buyerId','products','remarks','rmk','viscosity','formattedText','warnings']);
   if (r.portId !== null && !supplierPortById(text(r.portId, 100, 1))) return fail();
@@ -33,27 +35,44 @@ export function commercialMutation(value: unknown): CommercialEnquiryMutation {
   const reviewed = {vessel:text(r.vessel,500),imo:text(r.imo,50),eta:text(r.eta,500),portId:r.portId as string|null,buyerId:null,
     buyerText:r.buyerText === null ? null : text(r.buyerText,500),products,remarks:text(r.remarks,3000),rmk:r.rmk,
     viscosity:r.viscosity as string[],formattedText:text(r.formattedText,20000),warnings:warnings(r.warnings)};
-  if (v.action === 'confirm') {
+  if (v.action !== 'save') {
+    if (!reviewEnquiryEta(reviewed.eta).eta) throw new ApiError(400, 'Check the delivery dates.');
     if (!reviewed.portId || !reviewed.vessel.trim() || !reviewed.eta.trim() || !reviewed.formattedText.trim() || !products.length || (reviewed.imo && !/^[0-9]{7}$/.test(reviewed.imo))) return fail();
     for (const p of products) {
       const quantity = parseProductQuantity(p.quantityText);
       if (!quantity || quantity.max > 1_000_000) return fail();
     }
   }
-  return {dataMode:'live',requestId:uuid(v.requestId),id:uuid(v.id),expectedRevision:Number(v.expectedRevision),action:v.action as 'save'|'confirm',
+  return {dataMode:'live',requestId:uuid(v.requestId),id:uuid(v.id),expectedRevision:Number(v.expectedRevision),action:v.action as CommercialEnquiryMutation['action'],
+    ...(workingText ? { workingText: text(v.workingText, 20000) } : {}),
     source:{rawText:text(source.rawText,20000),parsed:source.parsed === null ? null : snapshot(source.parsed),
       parserVersion:source.parserVersion === null ? null : text(source.parserVersion,128,1),inboxId:source.inboxId === null ? null : uuid(source.inboxId)},reviewed};
 }
+export function commercialWrite(value: unknown): CommercialEnquiryMutation | CommercialEnquiryDecision {
+  if (!value || typeof value !== 'object' || !('action' in value)
+    || !['lost', 'postpone', 'cancel'].includes(String(value.action))) return commercialMutation(value);
+
+  const action = value.action as CommercialEnquiryDecision['action'];
+  const v = object(value, ['dataMode','requestId','id','expectedRevision','action', ...(action === 'lost' ? ['lostReason'] : [])]);
+  if (v.dataMode !== 'live') throw new ApiError(403, 'Switch to LIVE to update shared enquiries.');
+  if (!Number.isSafeInteger(v.expectedRevision) || Number(v.expectedRevision) < 1 || Number(v.expectedRevision) > 2147483646) return fail();
+  const operation = { dataMode: 'live' as const, requestId: uuid(v.requestId), id: uuid(v.id), expectedRevision: Number(v.expectedRevision) };
+  if (action !== 'lost') return { ...operation, action };
+  const lostReason = v.lostReason as BuyerLostReason;
+  if (!buyerLostReasons.includes(lostReason)) return fail();
+  return { ...operation, action, lostReason };
+}
+
 export function commercialQuery(url: URL): CommercialEnquiryQuery {
   const q = Object.fromEntries(url.searchParams);
   if (url.searchParams.size !== Object.keys(q).length || Object.keys(q).some(key => !['id','inboxId','scope','limit','cursor'].includes(key))) return fail();
   if (q.id !== undefined) { if (Object.keys(q).length !== 1) return fail(); return {dataMode:'live',id:uuid(q.id)}; }
   if (q.inboxId !== undefined) { if (Object.keys(q).length !== 1) return fail(); return {dataMode:'live',inboxId:uuid(q.inboxId)}; }
   const scope = q.scope ?? 'mine', limit = q.limit === undefined ? 25 : Number(q.limit);
-  if (!['mine','singapore'].includes(scope) || !Number.isInteger(limit) || limit < 1 || limit > 50 || (q.limit !== undefined && !/^[1-9][0-9]?$/.test(q.limit))) return fail();
+  if (!['mine','singapore','workbench','lost'].includes(scope) || !Number.isInteger(limit) || limit < 1 || limit > 50 || (q.limit !== undefined && !/^[1-9][0-9]?$/.test(q.limit))) return fail();
   if (q.cursor !== undefined) {
     const [stamp,id,extra] = q.cursor.split('|');
     if (q.cursor.length > 100 || extra !== undefined || !/^\d{4}-\d\d-\d\d[T ]/.test(stamp) || !Number.isFinite(Date.parse(stamp)) || !UUID.test(id ?? '')) return fail();
   }
-  return {dataMode:'live',scope:scope as 'mine'|'singapore',limit,...(q.cursor ? {cursor:q.cursor} : {})};
+  return {dataMode:'live',scope:scope as Extract<CommercialEnquiryQuery, { scope: string }>['scope'],limit,...(q.cursor ? {cursor:q.cursor} : {})};
 }

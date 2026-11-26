@@ -15,7 +15,7 @@ const job = {
   id: '90000000-0000-4000-8000-000000000001', claimToken: '90000000-0000-4000-8000-000000000002',
   groupName: 'Synthetic Pilot', reference: 'ECO-00000001', vessel: 'SYNTHETIC TRADER', imo: '9319466',
   eta: '20 OCT 2026', products: [{ grade: 'VLSFO', quantityText: '500-600' }],
-  rmk: false, viscosity: ['120cst max'], formattedText: 'PRIVATE FORMAT', buyer: 'PRIVATE BUYER', rawText: 'PRIVATE SOURCE',
+  rmk: false, viscosity: ['120cst max'], specialTerms: ['COQ REQUIRED', 'PRIVATE NOTE'], formattedText: 'PRIVATE FORMAT', buyer: 'PRIVATE BUYER', rawText: 'PRIVATE SOURCE',
 };
 function post(body: unknown, headers: Record<string, string> = {}) {
   return new Request(url, { method: 'POST', headers: { host, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
@@ -61,7 +61,8 @@ test('device claims project verified fields only and mark unusable exact-date jo
   assert.equal(result.status, 200);
   const { job: delivery } = await result.json();
   assert.deepEqual(Object.keys(delivery), ['id', 'claimToken', 'groupName', 'message']);
-  assert.match(delivery.message, /ECO-00000001$/);
+  assert.equal(delivery.message, 'SYNTHETIC TRADER (9319466) / SG 20 OCT 2026 / VLSFO 500-600 MT / *120CST MAX* / *COQ REQUIRED*');
+  assert.doesNotMatch(delivery.message, /ECO-\d|0\.5%/);
   assert.doesNotMatch(delivery.message, /PRIVATE/);
   assert.equal(account.calls.length, 0);
   const actions: string[] = [];

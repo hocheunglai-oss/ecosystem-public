@@ -1,6 +1,6 @@
-import { deliveryStates } from '../../shared/commercialEnquiries';
+import { buyerLostReasons, deliveryStates } from '../../shared/commercialEnquiries';
 import type {
-  CommercialEnquiry, CommercialEnquiryMutation, CommercialEnquiryMutationResult,
+  CommercialEnquiry, CommercialEnquiryDecision, CommercialEnquiryMutation, CommercialEnquiryMutationResult,
   CommercialEnquiryPage, CommercialEnquiryScope, CommercialEnquirySummary,
 } from '../../shared/commercialEnquiries';
 import { assertPreviewWritable } from './previewGuard';
@@ -14,10 +14,12 @@ const unavailable = () => new Error('Enquiries are unavailable. Try again.');
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const strings = (value: unknown, keys: string[]) => record(value) && keys.every(key => typeof value[key] === 'string');
-function summary(value: unknown, owner?: string): CommercialEnquirySummary {
+function summary(value: unknown, owner?: string, viewer = owner): CommercialEnquirySummary {
   if (!record(value) || !uuid(value.id) || !uuid(value.ownerId) || owner && value.ownerId !== owner
     || !Number.isSafeInteger(value.revision) || Number(value.revision) < 1
     || !['draft', 'confirmed'].includes(String(value.status))
+    || value.outcome !== undefined && !['postponed', 'lost', 'cancelled'].includes(String(value.outcome))
+    || value.outcome === 'lost' && !buyerLostReasons.some(reason => reason === value.lostReason)
     || !['reference', 'ownerName', 'vessel', 'imo', 'eta', 'createdAt', 'updatedAt'].every(key => typeof value[key] === 'string')
     || !Array.isArray(value.products) || value.products.some(item => !record(item) || !['HSFO', 'VLSFO', 'LSMGO'].includes(String(item.grade)) || typeof item.quantityText !== 'string')
     || value.port !== null && !strings(value.port, ['id', 'countryCode', 'countryName', 'portName'])
@@ -26,23 +28,27 @@ function summary(value: unknown, owner?: string): CommercialEnquirySummary {
   // List rows intentionally omit all source text, buyer data and private notes.
   const item = Object.fromEntries(['id', 'reference', 'ownerId', 'ownerName', 'revision', 'status', 'vessel', 'imo', 'eta', 'products', 'port', 'queue', 'createdAt', 'updatedAt', 'confirmedAt']
     .map(key => [key, value[key]])) as unknown as CommercialEnquirySummary;
-  if (owner && value.fixture !== undefined) item.fixture = fixtureAssignment(value.fixture);
+  if (value.outcome) item.outcome = value.outcome as CommercialEnquirySummary['outcome'];
+  if (value.outcome === 'lost') item.lostReason = value.lostReason as CommercialEnquirySummary['lostReason'];
+  if (value.fixture !== undefined && value.ownerId === viewer) item.fixture = fixtureAssignment(value.fixture);
   return item;
 }
 export function commercialDetail(value: unknown, owner: string): CommercialEnquiry {
   const item = summary(value, owner);
   if (!record(value) || !record(value.source) || typeof value.source.rawText !== 'string'
+    || value.workingText !== undefined && typeof value.workingText !== 'string'
     || !record(value.reviewed) || !strings(value.reviewed, ['vessel', 'imo', 'eta', 'remarks', 'formattedText'])
     || !Array.isArray(value.reviewed.products) || !Array.isArray(value.reviewed.warnings)
     || value.reviewed.warnings.some(warning => typeof warning !== 'string') || !Array.isArray(value.reviewed.viscosity)
     || typeof value.reviewed.rmk !== 'boolean') throw unavailable();
-  return { ...item, source: value.source, reviewed: value.reviewed } as unknown as CommercialEnquiry;
+  return { ...item, source: value.source, reviewed: value.reviewed,
+    ...(typeof value.workingText === 'string' ? { workingText: value.workingText } : {}) } as unknown as CommercialEnquiry;
 }
-export function commercialPage(value: unknown, owner?: string): CommercialEnquiryPage {
+export function commercialPage(value: unknown, owner?: string, viewer = owner): CommercialEnquiryPage {
   if (!record(value) || !Array.isArray(value.items) || value.items.length > 100 || value.nextCursor !== null && typeof value.nextCursor !== 'string') throw unavailable();
-  return { items: value.items.map(item => summary(item, owner)), nextCursor: value.nextCursor };
+  return { items: value.items.map(item => summary(item, owner, viewer)), nextCursor: value.nextCursor };
 }
-async function request(query: URLSearchParams, input?: CommercialEnquiryMutation | FixtureMutation | FixtureRegisterMutation | FixtureCancellationMutation, signal?: AbortSignal, resource: 'records' | 'fixtures' = 'records'): Promise<unknown> {
+async function request(query: URLSearchParams, input?: CommercialEnquiryMutation | CommercialEnquiryDecision | FixtureMutation | FixtureRegisterMutation | FixtureCancellationMutation, signal?: AbortSignal, resource: 'records' | 'fixtures' = 'records'): Promise<unknown> {
   // Reads also stay closed in TEST and VIEW AS; neither mode may reveal LIVE records.
   assertPreviewWritable(); assertLiveDataWritable();
   const response = await fetch(`/api/enquiries/${resource}${query.size ? `?${query}` : ''}`, {
@@ -61,7 +67,7 @@ async function request(query: URLSearchParams, input?: CommercialEnquiryMutation
 }
 export const commercialEnquiryApi = {
   page: async (owner: string, scope: CommercialEnquiryScope, cursor?: string, signal?: AbortSignal) =>
-    commercialPage(await request(new URLSearchParams({ scope, limit: '25', ...(cursor ? { cursor } : {}) }), undefined, signal), scope === 'mine' ? owner : undefined),
+    commercialPage(await request(new URLSearchParams({ scope, limit: '25', ...(cursor ? { cursor } : {}) }), undefined, signal), scope === 'mine' ? owner : undefined, owner),
   detail: async (owner: string, id: string, signal?: AbortSignal) => {
     const data = await request(new URLSearchParams({ id }), undefined, signal);
     if (!record(data)) throw unavailable();
@@ -77,7 +83,7 @@ export const commercialEnquiryApi = {
     if (item.source.inboxId !== inboxId) throw unavailable();
     return item;
   },
-  mutate: async (owner: string, input: CommercialEnquiryMutation, signal?: AbortSignal): Promise<CommercialEnquiryMutationResult> => {
+  mutate: async (owner: string, input: CommercialEnquiryMutation | CommercialEnquiryDecision, signal?: AbortSignal): Promise<CommercialEnquiryMutationResult> => {
     const data = await request(new URLSearchParams(), input, signal);
     if (!record(data) || data.requestId !== input.requestId) throw unavailable();
     const item = commercialDetail(data.item, owner);

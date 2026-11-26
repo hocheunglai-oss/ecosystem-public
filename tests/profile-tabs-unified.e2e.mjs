@@ -524,6 +524,8 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         await createLiveFixtureBuyer(page, 'UNIFIED TAB TEST BUYER');
         // Retain the reload to verify that the newly created buyer persists.
         await page.reload();
+        await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('heading', { name: 'Buyers and Credit', exact: true })).toBeVisible();
+        await activateDeveloperMode(page);
         for (const kind of kinds) await verifyProfile(page, state, kind, width, shot);
         await verifySharedEditing(page, state, width, shot);
         await verifyPartialManagerRetry(page, state);

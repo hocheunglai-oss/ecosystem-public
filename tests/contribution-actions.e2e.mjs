@@ -27,6 +27,7 @@ async function fixture(context) {
   await installSharedLocations(context,{user:()=>state.user,preview:()=>state.preview});
   await installSharedAttachments(context,{user:()=>state.user,preview:()=>state.preview});
   await context.route('**/api/enquiries/records*',route=>route.fulfill({json:{items:[],nextCursor:null,unreadCount:0}}));
+  await context.route('**/api/enquiries/dispatcher',route=>route.fulfill({json:{routes:[]}}));
   await installIntelligence(context, syntheticIntelligence());
   await installProfileTabMocks(context,{ownerId:()=>state.user?.id,preview:()=>Boolean(state.preview)});
   await context.route('**/api/enquiries/test-policy',route=>route.fulfill({json:{enabled:true,generation:'10000000-0000-4000-8000-000000000010'}}));

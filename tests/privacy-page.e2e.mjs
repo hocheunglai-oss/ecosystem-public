@@ -27,6 +27,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       if (path === '/api/access/privacy') { privacyReads++; return route.fulfill(privacyFailed ? { status: 503, json: { message: 'Unavailable.' } } : { json: accountPrivacyNotice }); }
       if (path === '/api/intelligence/snapshot') return route.fulfill({ json: { available: false, snapshot: null } });
       if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
+      if (path === '/api/enquiries/dispatcher') return route.fulfill({ json: { routes: [] } });
       if (path === '/api/enquiries/inbox') return route.fulfill({ json: { items: [], unreadCount: 0, nextCursor: null } });
       if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
       if (path.startsWith('/api/admin/')) return route.fulfill({ json: { items: [], count: 0, nextCursor: null, periodStart: '2026-10-15T00:00:00Z', periodEnd: '2026-10-22T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } });

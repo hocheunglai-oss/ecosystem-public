@@ -60,6 +60,7 @@ async function fixture(context){
   const reply=(json,status=200)=>route.fulfill({json,status});
   if(!session.user)return reply({user:null},401);
   if(path==='session')return reply(session);
+  if(path==='preview/options' && request.method()==='GET')return reply({offices:[{id:'HK',name:'HONG KONG'},{id:'SG',name:'SINGAPORE'}]});
   if(path==='users')return reply({users:[session.user,person,{...person,id:'inactive',isActive:false}],offices:[{id:'HK',name:'HONG KONG'},{id:'SG',name:'SINGAPORE'}]});
   if(path==='phone-requests')return reply({requests:[]});
   if(path==='preview'){const body=request.postDataJSON();assert.deepEqual(Object.keys(body).sort(),['officeId','role']);session.preview={...body,officeName:body.officeId==='SG'?'SINGAPORE':'HONG KONG',readOnly:true};return reply(session);}

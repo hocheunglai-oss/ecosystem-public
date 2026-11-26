@@ -182,6 +182,8 @@ jobs:
               tests/shared-inbox.e2e.mjs
               tests/whatsapp-intake.e2e.mjs
               tests/commercial-enquiries.e2e.mjs
+              tests/eco-whatsapp-dispatcher.e2e.mjs
+              tests/stage-one-roles.e2e.mjs
               tests/fixture-history.e2e.mjs
               tests/privacy-page.e2e.mjs
             artifacts: |
@@ -192,6 +194,7 @@ jobs:
               output/shared-inbox-ui
               output/whatsapp-intake-ui
               output/commercial-enquiries-ui
+              output/stage-one-roles
               output/fixture-history-ui
               output/privacy-ui
           - group: knowledge

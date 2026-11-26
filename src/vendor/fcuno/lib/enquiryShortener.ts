@@ -18,7 +18,7 @@ type ProductSegment = {
 const QUANTITY_UNIT_PATTERN = String.raw`(?:m\s*\.?\s*tons?|m\s*t|mt|mts|tons?|c\s*\.?\s*b\s*\.?\s*m|k\s*\.?\s*l|[吨噸])`
 const KL_UNIT_PATTERN = String.raw`k\s*\.?\s*l`
 const EXPLICIT_PORT_LINE_PATTERN =
-  /^\s*(?:port|position|location|bunker(?:ing)?\s*(?:port|location|place)|port\s+of\s+(?:call|delivery|supply)|delivery\s+(?:port|place|location)|place\s+of\s+(?:supply|delivery)|supply\s+(?:port|place|location)|loading\s+port|discharging\s+port|加油港口|港口|地点|地點)(?:\s|[:#(（-]|$)/i
+  /^\s*(?:port|position|location|demand\s+port|bunker(?:ing)?\s*(?:port|location|place)|port\s+of\s+(?:call|delivery|supply)|delivery\s+(?:port|place|location)|place\s+of\s+(?:supply|delivery)|supply\s+(?:port|place|location)|loading\s+port|discharging\s+port|加油港口|港口|地点|地點)(?:\s|[:#(（-]|$)/i
 const OPERATIONAL_SCHEDULE_LINE_PATTERN =
   /^\s*((?:e\s*\.?\s*t\s*\.?\s*(?:a|b|d|s|c(?:\s*\.?\s*d)?)|a\s*\.?\s*t\s*\.?\s*a)\s*\.?)\s*[:#-]?\s*(.*)$/i
 
@@ -206,10 +206,82 @@ function monthTokenFollowsDay(value: string, monthIndex: number) {
   )
 }
 
+const MONTH_NAME_PATTERN = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|agu(?:st)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+
+function normalizeDateInput(value: string) {
+  // Date-only callers select schedule lines. Copy only a wrapped quantity's
+  // unit into its line; preserve the original continuation and product input.
+  return normalizeInput(value).replace(
+    new RegExp(String.raw`(\b\d{4})([ \t]*\n\s*)(?=(${QUANTITY_UNIT_PATTERN})(?=$|[^A-Za-z0-9]))`, "gi"),
+    (_match, quantity: string, whitespace: string, unit: string) => `${quantity} ${unit.replace(/\s+/g, " ")}${whitespace}`,
+  )
+}
+
+function validSuppliedYearDate(day: string, month: string, year: string | undefined) {
+  if (!year) return true // Preserve the existing yearless/two-digit-year rules.
+  const normalizedMonth = validDateParts(day, month)
+  if (!normalizedMonth) return false
+  const yearNumber = Number(year)
+  const leapYear = yearNumber % 4 === 0 && (yearNumber % 100 !== 0 || yearNumber % 400 === 0)
+  return normalizedMonth !== "feb" || Number(day) !== 29 || leapYear
+}
+
+function withoutImpossibleSuppliedYearDates(value: string) {
+  if (!/\d{4}/.test(value)) return value
+  const blank = (match: string) => match.replace(/[^\r\n]/g, " ")
+  const validNumeric = (first: string, second: string, year: string | undefined) =>
+    validSuppliedYearDate(first, second, year) || validSuppliedYearDate(second, first, year)
+  const day = "(\\d{1,2})(?:st|nd|rd|th)?"
+  const namedDay = `${day}[\\s./-]*(?:of\\s+)?(${MONTH_NAME_PATTERN})\\b`
+  // In "29 FEB 1000 MT VLSFO",1000 is a quantity, not a supplied year.
+  // Quantity/unit whitespace may wrap lines, as in the existing quantity grammar.
+  const year = `(\\d{4})\\b(?!\\s*${QUANTITY_UNIT_PATTERN}(?=$|[^A-Za-z0-9]))`
+  const optionalYear = `(?:[\\s,./'-]+${year})?`
+  const range = "[ \\t]*(?:-|~|to|/)[ \\t]*"
+  let next = value
+
+  // Mask the entire invalid explicit expression before permissive yearless
+  // patterns run, rather than letting a partial day/month escape validation.
+  // Separate neighbouring ETA/ETD lines are outside these date-only spans.
+  next = next.replace(new RegExp(`(?<!\\d)${namedDay}${optionalYear}${range}${namedDay}${optionalYear}`, "gi"),
+    (match, firstDay: string, firstMonth: string, firstYear: string | undefined, secondDay: string, secondMonth: string, secondYear: string | undefined) =>
+      validSuppliedYearDate(firstDay, firstMonth, firstYear) && validSuppliedYearDate(secondDay, secondMonth, secondYear) ? match : blank(match))
+  next = next.replace(new RegExp(`(?<!\\d)${day}\\s*(?:-|~|to|/)\\s*${day}[\\s,./-]*(?:of\\s+)?(${MONTH_NAME_PATTERN})[\\s,./'-]+${year}`, "gi"),
+    (match, first: string, second: string, month: string, year: string) =>
+      validSuppliedYearDate(first, month, year) && validSuppliedYearDate(second, month, year) ? match : blank(match))
+  next = next.replace(new RegExp(`\\b(${MONTH_NAME_PATTERN})[\\s./-]*${day}\\s*(?:-|~|to|/)\\s*${day}[\\s,./'-]+${year}`, "gi"),
+    (match, month: string, first: string, second: string, year: string) =>
+      validSuppliedYearDate(first, month, year) && validSuppliedYearDate(second, month, year) ? match : blank(match))
+  next = next.replace(/\b(\d{4})[./-](\d{1,2})[./-](\d{1,2})\s*(?:-|~|to)\s*(\d{4})[./-](\d{1,2})[./-](\d{1,2})\b/gi,
+    (match, firstYear: string, firstMonth: string, firstDay: string, secondYear: string, secondMonth: string, secondDay: string) =>
+      validSuppliedYearDate(firstDay, firstMonth, firstYear) && validSuppliedYearDate(secondDay, secondMonth, secondYear) ? match : blank(match))
+  next = next.replace(new RegExp(`(?<![\\d./-])(\\d{1,2})[./-](\\d{1,2})(?:[./-]${year})?\\s*(?:-|~|to)\\s*(\\d{1,2})[./-](\\d{1,2})(?:[./-]${year})?\\b`, "gi"),
+    (match, first: string, second: string, firstYear: string | undefined, third: string, fourth: string, secondYear: string | undefined) =>
+      validNumeric(first, second, firstYear) && validNumeric(third, fourth, secondYear) ? match : blank(match))
+  next = next.replace(/\b(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?\s*(?:-|~|to|至|到)\s*(?:(\d{4})\s*年\s*)?(?:(\d{1,2})\s*月\s*)?(\d{1,2})\s*[日号]/gi,
+    (match, firstYear: string, firstMonth: string, firstDay: string, secondYear: string | undefined, secondMonth: string | undefined, secondDay: string) =>
+      validSuppliedYearDate(firstDay, firstMonth, firstYear) && validSuppliedYearDate(secondDay, secondMonth || firstMonth, secondYear || firstYear) ? match : blank(match))
+  next = next.replace(new RegExp(`(?<!\\d)${namedDay}[\\s,./'-]+${year}`, "gi"),
+    (match, dayValue: string, month: string, year: string) => validSuppliedYearDate(dayValue, month, year) ? match : blank(match))
+  next = next.replace(new RegExp(`\\b(${MONTH_NAME_PATTERN})[\\s./-]*${day}[\\s,./'-]+${year}`, "gi"),
+    (match, month: string, dayValue: string, year: string) => validSuppliedYearDate(dayValue, month, year) ? match : blank(match))
+  next = next.replace(/\b(\d{4})[./-](\d{1,2})[./-](\d{1,2})\b/g,
+    (match, year: string, month: string, dayValue: string) => validSuppliedYearDate(dayValue, month, year) ? match : blank(match))
+  next = next.replace(new RegExp(`(?<![\\d./-])(\\d{1,2})[./-](\\d{1,2})[./-]${year}`, "gi"),
+    (match, first: string, second: string, year: string) => validNumeric(first, second, year) ? match : blank(match))
+  next = next.replace(/\b(\d{4})\s*[年년]\s*(\d{1,2})\s*[月월]\s*(\d{1,2})\s*[日号일]/g,
+    (match, year: string, month: string, dayValue: string) => validSuppliedYearDate(dayValue, month, year) ? match : blank(match))
+  return next
+}
+
 export function findEnquiryDates(value: string) {
-  const normalized = normalizeInput(value).replace(/\[[^\]]*\d{1,2}:\d{2}[^\]]*\]/g, " ")
+  const dateInput = normalizeDateInput(value)
+    .replace(/\[[^\]]*\d{1,2}:\d{2}[^\]]*\]/g, " ")
+    // Repair a split two-digit ordinal only when followed by an explicit month.
+    .replace(new RegExp(`\\b([0-3])[ \\t]+(\\d)(?=(?:st|nd|rd|th)[ \\t]+(?:of[ \\t]+)?(?:${MONTH_NAME_PATTERN})\\b)`, "gi"), "$1$2")
+  const normalized = withoutImpossibleSuppliedYearDates(dateInput)
   const dates: string[] = []
-  const monthNamePattern = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|agu(?:st)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+  const monthNamePattern = MONTH_NAME_PATTERN
 
   for (const match of normalized.matchAll(/(?<!\d)(\d{1,2})[./](\d{1,2})\s*(?:-|~|to)\s*(\d{1,2})[./](\d{1,2})(?![./]\d)/gi)) {
     const range = formatDateRange(match[2], match[1], match[4], match[3])
@@ -266,7 +338,7 @@ export function findEnquiryDates(value: string) {
     if (range) dates.push(range)
   }
 
-  for (const match of normalized.matchAll(new RegExp(`\\b(${monthNamePattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|~|to)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\b`, "gi"))) {
+  for (const match of normalized.matchAll(new RegExp(`\\b(${monthNamePattern})\\s*[./-]?\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|~|to)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\b`, "gi"))) {
     const range = formatDateRange(match[2], match[1], match[3], match[1])
     if (range) dates.push(range)
   }
@@ -353,7 +425,7 @@ export function findEnquiryDates(value: string) {
 }
 
 function extractDeliveryDate(text: string) {
-  const lines = normalizeInput(text)
+  const lines = normalizeDateInput(text)
     .split("\n")
     .map(cleanSpaces)
     .filter(Boolean)
@@ -455,7 +527,7 @@ function extractDeliverySchedule(
   text: string,
   options: Pick<BuildShortenedEnquiryOptions, "includePort" | "port" | "portNames"> = {},
 ) {
-  const lines = normalizeInput(text)
+  const lines = normalizeDateInput(text)
     .split("\n")
     .map(cleanSpaces)
     .filter(Boolean)
@@ -760,7 +832,7 @@ function extractPairedProductQuantityLines(lines: string[], autoDetectVlsfoRemar
     let quantityLineIndex = -1
     let quantities: string[] = []
     for (let offset = index + 1; offset < Math.min(lines.length, index + 4); offset += 1) {
-      const quantityMatch = lines[offset].match(/^\s*(?:qty|quantity|quantities)\s*[:#-]?\s*(.+)$/i)
+      const quantityMatch = lines[offset].match(/^\s*(?:qty|qtty|quantity|quantities)\s*[:#-]?\s*(.+)$/i)
       if (!quantityMatch) continue
       quantities = extractExplicitQuantityList(quantityMatch[1])
       quantityLineIndex = offset
@@ -808,7 +880,10 @@ function productMatches(line: string) {
 function extractInlineProductSegments(line: string, autoDetectVlsfoRemarks: boolean) {
   const matches = productMatches(line)
   if (matches.length < 2) return []
-  if (/^\s*(?:prod(?:uct)?|grades?|spec(?:ification)?)\b\s*[:#-]?/i.test(line)) return []
+  if (/^\s*(?:prod(?:uct)?|spec(?:ification)?)\b\s*[:#-]?/i.test(line)) return []
+  if (/^\s*grades?\b\s*[:#-]?/i.test(line) && !matches.every((match, index) =>
+    extractQuantityFromInlineUnit(line.slice(match.index, matches[index + 1]?.index ?? line.length)),
+  )) return []
   const quantityBeforeStyle = Boolean(
     extractQuantityImmediatelyBeforeProduct(line.slice(0, matches[0].index)),
   )
@@ -849,10 +924,11 @@ function extractQuantityBeforeProduct(lines: string[], productIndex: number) {
   const unitOnlyPattern = new RegExp(String.raw`^${QUANTITY_UNIT_PATTERN}$`, "i")
   for (let index = nearby.length - 1; index >= 0; index -= 1) {
     const line = nearby[index]
+    if (line === PRODUCT_METADATA_BOUNDARY) break
     if (unitOnlyPattern.test(line)) {
       const hasTableHeader = nearby
         .slice(0, Math.max(0, index - 1))
-        .some((value) => /\b(?:qty|quantity|units?|grades?|iso\s*spec|sulphur|sulfur|max)\b/i.test(value))
+        .some((value) => /\b(?:qty|qtty|quantity|quantities|units?|grades?|iso\s*spec|sulphur|sulfur|max)\b/i.test(value))
       if (hasTableHeader) {
         const precedingQuantity = extractQuantityFromProductSegment(
           `${nearby[index - 1] || ""} ${line}`,
@@ -863,12 +939,12 @@ function extractQuantityBeforeProduct(lines: string[], productIndex: number) {
     }
     if (containsProduct(line)) break
     if (/^\s*0+(?:[,.]0+)?\s*$/.test(line)) break
-    const labelled = /^\s*(?:qty|quantity)\b/i.test(line)
+    const labelled = /^\s*(?:qty|qtty|quantity|quantities)\b/i.test(line)
     const standalone = /^\s*\d+(?:[,.]\d+)?(?:\s*(?:-|~|to)\s*\d+(?:[,.]\d+)?)?\s*(?:m\s*\.?\s*tons?|m\s*t|mt|mts|tons?|c\s*\.?\s*b\s*\.?\s*m|k\s*\.?\s*l|[吨噸])?\s*$/i.test(line)
     if (!labelled && !standalone) continue
 
     const combined = nearby.slice(index).join(" ")
-    const quantity = extractQuantityFromProductSegment(combined.replace(/^\s*(?:qty|quantity)\b\s*[:#-]?\s*/i, ""))
+    const quantity = extractQuantityFromProductSegment(combined.replace(/^\s*(?:qty|qtty|quantity|quantities)\b\s*[:#-]?\s*/i, ""))
     if (quantity) return quantity
   }
   return ""
@@ -881,8 +957,88 @@ function stripOperationalRateClause(value: string) {
   )
 }
 
+const PRODUCT_METADATA_BOUNDARY = "Enquiry product metadata boundary:"
+const PRODUCT_METADATA_LABEL_PATTERN = /^\s*(?:[-*']+\s*)?(?:vessel(?:\s+name)?|vsl|ship(?:\s+name)?|imo(?:\s+no\.?)?|port|bunker\s+port|buyer|company|agent|reference|ref\.?)\s*(?::\s*(.*)|$)/i
+
+function isMetadataGradeValue(value: string) {
+  const compact = value.toLowerCase().replace(/\s+/g, "")
+  return /^(?:hsfo|hfo|ifo|rmk|vlsfo|vslfo|lsmfo|lsfo|lsmgo|lemgo|lsgo|mgo|mdo|dma|dmb|gasoil|rmg)(?:\d{2,3})?(?:cst)?$/.test(compact) &&
+    containsProduct(value)
+}
+
+function isProductBlockBoundary(value: string) {
+  return containsProduct(value) ||
+    (isLabelLine(value) && !isSulphurSpecLine(value) && !/^(?:product|qty|qtty|quantity|quantities)\b/i.test(value))
+}
+
+function readProductBlock(lines: string[], index: number) {
+  const block = [lines[index]]
+  let endIndex = index
+  for (let offset = index + 1; offset < Math.min(lines.length, index + 6); offset += 1) {
+    const nextLine = lines[offset]
+    if (isProductBlockBoundary(nextLine)) break
+    block.push(nextLine)
+    endIndex = offset
+    if (new RegExp(String.raw`^${QUANTITY_UNIT_PATTERN}$`, "i").test(nextLine) || new RegExp(String.raw`${QUANTITY_UNIT_PATTERN}(?=$|[^A-Za-z0-9])`, "i").test(nextLine)) break
+  }
+  return { block, endIndex }
+}
+
+function readQuantityClausePrefix(value: string) {
+  const clauses = value.split(/([;/|]|,(?!\d))/)
+  let prefix = ""
+  let hasUnitOnlyClause = false
+  for (let index = 0; index < clauses.length; index += 2) {
+    const clause = cleanSpaces(clauses[index])
+    if (isProductBlockBoundary(clause)) return { prefix, stopped: true, hasUnitOnlyClause }
+    hasUnitOnlyClause ||= new RegExp(String.raw`^${QUANTITY_UNIT_PATTERN}$`, "i").test(clause)
+    prefix += clauses[index] + (clauses[index + 1] || "")
+  }
+  return { prefix, stopped: false, hasUnitOnlyClause }
+}
+
+function hasQuantityContinuation(lines: string[], index: number, sameLineClauses: string) {
+  // Use the request extractor's own quantity semantics and bounded block stops,
+  // excluding the metadata grade digits themselves from continuation evidence.
+  // A new product clause cannot supply a quantity for the metadata value.
+  const { prefix, stopped, hasUnitOnlyClause } = readQuantityClausePrefix(sameLineClauses)
+  const followingLines = stopped ? [] : lines.slice(index + 1, index + 6)
+  const { block } = readProductBlock([prefix, ...followingLines], 0)
+  // A unit-only continuation already gives the grade digits a legacy quantity
+  // interpretation. Preserve that ambiguous case rather than change its policy.
+  return Boolean(extractQuantityFromBlock(block)) || hasUnitOnlyClause ||
+    block.some((line) => new RegExp(String.raw`^${QUANTITY_UNIT_PATTERN}$`, "i").test(line))
+}
+
+function excludeMetadataGradeValues(lines: string[]) {
+  let wrappedMetadataValue = false
+  return lines.flatMap((line, index) => {
+    const label = line.match(PRODUCT_METADATA_LABEL_PATTERN)
+    const value = label ? label[1] || "" : wrappedMetadataValue ? line : null
+    wrappedMetadataValue = Boolean(label && !value)
+    if (value === null || !value) return [line]
+
+    // Only a grade/spec-only metadata value is excluded. Do not discard a whole
+    // mixed line or change the existing unquantified PRODUCT/grade policy.
+    const separator = value.search(/[;/|]|,(?!\d)/)
+    const metadataValue = cleanSpaces(separator < 0 ? value : value.slice(0, separator))
+    const requestClause = separator < 0 ? "" : cleanSpaces(value.slice(separator + 1))
+    if (!isMetadataGradeValue(metadataValue) || hasQuantityContinuation(lines, index, requestClause)) return [line]
+
+    // Retain a barrier so excluding metadata cannot join an earlier quantity
+    // to a later grade. The barrier is internal to product extraction only.
+    return requestClause ? [PRODUCT_METADATA_BOUNDARY, requestClause] : [PRODUCT_METADATA_BOUNDARY]
+  })
+}
+
+export function excludeEnquiryProductMetadata(text: string) {
+  const lines = normalizeInput(text).split("\n").map(cleanSpaces).filter(Boolean)
+  const filtered = excludeMetadataGradeValues(lines)
+  return filtered.some((line) => line === PRODUCT_METADATA_BOUNDARY) ? filtered.join("\n") : text
+}
+
 function extractProducts(text: string, autoDetectVlsfoRemarks: boolean) {
-  const lines = normalizeInput(text)
+  const lines = normalizeInput(excludeEnquiryProductMetadata(text))
     .split("\n")
     .map(cleanSpaces)
     .map(stripOperationalRateClause)
@@ -895,7 +1051,13 @@ function extractProducts(text: string, autoDetectVlsfoRemarks: boolean) {
   for (let index = 0; index < lines.length; index += 1) {
     if (paired.consumedLineIndexes.has(index)) continue
     const line = lines[index]
-    if (isNonRequestProductReference(line)) continue
+    const nextLine = lines[index + 1] || ""
+    const specProducts = /^spec(?:ification)?\s*[:#-]/i.test(line) ? productMatches(line) : []
+    const specQuantity = specProducts.length > 0 && new Set(specProducts.map((match) => match.product)).size === 1 &&
+      /^(?:qty|qtty|quantity|quantities)\b\s*[:#-]?/i.test(nextLine)
+      ? extractQuantityFromInlineUnit(nextLine)
+      : ""
+    if (isNonRequestProductReference(line) && !specQuantity) continue
     const inlineSegments = extractInlineProductSegments(line, autoDetectVlsfoRemarks)
     if (inlineSegments.length > 0) {
       products.push(...inlineSegments)
@@ -904,22 +1066,14 @@ function extractProducts(text: string, autoDetectVlsfoRemarks: boolean) {
 
     const product = classifyProduct(line)
     if (!product) continue
+    // A repeated sulphur-only specification belongs to the preceding request;
+    // it cannot take a new QTY line intended for the following fuel.
+    if (products.at(-1)?.product === product &&
+      /^\s*(?:vlsfo|lsfo|hsfo|hfo|lsmgo|mgo)\s+(?:max(?:imum)?\s*)?(?:\d*[.,])?\d+\s*%\s*(?:sulphur|sulfur|sulf)\s*$/i.test(line)) continue
 
-    const block = [line]
-    let endIndex = index
+    const { block, endIndex } = readProductBlock(lines, index)
 
-    for (let offset = index + 1; offset < Math.min(lines.length, index + 6); offset += 1) {
-      const nextLine = lines[offset]
-      if (containsProduct(nextLine)) break
-      if (isLabelLine(nextLine) && !isSulphurSpecLine(nextLine) && !/^(?:product|qty|quantity)\b/i.test(nextLine)) break
-
-      block.push(nextLine)
-      endIndex = offset
-
-      if (new RegExp(String.raw`^${QUANTITY_UNIT_PATTERN}$`, "i").test(nextLine) || new RegExp(String.raw`${QUANTITY_UNIT_PATTERN}(?=$|[^A-Za-z0-9])`, "i").test(nextLine)) break
-    }
-
-    const quantity = extractQuantityBeforeProduct(lines, index) || extractQuantityFromBlock(block)
+    const quantity = specQuantity || extractQuantityBeforeProduct(lines, index) || extractQuantityFromBlock(block)
     if (quantity) {
       products.push({
         product,

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { PreviewRole } from '../shared/access';
+import type { AccessOffice, PreviewRole } from '../shared/access';
 import type { PreviewPerson } from '../shared/personPreview';
-import { useAccess } from './auth';
+import { accessRequest, useAccess } from './auth';
 import './role-preview.css';
 
 const labels: Record<PreviewRole, string> = {
@@ -15,6 +15,9 @@ export function RolePreview({ pending = false }: { pending?: boolean }) {
   const [error, setError] = useState('');
   const [people, setPeople] = useState<PreviewPerson[] | null>(null);
   const [selected, setSelected] = useState('');
+  const [offices, setOffices] = useState<AccessOffice[]>([]);
+  const [office, setOffice] = useState('');
+  const officeId = office || access.preview?.officeId || access.realUser?.officeId || '';
   const container = useRef<HTMLElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -26,7 +29,16 @@ export function RolePreview({ pending = false }: { pending?: boolean }) {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, [expanded]);
+  useEffect(() => {
+    if (!expanded || !access.realUser?.isAdmin) return;
+    const controller = new AbortController();
+    void accessRequest<{ offices: AccessOffice[] }>('preview/options', undefined, controller.signal).then(result => {
+      if (!controller.signal.aborted) setOffices(result.offices.filter(item => item.id !== 'CREDIT'));
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [expanded, access.realUser?.id, access.realUser?.isAdmin]);
   if (!access.realUser?.isAdmin) return null;
+  const previewOfficeId = offices.some(item => item.id === officeId) ? officeId : access.realUser.officeId;
   const roles: PreviewRole[] = ['trader', 'spc-trader', 'manager', 'credit'];
   return <section ref={container} className="role-preview-controls" aria-label="View as"
     onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setExpanded(false); toggle.current?.focus(); } }}>
@@ -49,6 +61,11 @@ export function RolePreview({ pending = false }: { pending?: boolean }) {
         <button type="submit" className="ui-button ui-button--secondary" disabled={busy || pending || !selected}>VIEW AS USER</button>
         <button type="button" className="ui-button ui-button--secondary" disabled={busy} onClick={() => setPeople(null)}>BACK</button>
       </form> : <>
+      {offices.length > 1 && <label className="role-preview-form">Office
+        <select aria-label="Preview office" value={previewOfficeId} disabled={busy || pending} onChange={event => setOffice(event.target.value)}>
+          {offices.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}
+        </select>
+      </label>}
       <button type="button" className="ui-button ui-button--secondary" disabled={busy || pending} onClick={async () => {
         setBusy(true); setError('');
         try { const options = await access.loadPreviewPeople(); setPeople(options); setSelected(options[0]?.id ?? ''); }
@@ -61,7 +78,7 @@ export function RolePreview({ pending = false }: { pending?: boolean }) {
           if (busy || pending) return;
           setBusy(true); setError('');
           try {
-            await access.startPreview({ role, officeId: role === 'credit' ? 'CREDIT' : access.realUser!.officeId });
+            await access.startPreview({ role, officeId: role === 'credit' ? 'CREDIT' : previewOfficeId });
             setExpanded(false);
           } catch (failure) { setError(failure instanceof Error ? failure.message : 'Preview could not start.'); }
           finally { setBusy(false); }

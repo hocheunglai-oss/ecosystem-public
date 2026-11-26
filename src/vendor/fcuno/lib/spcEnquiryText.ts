@@ -1,6 +1,7 @@
 import {
   buildShortenedEnquiry,
   detectVlsfoMaxRemarks,
+  excludeEnquiryProductMetadata,
   findEnquiryDates,
   formatVlsfoMaxRemark,
   normalizeEnquiryQuantityNumber,
@@ -8,6 +9,7 @@ import {
   type VlsfoMaxRemark,
 } from "./enquiryShortener.ts"
 import { extractEnquiryPort, isValidImo, parseEnquiryWorksheetGuess } from "./enquiryWorksheetParser.ts"
+import { normalizeIndexedEnquiryPort } from "./enquiryPortIndex.ts"
 
 export type ParsedSpcEnquiry = {
   rawText: string
@@ -189,7 +191,9 @@ function upperText(value: string | null | undefined) {
 }
 
 export function normalizeSpcPort(value: string | null | undefined) {
-  const cleaned = oneLine(value).replace(/^(?:port|location)\s*[:#-]?\s*/i, "").trim()
+  const raw = oneLine(value).replace(/^(?:port|location)\s*[:#-]?\s*/i, "").trim()
+  const indexed = normalizeIndexedEnquiryPort(raw, { includeShortAliases: true })
+  const cleaned = indexed.includes("(") ? indexed : raw
   if (!cleaned) return "SG"
   if (/^(?:singapore|spore|sing|sgp|sin|sg|新加坡)$/i.test(cleaned)) return "SG"
   return upperText(cleaned)
@@ -493,6 +497,10 @@ export function parseSpcEnquiryText(
   }
 
   const delimited = parseDelimitedSpcEnquiryText(rawText, manualVlsfoRemarks)
+  // Keep legacy identity/date parsing on the original input, but do not let
+  // its fuel fallback reintroduce an explicitly excluded metadata value.
+  const productText = excludeEnquiryProductMetadata(rawText)
+  const productDelimited = productText === rawText ? delimited : parseDelimitedSpcEnquiryText(productText, manualVlsfoRemarks)
   const guess = parseEnquiryWorksheetGuess(rawText, { detectBuyer: false })
   const vesselName = upperText(guess.vesselName || delimited.vesselName)
   const imo = guess.imo || delimited.imo
@@ -508,9 +516,9 @@ export function parseSpcEnquiryText(
   const eta = (shortenedParts?.eta || delimited.eta)
     .replace(/^(?:singapore|spore|sing|sgp|sin|sg)\s+/i, "")
     .trim()
-  const hsfo = shortenedParts?.hsfo || delimited.hsfo
-  const vlsfo = shortenedParts?.vlsfo || delimited.vlsfo
-  const lsmgo = shortenedParts?.lsmgo || delimited.lsmgo
+  const hsfo = shortenedParts?.hsfo || productDelimited.hsfo
+  const vlsfo = shortenedParts?.vlsfo || productDelimited.vlsfo
+  const lsmgo = shortenedParts?.lsmgo || productDelimited.lsmgo
   const remarks = ""
   const explicitVlsfoRemarks = /\b80\s*cst\s*min\b/i.test(delimited.vlsfo)
     ? (["80cst min"] as VlsfoMaxRemark[])

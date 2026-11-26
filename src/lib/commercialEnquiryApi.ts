@@ -1,3 +1,4 @@
+import { deliveryStates } from '../../shared/commercialEnquiries';
 import type {
   CommercialEnquiry, CommercialEnquiryMutation, CommercialEnquiryMutationResult,
   CommercialEnquiryPage, CommercialEnquiryScope, CommercialEnquirySummary,
@@ -20,7 +21,8 @@ function summary(value: unknown, owner?: string): CommercialEnquirySummary {
     || !['reference', 'ownerName', 'vessel', 'imo', 'eta', 'createdAt', 'updatedAt'].every(key => typeof value[key] === 'string')
     || !Array.isArray(value.products) || value.products.some(item => !record(item) || !['HSFO', 'VLSFO', 'LSMGO'].includes(String(item.grade)) || typeof item.quantityText !== 'string')
     || value.port !== null && !strings(value.port, ['id', 'countryCode', 'countryName', 'portName'])
-    || value.queue !== null && (!record(value.queue) || value.queue.status !== 'awaiting_connection' || typeof value.queue.queuedAt !== 'string')) throw unavailable();
+    || value.queue !== null && (!record(value.queue) || value.queue.status !== 'awaiting_connection' || typeof value.queue.queuedAt !== 'string'
+      || value.queue.delivery !== undefined && !(deliveryStates as readonly unknown[]).includes(value.queue.delivery))) throw unavailable();
   // List rows intentionally omit all source text, buyer data and private notes.
   const item = Object.fromEntries(['id', 'reference', 'ownerId', 'ownerName', 'revision', 'status', 'vessel', 'imo', 'eta', 'products', 'port', 'queue', 'createdAt', 'updatedAt', 'confirmedAt']
     .map(key => [key, value[key]])) as unknown as CommercialEnquirySummary;

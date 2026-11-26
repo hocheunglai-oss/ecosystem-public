@@ -117,3 +117,21 @@ test('CBM cautions survive unit-only lines and compact quantities without silent
   assert.equal(narrative.vlsfo, '450', 'a narrative CBM mention warns but does not invent a quantity unit');
   assert.ok(narrative.warnings.some(warning => /^WARNING: CBM spotted/.test(warning)));
 });
+
+test('current Worksheet rules handle nonstandard vessel labels, demand port and SPEC/Qtty pairs', () => {
+  const raw = 'Please quote for: MV CALIFORNIA\nIMO: 9074729\nDemand port: Singapore\nETA: 28 NOV 2026\nSPEC: VLSFO 380 CST\nQtty: 600 MT';
+  const actual = parse(raw);
+  assert.equal(actual.vessel, 'CALIFORNIA');
+  assert.equal(actual.imo, '9074729');
+  assert.equal(actual.portId, 'sg');
+  assert.equal(actual.eta, '28 nov 2026');
+  assert.equal(actual.vlsfo, '600');
+  assert.equal(parse(raw.replace('Demand port: Singapore','At: SG')).portId, 'sg');
+  assert.equal(parse(raw + '\nAt: Rotterdam').portId, '');
+  assert.equal(parse(raw.replace('600 MT','-600 MT')).vlsfo, '');
+  assert.equal(parse(raw.replace('600 MT','600 CBM')).vlsfo, '');
+  const invalid = parse(raw.replace('9074729', '9074728') + '\nRef: 9074729');
+  assert.equal(invalid.imo, '');
+  assert.equal(invalid.vessel, 'CALIFORNIA');
+  assert.ok(invalid.warnings.some(warning => warning.includes('check digit')));
+});

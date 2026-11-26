@@ -1,10 +1,12 @@
 import { useAccess } from './auth';
+import { useTestWorkspace } from './TestWorkspace';
 import { canUseBuyerCredit, ECO_2_RELEASE_NOTICE } from '../shared/ecoRelease';
 import './release-gate.css';
 
 export function useBuyerCreditAvailable(): boolean {
   const { user, preview } = useAccess();
-  return canUseBuyerCredit(user, preview);
+  const { developerMode } = useTestWorkspace();
+  return canUseBuyerCredit(user, preview, developerMode);
 }
 
 export function ReleaseNotice({ compact = false }: { compact?: boolean }) {

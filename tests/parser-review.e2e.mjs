@@ -1,3 +1,4 @@
+import { activateTestWorkspace } from './fixtures/test-workspace.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -99,7 +100,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const noOverflow = async () => { assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal page overflow'); assert.ok(await page.locator('.workspace-window').evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'No horizontal workspace overflow'); };
       try {
         await page.goto(base, { waitUntil: 'domcontentloaded' });
-        const testButton = page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true }); await expect(testButton).toBeEnabled(); await testButton.click(); await expect(testButton).toHaveAttribute('aria-pressed', 'true');
+        await activateTestWorkspace(page);
         const region = await openReports(page); await expect(region.getByRole('button', { name: /SUBMITTED 1/ })).toBeVisible(); await region.scrollIntoViewIfNeeded(); await shot('queue');
         await region.getByRole('button', { name: /SUBMITTED 1/ }).click(); const detail = page.getByRole('complementary', { name: 'Parser report details', exact: true }); await expect(detail).toBeVisible();
         await expect(detail.locator('.parser-report-diff').first()).toContainText('SYNTHETIC 1'); await expect(detail.locator('.parser-report-diff').first()).toContainText('SUBMITTED 1'); await expect(detail.getByRole('region', { name: 'Original AI result' })).toContainText('UNAPPLIED AI VESSEL');

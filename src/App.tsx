@@ -39,7 +39,7 @@ import { ResourceIcon, ResourceWallet, useActivityNow } from "./ResourceWallet";
 import { HatsOffPanel, hatsPreviewCounts, type HatsAppearancePreview } from "./HatsOffPanel";
 import { canPreviewAppearance } from "../shared/appearancePreview";
 import { hatCount } from "./lib/hats";
-import { contributionActivity, contributionPreviewCounts, contributionStatus, type ContributionStatusKey } from "./lib/contributionActivity";
+import { contributionPreviewCounts, contributionStatus, type ContributionStatusKey } from "./lib/contributionActivity";
 import { ProfileMenu } from "./ProfileMenu";
 import { FlowingWaterBackground } from "./FlowingWaterBackground";
 import { useWaterBackground } from './backgroundPreference';
@@ -443,7 +443,7 @@ function Workspace() {
       management: "settings",
       audit: "settings",
     };
-    if (route && destinations[route]) {
+    if (Object.hasOwn(destinations, route)) {
       event.preventDefault();
       setModal(null);
       const portId = route === "ports" ? new URLSearchParams(search).get("port") : null;

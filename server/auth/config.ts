@@ -7,6 +7,7 @@ export interface AuthConfig {
   secretKey: string;
   rateLimitSecret: string;
   secureCookies: boolean;
+  localStaging?: true;
   deploymentOrigin?: string;
   newUserPassword?: string;
 }
@@ -17,6 +18,16 @@ export function authConfig(env = process.env): AuthConfig {
       !ECO_SUPABASE_SECRET_KEY || !ECO_RATE_LIMIT_SECRET || ECO_RATE_LIMIT_SECRET.length < 32) throw new Error('AUTH_NOT_CONFIGURED');
   const origin = new URL(ECO_ORIGIN);
   const database = new URL(ECO_SUPABASE_URL);
+  if (env.ECO_LOCAL_STAGING === '1') {
+    if (env.VERCEL || env.VERCEL_ENV || env.VERCEL_PROJECT_ID || env.VERCEL_ORG_ID ||
+        origin.origin !== ECO_ORIGIN || database.origin !== ECO_SUPABASE_URL ||
+        origin.protocol !== 'http:' || database.protocol !== 'http:' ||
+        origin.hostname !== '127.0.0.1' || database.hostname !== '127.0.0.1' ||
+        !origin.port || !database.port || origin.port === database.port) throw new Error('AUTH_NOT_CONFIGURED');
+    return { origin: ECO_ORIGIN, supabaseUrl: ECO_SUPABASE_URL, publishableKey: ECO_SUPABASE_PUBLISHABLE_KEY,
+      secretKey: ECO_SUPABASE_SECRET_KEY, rateLimitSecret: ECO_RATE_LIMIT_SECRET, secureCookies: false,
+      localStaging: true, newUserPassword: env.ECO_NEW_USER_PASSWORD };
+  }
   if ((env.VERCEL_ENV === 'production' && ECO_ORIGIN !== ecoConnections.productionOrigin) ||
       (env.VERCEL_PROJECT_ID && env.VERCEL_PROJECT_ID !== ecoConnections.vercel.projectId) ||
       (env.VERCEL_ORG_ID && env.VERCEL_ORG_ID !== ecoConnections.vercel.teamId)) throw new Error('AUTH_NOT_CONFIGURED');

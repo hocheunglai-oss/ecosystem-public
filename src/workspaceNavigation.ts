@@ -9,7 +9,6 @@ export const workspacePages = {
   "singapore-suppliers": { label: "Supplier Profiles", aliasOf: "suppliers" },
   counterparties: { label: "Buyer Profiles", group: "Buyers and Credit" },
   "credit-request": { label: "Credit Requests", group: "Buyers and Credit" },
-  contribute: { label: "Ports and countries" },
   feedback: { label: "Feedback for ecosystem" },
   settings: { label: "Settings" },
   countries: { label: "Countries & Ports", aliasOf: "ports" },

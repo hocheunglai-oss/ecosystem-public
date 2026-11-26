@@ -3,8 +3,12 @@ import { generatedSystemInformation } from '../generated/system-information.ts';
 
 /** Call only after an active, effective administrator has been authorized. */
 export function getSystemInformation(environment: NodeJS.ProcessEnv = process.env): SystemInformation {
+  const build = structuredClone(generatedSystemInformation);
+  if (environment.ECO_LOCAL_STAGING === '1' && !environment.VERCEL_ENV) {
+    build.targets = { ...build.targets, databaseRegion:'local', databaseProjectRef:null, computeRegions:[] };
+  }
   return {
-    ...structuredClone(generatedSystemInformation),
+    ...build,
     runtime: {
       node: process.version,
       requiredNode: generatedSystemInformation.build.requiredNode,

@@ -19,6 +19,10 @@ test('system metadata exposes only allowlisted runtime values and exact installe
   for (const item of info.dependencies) assert.match(item.version, /^\d+\.\d+\.\d+/);
   assert.ok(!JSON.stringify(info).includes('private'));
   assert.equal(getSystemInformation({ VERCEL_REGION: 'secret/value', VERCEL_DEPLOYMENT_ID: 'secret/value' }).runtime.region, null);
+  const staging = getSystemInformation({ ECO_LOCAL_STAGING:'1' });
+  assert.equal(staging.targets.databaseRegion,'local');
+  assert.equal(staging.targets.databaseProjectRef,null);
+  assert.deepEqual(staging.targets.computeRegions,[]);
   info.dependencies.length = 0;
   assert.ok(getSystemInformation().dependencies.length > 0);
 });

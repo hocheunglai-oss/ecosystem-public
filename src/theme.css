@@ -36,7 +36,7 @@
 }
 
 /* Standard summary panels share the flat workspace surface in each theme. */
-:is(.office-selected-summary, .resource-balance) { background: var(--ws-surface, #eef3f9); }
+:is(.resource-balance) { background: var(--ws-surface, #eef3f9); }
 
 /* Shared dark working surfaces; semantic status colours retain their meaning. */
 :root[data-theme="dark"] :is(.workspace-window, .modal) .contribution-reward {
@@ -56,7 +56,7 @@
 :root[data-theme="dark"] :is(.window-content, .table-wrap, .resource-history, .center-incoming-list) {
   scrollbar-color: var(--ui-boundary) var(--ui-field);
 }
-:root[data-theme="dark"] :is(.resource-wallet, .team-resources, .team-performance) {
+:root[data-theme="dark"] :is(.resource-wallet) {
   color: var(--theme-ink);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
@@ -76,9 +76,7 @@
   .center-history-compact details > div, .center-incoming-open > span,
   .center-incoming-open > small, .search-select-empty, .calculated-field span,
   .calculated-field small, .reset-demo-description, .resource-empty,
-  .resource-history time, .office-selected-summary > div > span,
-  .economy-team-table tbody th span, .team-performance-table th,
-  .team-performance-label
+  .resource-history time
 ) { color: var(--theme-muted); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
   .stat-card > strong, .module-metrics strong, .detail-hero h2, .credit-available strong,
@@ -127,7 +125,7 @@
   box-shadow: none;
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
-  .center-tabs button[aria-selected="true"], .office-view-tabs [role="tab"][aria-selected="true"], .segmented button.active
+  .center-tabs button[aria-selected="true"], .segmented button.active
 ) {
   color: var(--theme-ink);
   background: var(--ui-raised);
@@ -155,9 +153,7 @@
   .detail-footer, .module-metrics, .module-settings-toolbar, .modal-actions,
   .modal-head, .form-bottom, .calculated-field, .port-card-bottom, .center-credit-records article,
   .center-context-panel dl > div, .outcome-checks, .center-details-column,
-  .center-tabs, .center-history-compact details, .office-view-tabs,
-  .office-comparison-scroll, .resource-history li,
-  .economy-team-table-scroll
+  .center-tabs, .center-history-compact details, .resource-history li
 ) { border-color: var(--theme-line); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.card, .directory-list) { background: transparent; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.directory-item, .port-card, .center-incoming-row) {
@@ -186,12 +182,11 @@
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) tbody th { color: var(--theme-ink); background: transparent; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) td small { color: var(--theme-muted); }
-:root[data-theme="dark"] :is(.workspace-window, .modal) :is(.office-comparison-table button) { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) .text-button { color: var(--theme-cyan); }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.positive, .text-green) { color: var(--theme-green) !important; }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(.negative, .text-amber) { color: var(--theme-amber) !important; }
 :root[data-theme="dark"] :is(
-  .office-selected-summary, .resource-balance
+  .resource-balance
 ) {
   color: var(--theme-ink);
   background: var(--theme-panel);

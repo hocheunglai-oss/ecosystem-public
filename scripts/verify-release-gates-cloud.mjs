@@ -401,21 +401,15 @@ async function browserCheck(engine, browserType, width, theme) {
     await page.screenshot({ path: join(output, `${engine}-${width}-${theme}-${label}.png`), fullPage: true });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: horizontal overflow`);
   };
-  const open = async name => {
-    const navigation = page.getByRole('navigation', { name: 'Workspace navigation' });
-    const group = navigation.getByRole('button', { name: 'Buyers and Credit', exact: true });
-    if (await group.getAttribute('aria-expanded') !== 'true') await group.click();
-    await navigation.getByRole('button', { name, exact: true }).click();
-    const dialog = page.getByRole('dialog', { name, exact: true }); await expect(dialog).toBeVisible(); return dialog;
-  };
   const close = () => page.getByRole('button', { name: 'Close workspace', exact: true }).click();
   await page.goto(base);
   await page.getByLabel('Email', { exact: true }).fill(identities[0].email);
   await page.getByLabel('Password', { exact: true }).fill(passwords.admin);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible();
-  let dialog = await open('Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible(); await close();
-  dialog = await open('Credit Requests'); await expect(dialog.locator('.credit-workspace')).toBeVisible(); await close();
+  await expectDeferredHeading(page);
+  await expect(page.getByRole('button', { name: 'Developer mode', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Test data', exact: true })).toHaveCount(0);
   for (const [role, label] of roles) {
     await page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true }).click();
     await page.locator('.home-display-controls').getByRole('button', { name: label, exact: true }).click();
@@ -424,7 +418,7 @@ async function browserCheck(engine, browserType, width, theme) {
     await expectDeferredHeading(page);
     if (role === 'trader') await shot('preview-heading');
     for (const name of ['Buyer Profiles', 'Credit Requests']) {
-      dialog = await openDeferred(page, name); await expect(dialog.locator('.release-notice:visible')).toHaveText(notice);
+      const dialog = await openDeferred(page, name); await expect(dialog.locator('.release-notice:visible')).toHaveText(notice);
       await expect(dialog.locator('.buyer-profile, .buyer-profile-directory, .credit-workspace')).toHaveCount(0);
       if (role === 'trader') await shot(name === 'Buyer Profiles' ? 'buyer-gate' : 'credit-gate');
       await close();
@@ -432,7 +426,7 @@ async function browserCheck(engine, browserType, width, theme) {
     await page.getByRole('button', { name: 'Back to ECO RELEASE ADMIN', exact: true }).first().click();
     await expect(page.getByRole('status', { name: 'Role preview' })).toHaveCount(0);
   }
-  dialog = await open('Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible(); await close();
+  await expectDeferredHeading(page);
   await json(await post(context, '/api/access/logout'));
   await page.reload(); await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
   await page.getByLabel('Email', { exact: true }).fill(identities[1].email);
@@ -440,7 +434,7 @@ async function browserCheck(engine, browserType, width, theme) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible();
   await expectDeferredHeading(page); await shot('trader-heading');
-  for (const name of ['Buyer Profiles', 'Credit Requests']) { dialog = await openDeferred(page, name); await expect(dialog.locator('.release-notice:visible')).toHaveText(notice); await expect(dialog.locator('.buyer-profile, .buyer-profile-directory, .credit-workspace')).toHaveCount(0); await close(); }
+  for (const name of ['Buyer Profiles', 'Credit Requests']) { const dialog = await openDeferred(page, name); await expect(dialog.locator('.release-notice:visible')).toHaveText(notice); await expect(dialog.locator('.buyer-profile, .buyer-profile-directory, .credit-workspace')).toHaveCount(0); await close(); }
   await json(await post(context, '/api/access/logout'));
   // Expected unauthenticated session probes are filtered above; all other errors fail.
   await page.reload(); await expect(page.getByLabel('Email', { exact: true })).toBeVisible(); await shot('signed-out');
@@ -594,13 +588,11 @@ async function verify() {
     checks.push('suppliers:PIC-options-authenticated-names-only-active-SPC');
     await parserProtocol(admin, trader, source.sha256);
     await inboxProtocol(admin, trader);
-    mark('admin-own-private-buyer-tabs');
-    const initial = await json(await get(admin, tabsUrl(buyer))); assert.equal(initial.private.revision, 0);
-    const adminTab = tab('ADMIN PRIVATE');
-    const adminInput = writeInput(buyer, 0, [adminTab]);
-    const saved = await json(await post(admin, '/api/profile-tabs/save', adminInput)); assert.deepEqual(saved.private.tabs, [adminTab]);
-    assert.deepEqual(await json(await post(admin, '/api/profile-tabs/save', adminInput)), saved, 'Replay must recover the same receipt.');
-    assert.deepEqual((await directRpc(admin, 'eco_list_profile_tabs', { p_target: buyer })).body.private.tabs, [adminTab]);
+    mark('stage-one-admin-buyer-denied');
+    await buyerDenied(admin);
+    const policy = await json(await get(admin, '/api/enquiries/test-policy'));
+    assert.equal(policy.enabled, false);
+    checks.push('real:admin-and-spc:stage-two-denied-by-API-and-RPC');
     mark('four-nonadmin-previews');
     for (const [role] of roles) {
       await json(await post(admin, '/api/access/preview', { role, officeId: role === 'credit' ? 'CREDIT' : 'HONG KONG' }));
@@ -610,11 +602,9 @@ async function verify() {
       checks.push(`preview:${role}:API+RPC`);
     }
     await json(await post(admin, '/api/access/preview', { role: 'admin', officeId: 'HONG KONG' }));
-    const hidden = await json(await get(admin, tabsUrl(buyer))); assert.deepEqual(hidden.private, { revision: 0, tabs: [] });
-    assert.deepEqual((await directRpc(admin, 'eco_list_profile_tabs', { p_target: buyer })).body.private, hidden.private);
-    await json(await post(admin, '/api/profile-tabs/save', writeInput(buyer, 1, [tab('ADMIN PREVIEW DENIED')])), 403);
+    await buyerDenied(admin);
     await json(await post(admin, '/api/access/preview/end'));
-    assert.deepEqual((await json(await get(admin, tabsUrl(buyer)))).private.tabs, [adminTab]);
+    await buyerDenied(admin);
     mark('four-real-nonadmin-roles');
     for (const [role] of roles) {
       setOwnedTraderRole(role);
@@ -628,13 +618,9 @@ async function verify() {
       }
       checks.push(`real:${role}:API+RPC`);
     }
-    mark('other-admin-private-owner-isolation');
+    mark('second-admin-buyer-denial');
     setOwnedTraderRole('admin');
-    const isolated = await json(await get(trader, tabsUrl(buyer))); assert.deepEqual(isolated.private, { revision: 0, tabs: [] });
-    const otherTab = tab('SECOND ADMIN PRIVATE');
-    await json(await post(trader, '/api/profile-tabs/save', writeInput(buyer, 0, [otherTab])));
-    assert.deepEqual((await json(await get(trader, tabsUrl(buyer)))).private.tabs, [otherTab]);
-    assert.deepEqual((await json(await get(admin, tabsUrl(buyer)))).private.tabs, [adminTab]);
+    await buyerDenied(trader);
     setOwnedTraderRole('trader');
     await browserCheck('chromium', chromium, 1440, 'light');
     await browserCheck('webkit', webkit, 320, 'dark');
@@ -646,7 +632,7 @@ async function verify() {
     await json(await get(admin, '/api/parser/reports?dataMode=live'), 401);
     await json(await post(admin, '/api/parser/reports', parserReportInput()), 401);
     const fresh = await login(admin, identities[0]); assert.equal(fresh.preview ?? null, null); assert.equal(fresh.user.isAdmin, true);
-    assert.deepEqual((await json(await get(admin, tabsUrl(buyer)))).private.tabs, [adminTab]);
+    await buyerDenied(admin);
     completed = true; save();
   } catch (error) {
     failure = safeFailure(error); save();

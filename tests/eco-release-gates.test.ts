@@ -6,21 +6,22 @@ import type { AccessUser, RolePreview, PreviewRole } from '../shared/access';
 import { createSeedState } from '../src/lib/seed';
 import { globalSearchRecords, queryGlobalSearch } from '../src/lib/globalSearch';
 import { actorFromAccess } from '../src/lib/accessActor';
-const admin: AccessUser = { id: 'release-admin', email: 'release@example.test', displayName: 'ADMIN', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isManager: false, isSpcTrader: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const admin: AccessUser = { id: 'release-admin', email: 'release@example.test', displayName: 'ADMIN', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isManager: false, isSpcTrader: true, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1, capabilities: { appearancePreview: false, testWorkspace: true } };
 const preview = (role: PreviewRole): RolePreview => ({ role, officeId: role === 'credit' ? 'CREDIT' : 'HONG KONG', officeName: role === 'credit' ? 'CREDIT' : 'HONG KONG', readOnly: true });
 
-test('ECO 1.0 buyer and credit availability follows active administrator access and effective preview role', () => {
+test('buyer and credit availability requires the staging administrator in developer mode', () => {
   assert.equal(ECO_2_RELEASE_NOTICE, 'UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0');
-  assert.equal(canUseBuyerCredit(admin), true);
-  assert.equal(canUseBuyerCredit(projectPreviewUser(admin, preview('admin')), preview('admin')), true);
-  for (const role of ['trader', 'spc-trader', 'manager', 'credit'] as const) {
+  assert.equal(canUseBuyerCredit(admin), false);
+  assert.equal(canUseBuyerCredit(admin, null, true), true);
+  assert.equal(canUseBuyerCredit({ ...admin, capabilities: undefined }, null, true), false);
+  for (const role of ['admin', 'trader', 'spc-trader', 'manager', 'credit'] as const) {
     const selected = preview(role), effective = projectPreviewUser(admin, selected);
-    assert.equal(canUseBuyerCredit(effective, selected), false, role);
-    assert.equal(canUseBuyerCredit(admin, selected), false, `real administrator cannot bypass ${role} preview`);
+    assert.equal(canUseBuyerCredit(effective, selected, true), false, role);
+    assert.equal(canUseBuyerCredit(admin, selected, true), false, `real administrator cannot bypass ${role} preview`);
     assert.equal(canUseBuyerCredit(effective), false, `ordinary ${role} account`);
   }
-  assert.equal(canUseBuyerCredit({ ...admin, isActive: false }), false);
-  assert.equal(canUseBuyerCredit({ ...admin, activated: false }), false);
+  assert.equal(canUseBuyerCredit({ ...admin, isActive: false }, null, true), false);
+  assert.equal(canUseBuyerCredit({ ...admin, activated: false }, null, true), false);
   assert.equal(canUseBuyerCredit(null), false);
 });
 
@@ -41,7 +42,7 @@ test('non-admin search cannot expose buyer directory results; operational record
     assert.equal(queryGlobalSearch(records, 'ECO20001').length, 0);
     assert.equal(queryGlobalSearch(records, 'jptyo')[0]?.context?.portId, 'port-tokyo');
   }
-  const adminResults = globalSearchRecords(state, actorFromAccess(admin), [], [], canUseBuyerCredit(admin));
+  const adminResults = globalSearchRecords(state, actorFromAccess(admin), [], [], canUseBuyerCredit(admin, null, true));
   assert.equal(queryGlobalSearch(adminResults, 'ECO20001')[0].category, 'Buyer');
   assert.equal(globalSearchRecords(state, actorFromAccess(admin), []).some(item => item.category === 'Buyer'), false, 'search fails closed unless release access is supplied');
 });
@@ -58,12 +59,13 @@ test('local mutation boundary rejects deferred buyer actions without disabling o
   ] as const;
   const before = JSON.stringify(state);
   for (const action of actions) {
-    assert.throws(() => assertReleaseActionAvailable(action, state, trader), { message: ECO_2_RELEASE_NOTICE });
-    assert.doesNotThrow(() => assertReleaseActionAvailable(action, state, admin));
+    assert.throws(() => assertReleaseActionAvailable(action, state, trader, true), { message: ECO_2_RELEASE_NOTICE });
+    assert.throws(() => assertReleaseActionAvailable(action, state, admin, false), { message: ECO_2_RELEASE_NOTICE });
+    assert.doesNotThrow(() => assertReleaseActionAvailable(action, state, admin, true));
   }
   assert.equal(JSON.stringify(state), before);
   for (const action of [{ type: 'confirm-enquiry', id: 'enquiry-existing' }, { type: 'record-loss', id: 'enquiry-existing', reasonId: 'loss-existing' }, { type: 'submit-contribution', targetType: 'port', targetId: 'port-tokyo', title: 'Changed', body: 'Changed' }] as const) {
     assert.equal(isBuyerCreditAction(action, state), false);
-    assert.doesNotThrow(() => assertReleaseActionAvailable(action, state, trader));
+    assert.doesNotThrow(() => assertReleaseActionAvailable(action, state, trader, false));
   }
 });

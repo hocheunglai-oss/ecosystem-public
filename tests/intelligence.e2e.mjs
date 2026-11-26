@@ -1,3 +1,4 @@
+import { activateDeveloperMode } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
@@ -217,6 +218,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await shot('prices');
 
       await button(dialog, 'Close workspace').click();
+      await activateDeveloperMode(page);
       const control = page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true });
       await expect(control).toBeEnabled();
       const beforeTest = state.reportRequests.length;

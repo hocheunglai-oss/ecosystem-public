@@ -66,5 +66,3 @@
 :root[data-interface="mobile"] .account-inline-panel .inbox-list { max-height: none; overflow: visible; }
 :root[data-interface="mobile"] .account-inline-panel .inbox-arrivals { flex-wrap: wrap; }
 :root[data-interface="mobile"] .account-inline-panel .inbox-item-clear { min-width: 44px; }
-:root[data-interface="mobile"] .office-comparison-table,
-:root[data-interface="mobile"] .economy-team-table { min-width: 0; }

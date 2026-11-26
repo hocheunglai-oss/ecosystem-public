@@ -108,6 +108,19 @@ test('account privacy guidance requires a live member and is readable by traders
 test('an unconfigured installation fails closed rather than selecting another project', () => {
   assert.throws(() => authConfig({ NODE_ENV: 'production' }), /AUTH_NOT_CONFIGURED/);
 });
+test('local staging accepts only distinct loopback services outside Vercel', () => {
+  const env = { ECO_LOCAL_STAGING:'1', ECO_ORIGIN:'http://127.0.0.1:4301', ECO_SUPABASE_URL:'http://127.0.0.1:30404',
+    ECO_SUPABASE_PUBLISHABLE_KEY:'synthetic-public', ECO_SUPABASE_SECRET_KEY:'synthetic-local', ECO_RATE_LIMIT_SECRET:'x'.repeat(32) };
+  const local = authConfig(env);
+  assert.equal(local.localStaging,true);
+  assert.equal(local.secureCookies,false);
+  for (const change of [
+    {VERCEL_ENV:'preview'}, {VERCEL_ENV:'production'}, {VERCEL:'1'},
+    {ECO_SUPABASE_URL:'https://cucfyycoklddufdluahi.supabase.co'},
+    {ECO_SUPABASE_URL:env.ECO_ORIGIN}, {ECO_SUPABASE_URL:'http://127.0.0.1:30404/api'},
+    {ECO_ORIGIN:'https://eco.fcuno.com'}, {ECO_ORIGIN:'http://0.0.0.0:4301'},
+  ]) assert.throws(() => authConfig({...env,...change}), /AUTH_NOT_CONFIGURED/);
+});
 test('a legacy browser identity, role parameter or forged cookie does not grant a session', async () => {
   const f = fixture(null);
   const response = await handleAuth(new Request(config.origin + '/api/access/session?role=admin', { headers: { cookie: 'ecosystem.session.v1=marco' } }), config, f.gateway);

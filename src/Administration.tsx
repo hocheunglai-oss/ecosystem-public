@@ -69,6 +69,7 @@ const human = (value: string) =>
   value.replaceAll("-", " ").replaceAll("_", " ");
 const pageName = (value: string) =>
   feedbackPages.find((page) => page.id === value.replace(/^\//, ""))?.label ??
+  (/^\/?contribute$/.test(value) ? "Ports and countries" : null) ??
   (value || "Not specified");
 
 function StatusLabel({ value }: { value: string }) {

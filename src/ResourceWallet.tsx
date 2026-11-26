@@ -144,7 +144,7 @@ export function ResourceWallet({ statusPreview = null, onStatusPreviewChange }: 
   statusPreview?: ContributionStatusKey | null;
   onStatusPreviewChange?: (status: ContributionStatusKey | null) => void;
 }) {
-  const { state, actor } = useDemo();
+  const { actor } = useDemo();
   const { realUser } = useAccess();
   const canPreview = canPreviewAppearance(realUser);
   const visiblePreview = canPreview ? statusPreview : null;

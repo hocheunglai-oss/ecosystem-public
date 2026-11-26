@@ -1,4 +1,3 @@
-import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { ReleaseNotice, useBuyerCreditAvailable } from './ReleaseGate';
 import { isBuyerCreditWorkspace } from '../shared/ecoRelease';
 import LocationWorkspace from "./LocationWorkspace";
@@ -8,7 +7,6 @@ import { useCallback, useState } from "react";
 import {
   ArrowLeft,
   History,
-  Plus,
 } from "lucide-react";
 import EnquiryPage from "./EnquiryPage";
 import RecordsPage from "./RecordsPage";
@@ -27,19 +25,6 @@ import { useAccess } from './auth';
 import {
   ManagementPage,
 } from "./OperationsPages";
-import { useDemo } from "./store";
-import {
-  actors,
-  isAdmin,
-  type Contribution,
-} from "./lib/model";
-import {
-  Empty,
-  Field,
-  SearchBox,
-  Status,
-  time,
-} from "./ui";
 import type { OpenModal } from "./types";
 import type { OpenWorkspace, WorkspaceId, WorkspaceNavigationContext } from "./workspaceNavigation";
 export type { WorkspaceId } from "./workspaceNavigation";
@@ -53,11 +38,6 @@ type Props = {
   context?: WorkspaceNavigationContext;
   onAdminOperationPending?: (reference: string | null) => void;
 };
-
-const actorName = (id: string) =>
-  actors.find((person) => person.id === id)?.name ?? id;
-const includes = (query: string, ...values: (string | undefined)[]) =>
-  values.join(" ").toLowerCase().includes(query.trim().toLowerCase());
 
 export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPending }: Props) {
   const buyerCreditAvailable = useBuyerCreditAvailable();
@@ -79,9 +59,6 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
       break;
     case "counterparties":
       content = <BuyerProfileDirectory open={open} initialBuyerId={context?.buyerId} />;
-      break;
-    case "contribute":
-      content = <ContributionLibrary open={open} />;
       break;
     case "feedback":
       content = <FeedbackWorkspace />;
@@ -111,158 +88,6 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
       )}
       {content}
     </div>
-  );
-}
-
-function ContributionLibrary({ open }: { open: OpenModal }) {
-  const { state } = useDemo();
-  const [targetType, setTargetType] = useState<"port" | "country">("port");
-  const [portId, setPortId] = useState(state.ports[0]?.id ?? "");
-  const countries = [
-    ...new Set(state.ports.map((port) => port.country)),
-  ].sort();
-  const [country, setCountry] = useState(countries[0] ?? "");
-  return (
-    <>
-      <section className="card module-compose">
-        <div className="form-grid">
-          <Field label="Type">
-            <select
-              value={targetType}
-              onChange={(event) =>
-                setTargetType(event.target.value as "port" | "country")
-              }
-            >
-              <option value="port">Port</option>
-              <option value="country">Country</option>
-            </select>
-          </Field>
-          {targetType === "port" ? (
-            <Field label="Port">
-              <select
-                value={portId}
-                onChange={(event) => setPortId(event.target.value)}
-              >
-                {state.ports.map((port) => (
-                  <option key={port.id} value={port.id}>
-                    {port.name} · {port.country}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          ) : (
-            <Field label="Country">
-              <select
-                value={country}
-                onChange={(event) => setCountry(event.target.value)}
-              >
-                {countries.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-        </div>
-        <KnowledgeUpdateButton
-          onClick={() =>
-            open({
-              type: "contribute",
-              targetType,
-              targetId: targetType === "port" ? portId : country,
-            })
-          }
-        >
-          EDIT
-        </KnowledgeUpdateButton>
-      </section>
-      <ContributionRecords open={open} feedback={false} />
-    </>
-  );
-}
-
-function ContributionRecords({
-  open,
-  feedback,
-}: {
-  open: OpenModal;
-  feedback: boolean;
-}) {
-  const { state, actor } = useDemo();
-  const [query, setQuery] = useState("");
-  const [scope, setScope] = useState("all");
-  const [status, setStatus] = useState("all");
-  const items = state.contributions.filter(
-    (item) =>
-      (feedback
-        ? item.targetType === "feedback"
-        : item.targetType === "port" || item.targetType === "country") &&
-      (scope === "all" || item.author === actor.id) &&
-      (status === "all" || item.status === status) &&
-      includes(query, item.title, item.body, item.feedbackPage?.label, actorName(item.author)),
-  );
-  const targetName = (item: Contribution) =>
-    item.targetType === "port"
-      ? state.ports.find((port) => port.id === item.targetId)?.name
-      : item.targetType === "country"
-        ? item.targetId
-        : item.targetType === "feedback" ? item.feedbackPage?.label : null;
-  return (
-    <section className="card">
-      <div className="directory-toolbar">
-        <SearchBox value={query} onChange={setQuery} placeholder="Search" />
-        <select
-          aria-label="Contribution author"
-          value={scope}
-          onChange={(event) => setScope(event.target.value)}
-        >
-          <option value="all">Everyone</option>
-          <option value="mine">Mine</option>
-        </select>
-        <select
-          aria-label="Contribution status"
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
-          <option value="all">All statuses</option>
-          <option value="approved">Published</option>
-          <option value="pending">Previous submissions</option>
-          <option value="declined">Declined</option>
-        </select>
-      </div>
-      {items.length ? (
-        <div className="review-list">
-          {items.map((item) => (
-            <article className="review-item" key={item.id}>
-              <div className="review-item-head">
-                <div>
-                  {targetName(item) && (
-                    <div className="eyebrow">{targetName(item)}</div>
-                  )}
-                  <h3>{item.title}</h3>
-                </div>
-                <Status value={item.publication === "direct" ? "updated" : item.status} />
-              </div>
-              <p className="module-preserve-lines">{item.body}</p>
-              <div className="review-meta">
-                <small>
-                  {actorName(item.author)} · {time(item.createdAt)}
-                </small>
-              </div>
-              {item.reviewedAt && (
-                <p className="source-note">
-                  {actorName(item.reviewer ?? "")} · {time(item.reviewedAt)}
-                </p>
-              )}
-
-            </article>
-          ))}
-        </div>
-      ) : (
-        <Empty title="No records" />
-      )}
-    </section>
   );
 }
 

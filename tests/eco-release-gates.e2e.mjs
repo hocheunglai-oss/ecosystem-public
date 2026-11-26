@@ -1,6 +1,6 @@
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
-import { installTestWorkspacePolicy, activateTestWorkspace } from './fixtures/test-workspace.mjs';
+import { installTestWorkspacePolicy, activateDeveloperMode, activateTestWorkspace } from './fixtures/test-workspace.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -82,7 +82,9 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
     const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message)); page.setDefaultTimeout(10000);
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: viewport overflow`); };
     try {
-      await page.goto(base); await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible(); await activateTestWorkspace(page);
+      await page.goto(base); await expect(page.getByRole('main', { name: 'ECOSYSTEM workspace' })).toBeVisible(); await expectDeferredHeading(page);
+      await expect(page.getByRole('button', { name: 'Test data', exact: true })).toHaveCount(0);
+      await activateTestWorkspace(page);
       let dialog = await open(page, 'Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible(); await close(page);
       dialog = await open(page, 'Credit Requests'); await expect(dialog.locator('.credit-workspace')).toBeVisible();
       // Admin contextual links and modal remain usable.
@@ -107,6 +109,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       }
       // Revoke administrator access while a buyer workspace is mounted. Cached
       // administrator panels must disappear before another person can use them.
+      await activateDeveloperMode(page);
       dialog = await open(page, 'Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible();
       state.user = { ...admin, displayName: 'REAL TRADER', isAdmin: false, isSpcTrader: false }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.locator('.hud-identity')).toContainText('REAL TRADER'); await expect(page.locator('.buyer-profile-directory')).toHaveCount(0);
       for (const [role] of roles) {
@@ -118,6 +121,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         for (const name of ['Buyer Profiles', 'Credit Requests']) { dialog = await openDeferred(page, name); await expect(dialog.locator('.release-notice:visible')).toHaveText(notice); await close(page); }
       }
       state.user = { ...admin }; await invalidateFixtureAuthority(page, { user: state.user, preview: state.preview }); await expect(page.locator('.home-display-controls').getByRole('button', { name: 'View as', exact: true })).toBeVisible();
+      await activateDeveloperMode(page);
       dialog = await open(page, 'Buyer Profiles'); await expect(dialog.getByRole('textbox', { name: 'Search buyer profiles', exact: true })).toBeVisible(); await close(page);
       assert.deepEqual(state.writes, [], 'release preview must not save profile data'); assert.deepEqual(errors, []);
       results.push({ engine, width, theme, passed: true, previewRoles: roles.map(([role]) => role), actualRoles: roles.map(([role]) => role) }); console.log(`PASS ${engine} ${width} ${theme}: admin, four previews, four actual roles, search, legacy links, enquiry, access revocation`);

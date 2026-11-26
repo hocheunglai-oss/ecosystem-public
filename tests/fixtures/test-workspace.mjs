@@ -4,7 +4,15 @@ export const testGeneration = '10000000-0000-4000-8000-000000000010';
 export async function installTestWorkspacePolicy(context) {
   await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: true, generation: testGeneration } }));
 }
+export const developerModeControl = page => page.locator('.home-display-controls').getByRole('button', { name: 'Developer mode', exact: true });
+export async function activateDeveloperMode(page) {
+  const toggle = developerModeControl(page);
+  await expect(toggle).toBeEnabled();
+  if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+}
 export async function activateTestWorkspace(page) {
+  await activateDeveloperMode(page);
   const toggle = page.locator('.home-display-controls').getByRole('button', { name: 'Test data', exact: true });
   await expect(toggle).toBeEnabled();
   if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
@@ -12,6 +20,7 @@ export async function activateTestWorkspace(page) {
 }
 /** Exercise normal LIVE permissions using one explicitly created, isolated test record. */
 export async function createLiveFixtureBuyer(page, name, capture) {
+  await activateDeveloperMode(page);
   const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
   const group = nav.getByRole('button', { name: 'Buyers and Credit', exact: true });
   if (await group.getAttribute('aria-expanded') !== 'true') await group.click();

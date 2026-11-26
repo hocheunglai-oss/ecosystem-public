@@ -389,12 +389,6 @@ body {
 .workspace-module .tabs button.active:after {
   background: #7da84a;
 }
-.module-compose {
-  margin-bottom: 24px;
-}
-.module-preserve-lines {
-  white-space: pre-line;
-}
 .module-settings-toolbar {
   display: flex;
   gap: 12px;

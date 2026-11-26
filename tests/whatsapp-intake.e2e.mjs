@@ -1,3 +1,4 @@
+import { activateDeveloperMode } from './fixtures/test-workspace.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -77,7 +78,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     try {
       await page.clock.install({ time: new Date('2026-10-20T09:00:00Z') });
       await page.goto(base, { waitUntil: 'domcontentloaded' });
-      await expect(testControl(page)).toBeEnabled();
+      await activateDeveloperMode(page); await expect(testControl(page)).toBeEnabled();
       const inbox = await openInbox(page);
       await expect(inbox.locator('.inbox-list')).toHaveAttribute('aria-busy', 'false');
       await expect(inbox.locator('.inbox-notification-row')).toHaveCount(0);
@@ -108,7 +109,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.equal(session.items[0].read, true); assert.equal(session.mutations.filter(item => item.action === 'read').length, 1);
       await enquiry.getByRole('textbox', { name: 'Vessel', exact: true }).scrollIntoViewIfNeeded(); await shot('parser');
       await page.clock.resume(); await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(testControl(page)).toBeEnabled(); await openInbox(page);
+      await activateDeveloperMode(page); await expect(testControl(page)).toBeEnabled(); await openInbox(page);
       await expect(inbox.locator('.inbox-notification-row')).toHaveCount(1);
       await expect(inbox.locator('.inbox-item')).not.toHaveClass(/is-unread/);
       await expect(page.locator('.inbox-count')).toHaveCount(0);

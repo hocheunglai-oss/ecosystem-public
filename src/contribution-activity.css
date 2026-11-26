@@ -1,6 +1,5 @@
 /* Recent contribution activity and independent peer recognition. */
-.contribution-activity,
-.office-performance {
+.contribution-activity {
   --activity-accent: #278d9a;
   --activity-soft: #dcedf1;
   --activity-panel: #ffffff52;
@@ -131,7 +130,7 @@
 .activity-empty { color: var(--muted); font-size: 11px; text-align: center; padding: 10px 0; }
 .trader-hud .hud-resource-activity { color: #bceee9; }
 .hud-activity-period { color: #c2d6dc; padding: 2px 4px; margin-left: 1px; border: 1px solid #b8d2dc38; border-radius: 3px; font-size: 9px; font-weight: 650; }
-.trader-hud :is(.contribution-activity,.office-performance) {
+.trader-hud :is(.contribution-activity) {
   --activity-accent: #7ac8ca;
   --activity-soft: #99d6e00d;
   --activity-panel: #ffffff04;
@@ -151,12 +150,12 @@
 .trader-hud .activity-chart h3,
 .trader-hud .activity-section-heading { padding: 8px 9px; font-size: 10px; }
 .trader-hud .activity-history > li { gap: 7px; padding-block: 10px; }
-:root[data-theme="dark"] :is(.contribution-activity,.office-performance) {
+:root[data-theme="dark"] :is(.contribution-activity) {
   --activity-accent: #7ac8ca;
   --activity-soft: #304d5d;
   --activity-panel: #ffffff03;
 }
-:root[data-theme="dark"] .trader-hud :is(.contribution-activity,.office-performance) { --activity-soft: #99d6e00d; }
+:root[data-theme="dark"] .trader-hud :is(.contribution-activity) { --activity-soft: #99d6e00d; }
 @media (max-width: 480px) {
   .activity-summary { gap: 12px; padding: 12px; }
   .activity-summary-recognition { padding-left: 12px; }

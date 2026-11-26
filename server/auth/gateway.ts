@@ -218,7 +218,13 @@ export function createAuthGateway(request: Request, config: AuthConfig): AuthGat
       }
       if (!data.user) return null;
       // This RPC additionally checks the live provider session, active membership and revocations.
-      try { return await rpc<AccessUser>('eco_current_user'); }
+      try {
+        const member = await rpc<AccessUser>('eco_current_user');
+        if (member.capabilities?.testWorkspace && !config.localStaging) {
+          return { ...member, capabilities: { ...member.capabilities, testWorkspace: false } };
+        }
+        return member;
+      }
       catch (error) { if (error instanceof ApiError && error.status === 401) return null; throw error; }
     },
     async consumeLoginAttempt(email) {

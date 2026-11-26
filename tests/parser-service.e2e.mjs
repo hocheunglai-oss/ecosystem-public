@@ -1,3 +1,4 @@
+import { activateTestWorkspace } from './fixtures/test-workspace.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -50,7 +51,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
     const shot=name=>page.screenshot({path:resolve(out,`${engine}-${width}-${theme}-${name}.png`),animations:'disabled',fullPage:true,timeout:30000});
     try{
       await page.goto(base,{waitUntil:'domcontentloaded'});
-      const testButton=page.locator('.home-display-controls').getByRole('button',{name:'Test data',exact:true});await expect(testButton).toBeEnabled();await testButton.click();await expect(testButton).toHaveAttribute('aria-pressed','true');
+      await activateTestWorkspace(page);
       const dialog=await openEnquiry(page);
       await expect(dialog.getByRole('button',{name:'CHECK IMO',exact:true})).toBeDisabled();
       await dialog.getByLabel('Raw enquiry',{exact:true}).fill('VESSEL: CAUTION TEST\nIMO: 9074729\nPORT: SINGAPORE\nETA: 20 OCT 2026\nRMK: 300 MT\nVLSFO: 500 MT 120 CST MAX / 180 CST MAX\nLSMGO: 40 CBM');

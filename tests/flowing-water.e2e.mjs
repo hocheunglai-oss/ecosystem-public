@@ -723,15 +723,18 @@ async function verifyNightContrast(page) {
     contrasts.push(contrast);
   };
   const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();
+  const deferred = page.locator('.world-launcher .launcher-group--deferred');
   const footer = await page.locator('.home-display-controls button:visible:not(.ecosystem-feedback)').all();
-  assert.equal(navigation.length, 2, 'Both secondary entry actions are checked');
+  assert.equal(navigation.length, Object.keys(groups).length - 1, 'All available secondary entry actions are checked');
   assert.ok(footer.length >= 2, 'Ordinary theme and account-view footer controls are checked');
   for (const action of [...navigation, ...footer]) {
     await page.mouse.move(0, 0); await inspect(action, 'normal');
     await action.hover(); await inspect(action, 'hover');
   }
   await page.mouse.move(0, 0);
-  assert.equal(contrasts.length, 3 + 2 * (navigation.length + footer.length), 'Unboxed labels and normal/hover entry and footer actions all retain readable contrast');
+  await inspect(deferred.getByRole('heading', { name: 'Buyers and Credit', exact: true }), 'normal');
+  await inspect(deferred.locator('.launcher-release-remark'), 'normal');
+  assert.equal(contrasts.length, 5 + 2 * (navigation.length + footer.length), 'Unboxed labels, the Stage 2 heading and notice, and normal/hover controls retain readable contrast');
   return Math.min(...contrasts);
 }
 async function verifyHiddenPause(page, background, waterImage) {

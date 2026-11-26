@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommercialEnquiry, CommercialEnquiryScope, CommercialEnquirySummary } from '../shared/commercialEnquiries';
 import { commercialEnquiryApi } from './lib/commercialEnquiryApi';
 
-export function useCommercialEnquiries(owner: string, enabled: boolean) {
-  const [scope, setScope] = useState<CommercialEnquiryScope>('mine');
+export function useCommercialEnquiries(owner: string, enabled: boolean, scope: CommercialEnquiryScope = 'workbench') {
   const [rows, setRows] = useState<CommercialEnquirySummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,8 +50,13 @@ export function useCommercialEnquiries(owner: string, enabled: boolean) {
   function accept(item: CommercialEnquiry) {
     if (!active.current.enabled || item.ownerId !== active.current.owner) return;
     if (active.current.scope === 'singapore' && !item.queue) return;
-    setRows(current => [item, ...current.filter(row => row.id !== item.id)]);
+    setRows(current => {
+      if (current.some(row => row.id === item.id && row.revision > item.revision)) return current;
+      const rows = current.filter(row => row.id !== item.id);
+      const active = item.outcome !== 'lost' && item.outcome !== 'cancelled';
+      return (scope === 'lost' ? item.outcome === 'lost' : active) ? [item, ...rows] : rows;
+    });
   }
-  return { scope, setScope, rows: enabled ? rows : [], cursor: enabled ? cursor : null, busy, error,
+  return { rows: enabled ? rows : [], cursor: enabled ? cursor : null, busy, error,
     reload: () => load(), more: () => cursor ? load(cursor) : Promise.resolve(), accept };
 }

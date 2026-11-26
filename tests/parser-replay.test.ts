@@ -13,7 +13,7 @@ const rawText = 'Vessel: SYNTHETIC REPLAY\nIMO: 9319466\nBuyer: ALPHA SHIPPING\n
 const expected: ParserReplaySnapshot = {
   fields: { vessel: 'SYNTHETIC REPLAY', imo: '9319466', buyerText: 'ALPHA SHIPPING', portText: 'singapore', eta: '15 - 17 oct 2026', hsfo: '', vlsfo: '450', lsmgo: '', remarks: '' },
   rmk: false, viscosity: [], warnings: [],
-  standardText: 'SYNTHETIC REPLAY (9319466) / SG / 15 - 17 OCT 2026 / 450 MT VLSFO (0.5%)',
+  standardText: 'SYNTHETIC REPLAY (9319466) / SG 15-17 OCT 2026 / VLSFO 450 MT',
 };
 const input: ParserReplayInput = {
   rawText, expected, captureComplete: true,

@@ -199,7 +199,7 @@ html { background: var(--ui-canvas); }
   p, .knowledge-prose, .buyer-profile__remark-text, .buyer-competition-entry p, .users-access-list strong
 ) { font-size: var(--ui-text-body); line-height: 1.5; }
 #root :is(.workspace-window, .modal, .workspace-module, .access-login) :is(
-  .field, .field > span, form > label, .check-label, .access-checkbox, dt, .center-field-heading,
+  .field, .field > span, form > label, .check-label, .access-checkbox, dt,
   .center-format-heading > label, .section-label
 ) { font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); line-height: 1.5; }
 #root :is(.workspace-window, .modal, .workspace-module) :is(
@@ -217,7 +217,7 @@ html { background: var(--ui-canvas); }
   .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
   .knowledge-editor-actions > button, .knowledge-sheet-toolbar > button,
   .knowledge-pagination > button, .knowledge-related > button, .table-controls > button,
-  .center-lifecycle > button, .enquiry-terms > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
+  .center-lifecycle > button, .enquiry-terms > button, .buyer-history-link, .credit-action, .credit-record-actions > button,
   .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
   .supplier-information-actions > button, .location-recents button, .supplier-recents button
 ) {
@@ -251,7 +251,7 @@ html { background: var(--ui-canvas); }
   .knowledge-tools > button, .knowledge-inline-tools > button, .knowledge-editor-topbar > button, .knowledge-editor-additions > button,
   .knowledge-editor-actions > button, .knowledge-sheet-toolbar > button,
   .knowledge-pagination > button, .knowledge-related > button, .table-controls > button,
-  .center-lifecycle > button, .enquiry-terms > button, .parser-clear, .buyer-history-link, .credit-action, .credit-record-actions > button,
+  .center-lifecycle > button, .enquiry-terms > button, .buyer-history-link, .credit-action, .credit-record-actions > button,
   .supplier-directory-filters > button, .supplier-profile-toolbar > button, .supplier-origin,
   .supplier-information-actions > button, .location-recents button, .supplier-recents button
 ):hover:not(:disabled) { background: var(--ui-control-hover); border-color: var(--ui-focus); box-shadow: none; filter: none; }

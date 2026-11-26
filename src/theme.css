@@ -60,7 +60,7 @@
   color: var(--theme-ink);
 }
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
-  .field, .field > span, .check-label, .center-field-heading, .center-format-heading > label,
+  .field, .field > span, .check-label, .center-format-heading > label,
   .center-incoming h3, .center-context-panel > header > strong, .detail-list dt,
   .center-credit-numbers span, .center-history-compact, .outcome-checks
 ) { color: var(--theme-muted); }
@@ -118,7 +118,7 @@
 
 /* Ordinary actions and selection use neutral surfaces, separate from contributions. */
 :root[data-theme="dark"] :is(.workspace-window, .modal) :is(
-  .button.secondary, .parser-clear, .center-lifecycle button, .enquiry-terms button,
+  .button.secondary, .center-lifecycle button, .enquiry-terms button,
   .lost-reason-row > button, .segmented, .knowledge-strip .button
 ) {
   color: var(--theme-ink);

@@ -126,12 +126,12 @@ await scenario('Right credit indicator is compact and Clear is inside a taller p
   const parser = await dialog.getByLabel('Raw enquiry', { exact: true }).boundingBox();
   const credit = await indicator.boundingBox();
   const standard = await dialog.getByLabel('Standard format', { exact: true }).boundingBox();
-  const clear = await dialog.getByRole('button', { name: 'Clear parser', exact: true }).boundingBox();
+  const clear = await dialog.getByRole('button', { name: 'CLEAR', exact: true }).boundingBox();
   assert.ok(credit.x > parser.x + parser.width, 'Credit and incoming belong to the right sidebar');
   assert.ok(parser.height >= 300, `Parser too short: ${parser.height}`);
   assert.ok(standard.height >= 65 && standard.height <= 105, `Expected three-line standard field, got ${standard.height}`);
-  assert.ok(clear.x >= parser.x && clear.x + clear.width <= parser.x + parser.width + 1 && clear.y >= parser.y && clear.y + clear.height <= parser.y + parser.height + 1);
-  await dialog.getByRole('button', { name: 'Clear parser', exact: true }).click();
+  assert.ok(clear.x >= parser.x && clear.x + clear.width <= parser.x + parser.width + 1 && clear.y + clear.height <= parser.y);
+  await dialog.getByRole('button', { name: 'CLEAR', exact: true }).click();
   await expect(dialog.getByLabel('Raw enquiry', { exact: true })).toHaveValue('');
   await expect(dialog.getByLabel('Vessel', { exact: true })).toHaveValue('');
   await expect(dialog.getByLabel('Standard format', { exact: true })).toHaveValue('');

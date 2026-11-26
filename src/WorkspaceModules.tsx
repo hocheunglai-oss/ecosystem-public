@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import EnquiryPage from "./EnquiryPage";
 import RecordsPage from "./RecordsPage";
+import { LiveLostRecords } from "./LiveLostRecords";
+import { useTestWorkspace } from "./TestWorkspace";
 import FixtureHistory from "./FixtureHistory";
 import { BuyerProfileDirectory } from "./BuyerProfile";
 import LostReasonSettings from "./LostReasonSettings";
@@ -59,6 +61,7 @@ const includes = (query: string, ...values: (string | undefined)[]) =>
 
 export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPending }: Props) {
   const buyerCreditAvailable = useBuyerCreditAvailable();
+  const { dataMode } = useTestWorkspace();
   if (isBuyerCreditWorkspace(id) && !buyerCreditAvailable) return <ReleaseNotice />;
   let content;
   switch (id) {
@@ -69,7 +72,7 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
       content = <FixtureHistory open={open} />;
       break;
     case "lost":
-      content = <RecordsPage open={open} kind="lost" />;
+      content = dataMode === "live" ? <LiveLostRecords onOpen={onOpen} /> : <RecordsPage open={open} kind="lost" />;
       break;
     case "ports":
       content = <LocationWorkspace open={open} onOpen={onOpen} context={context} />;

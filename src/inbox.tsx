@@ -25,8 +25,8 @@ export const INBOX_STORAGE_KEY = "ecosystem.inbox.v2";
 export const WHATSAPP_BUSINESS_DESTINATION = "+85298472818";
 export type InboxChannel = "whatsapp" | "email";
 
-// The optional relation is browser navigation only, never a server-verified enquiry.
-export interface IncomingEnquiry extends Omit<SharedIncomingEnquiry, 'dismissed'> { dismissed?: boolean; enquiryId?: string }
+// TEST links are local. LIVE links come from the server.
+export interface IncomingEnquiry extends Omit<SharedIncomingEnquiry, 'dismissed'> { dismissed?: boolean }
 
 // Synthetic mappings are defaults only; current profiles drive new arrivals.
 export const demoContacts = contactsFor({});

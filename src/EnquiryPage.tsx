@@ -12,7 +12,8 @@ import { commercialEnquiryApi } from './lib/commercialEnquiryApi';
 import { useCommercialEnquiries } from './useCommercialEnquiries';
 import { FixtureHandoff, PendingFixtureCancellation } from './FixtureDialogs';
 import type { FixtureAssignment } from '../shared/fixtureWorkflow';
-import type { CommercialEnquiry, CommercialEnquiryMutation, CommercialEnquirySummary } from '../shared/commercialEnquiries';
+import { EnquiryDecisionDialog } from './EnquiryDecisionDialog';
+import type { CommercialEnquiry, CommercialEnquiryDecision, CommercialEnquiryMutation, CommercialEnquirySummary } from '../shared/commercialEnquiries';
 import { supplierPortForLocation } from '../shared/supplierPorts';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Flag, Check, ArrowUpRight } from "lucide-react";
@@ -37,6 +38,7 @@ import {
   formatEnquiry,
   parseEnquiry,
   productsFromFields,
+  reviewEnquiryEta,
   stripCommercialDetails,
   type ParsedEnquiry,
 } from "./lib/parser";
@@ -54,7 +56,9 @@ const tabLabels: Record<Tab, string> = {
   Intelligence: "Ports & Suppliers",
   Credit: "Buyers and Credit",
 };
-type Selection = { kind: "new" | "incoming" | "record"; id: string };
+type EnquiryEdit = 'amend' | 'reoffer';
+type Selection = { kind: "new" | "incoming" | "record"; id: string; edit?: EnquiryEdit };
+type PendingEnquiryWrite = { input: CommercialEnquiryMutation; version: number };
 type Draft = {
   raw: string;
   parsedRaw: string;
@@ -68,8 +72,10 @@ type Draft = {
   parseOrigin?: 'initial' | 'reparsed';
   aiRequest?: CapturedAiAttempt;
   shared?: CommercialEnquiry;
-  sharedId?: string;
-  pendingSave?: { body: string; input: CommercialEnquiryMutation };
+  pendingSave?: PendingEnquiryWrite;
+  editVersion?: number;
+  savedVersion?: number;
+  source?: CommercialEnquiry['source'];
 };
 const blank = (): ParsedEnquiry => ({
   vessel: "",
@@ -116,11 +122,12 @@ export default function EnquiryPage({ open, onOpen, context }: { open: OpenModal
 
 function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: OpenWorkspace; context?: WorkspaceNavigationContext }) {
   const { state, actor, run } = useDemo();
-  const { user, realUser, preview } = useAccess();
+  const { realUser, preview } = useAccess();
   const { dataMode } = useTestWorkspace();
   const live = dataMode === 'live';
   const liveEnabled = live && !preview && Boolean(realUser?.isActive && realUser.activated);
   const commercial = useCommercialEnquiries(actor.id, liveEnabled);
+  const [decision, setDecision] = useState<{ enquiry: CommercialEnquirySummary; action: CommercialEnquiryDecision['action'] }>();
   const [handoff, setHandoff] = useState<CommercialEnquirySummary>();
   const [pendingCancellation, setPendingCancellation] = useState<{ enquiry: CommercialEnquirySummary; fixture: FixtureAssignment }>();
   const [assignments, setAssignments] = useState<Record<string, FixtureAssignment>>({});
@@ -141,6 +148,8 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   const [epoch, setEpoch] = useState(0);
   const [, refreshDrafts] = useState(0);
   const drafts = useRef(new Map<string, Draft>());
+  const flushDraft = useRef<(() => Promise<boolean>) | null>(null);
+  const selectionPending = useRef(false);
   const key = `${selection.kind}:${selection.id}`;
   const incoming =
     selection.kind === "incoming"
@@ -159,7 +168,7 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   ) : [];
   const unlinked = items.filter(
     (item) =>
-      (!unreadOnly || (!item.dismissed && !item.read) || selection.kind === 'incoming' && item.id === selection.id) && !linked[item.id] && !(live ? [] : state.enquiries).some(
+      (!unreadOnly || (!item.dismissed && !item.read) || selection.kind === 'incoming' && item.id === selection.id) && !linked[item.id] && !(live && item.enquiryId) && !(live ? [] : state.enquiries).some(
         (enquiry) =>
           enquiry.id === item.enquiryId && enquiry.owner === actor.id,
       ),
@@ -179,17 +188,16 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
       if (item?.source.inboxId) setLinked(current => ({ ...current, [item.source.inboxId!]: item.id }));
     }).catch(error => { if (!controller.signal.aborted) setDetailError(error instanceof Error ? error.message : 'Enquiry is unavailable.'); });
     return () => controller.abort();
-  }, [actor.id, key, needsDetail, detailReload]);
+  }, [actor.id, key, selection.edit, needsDetail, detailReload]);
   useEffect(() => {
-    if (selected) {
-      setSelection({ kind: "incoming", id: selected.id });
-      setTab("Enquiry");
+    if (selected && (selection.kind !== 'incoming' || selection.id !== selected.id)) {
+      void navigate({ kind: 'incoming', id: selected.id });
     }
   }, [selected?.id]);
   useEffect(() => {
     setUnreadOnly(Boolean(context?.unreadOnly));
     if (context?.enquiryId && (liveEnabled || state.enquiries.some(item => item.id === context.enquiryId && item.owner === actor.id))) {
-      clearSelection(); setSelection({ kind: 'record', id: context.enquiryId }); setTab('Enquiry');
+      void navigate({ kind: 'record', id: context.enquiryId });
     }
   }, [context, actor.id]);
   const remember = useCallback(
@@ -202,17 +210,19 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   );
   function initial(): Draft {
     const cached = drafts.current.get(key);
-    if (cached) return cached;
     const shared = live && remote?.key === key ? remote.item : null;
+    if (cached && (!shared || cached.shared?.revision === shared.revision || cached.pendingSave || cached.editVersion !== cached.savedVersion) && !selection.edit) return cached;
     if (shared) {
-      const fields = parseEnquiry(shared.source.rawText, [], state.ports);
-      const reparsed = captureParserSnapshot(shared.source.rawText, fields, [], state.ports);
+      const workingText = shared.workingText ?? shared.source.rawText;
+      const fields = parseEnquiry(workingText, [], state.ports);
+      const reparsed = captureParserSnapshot(workingText, fields, [], state.ports);
       Object.assign(fields, { vessel: shared.reviewed.vessel, imo: shared.reviewed.imo, buyerId: '',
         buyerText: shared.reviewed.buyerText ?? '', portId: shared.reviewed.portId ?? '', eta: shared.reviewed.eta,
         hsfo: '', vlsfo: '', lsmgo: '', remarks: shared.reviewed.remarks, warnings: shared.reviewed.warnings });
       for (const product of shared.reviewed.products) fields[product.grade.toLowerCase() as 'hsfo' | 'vlsfo' | 'lsmgo'] = product.quantityText;
-      return { ...empty(), raw: shared.source.rawText, parsedRaw: shared.source.rawText, fields,
-        savedId: shared.id, shared, preview: shared.reviewed.formattedText, rmk: shared.reviewed.rmk,
+      return { ...empty(), raw: workingText, parsedRaw: workingText, fields,
+        savedId: shared.id, shared, rmk: shared.reviewed.rmk,
+        preview: shared.status === 'draft' && shared.workingText !== undefined ? shared.reviewed.formattedText : null,
         viscosity: shared.reviewed.viscosity, original: reparsed,
         originalRevision: crypto.randomUUID(), parseOrigin: 'reparsed' };
     }
@@ -251,6 +261,7 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
       raw,
       parsedRaw: raw,
       original,
+      ...(incoming && live ? { source: { rawText: incoming.rawText, parsed: original, parserVersion: PARSER_VERSION, inboxId: incoming.id } } : {}),
       originalRevision: crypto.randomUUID(),
       parseOrigin: saved ? 'reparsed' : 'initial',
       fields,
@@ -264,19 +275,28 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   }
   const creditLimit = buyer ? effectiveCreditLimit(buyer) : 0;
   const creditAvailable = buyer ? availableCredit(buyer) : 0;
-  function clearParser() {
-    drafts.current.delete(key);
-    clearSelection();
-    setSelection({ kind: "new", id: uid("draft") });
-    setTab("Enquiry");
+  async function navigate(next: Selection) {
+    if (selectionPending.current) return;
+    selectionPending.current = true;
+    try {
+      if (flushDraft.current && !await flushDraft.current()) return;
+      if (next.kind === 'incoming') select(next.id);
+      else clearSelection();
+      setSelection(next);
+      setTab('Enquiry');
+    } finally {
+      selectionPending.current = false;
+    }
   }
-  function chooseRecord(id: string) {
-    clearSelection();
-    setSelection({ kind: "record", id });
-    setTab("Enquiry");
+  function chooseRecord(id: string, edit?: EnquiryEdit) {
+    void navigate({ kind: 'record', id, edit });
+  }
+  function newEnquiry() {
+    void navigate({ kind: 'new', id: uid('draft') });
   }
   function sharedSaved(item: CommercialEnquiry) {
     commercial.accept(item);
+    setRemote(current => current?.item?.id === item.id ? { ...current, item } : current);
     if (item.source.inboxId) setLinked(current => ({ ...current, [item.source.inboxId!]: item.id }));
   }
   function reloadRecord(id?: string) {
@@ -289,27 +309,59 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
     const own = item.ownerId === actor.id;
     const assigned = assignments[item.id];
     const fixture = assigned && assigned.revision > (item.fixture?.revision ?? 0) ? assigned : item.fixture;
-    const canManage = own && liveEnabled && commercial.scope === 'mine' && item.status === 'confirmed' && item.port?.countryCode === 'SG';
-    const canAssign = canManage && (!fixture || fixture.status === 'pending');
-    const canCancel = canManage && fixture && !fixture.confirmed && (fixture.status === 'pending' || fixture.status === 'cancelled');
-    return <article key={item.id} className={`center-incoming-row${selection.kind === 'record' && selection.id === item.id ? ' is-selected' : ''}`} data-commercial-id={item.id}>
-      {own ? <button className="center-incoming-open" aria-label={`Open ${item.vessel || item.reference}`} onClick={() => chooseRecord(item.id)}>
-        <span><strong>{item.vessel || item.reference}</strong><br />
-          <span>{item.reference} · {item.port?.portName || '—'}</span><br />
-          <span>{fixture ? `${fixture.status} · ${fixture.supplierTrader}` : item.queue ? deliveryLabel(item.queue) : item.status} · {date(item.updatedAt)}</span></span>
-      </button> : <div className="center-incoming-open">
-        <span><strong>{item.vessel || item.reference}</strong><br />
-          <span>{item.reference} · {item.ownerName}</span><br />
-          <span>{item.products.map(product => `${product.grade} ${product.quantityText}${/\b(?:MTS?|metric tonnes?)\b/i.test(product.quantityText) ? '' : ' MT'}`).join(' / ')}</span><br />
-          <span>{item.eta}{item.queue && ` · ${deliveryLabel(item.queue)}`}</span></span>
-      </div>}
-      {(canAssign || canCancel) && <div className="center-lifecycle">
+    const canManage = own && liveEnabled;
+    const singapore = item.status === 'confirmed' && item.port?.countryCode === 'SG';
+    const open = !item.outcome;
+    const sending = item.queue?.delivery === 'sending';
+    const canAssign = canManage && singapore && open && !sending && (!fixture || fixture.status === 'pending');
+    const canCancelStem = canManage && singapore && open && fixture && !fixture.confirmed && (fixture.status === 'pending' || fixture.status === 'cancelled');
+    const canDecide = canManage && !fixture && !sending && (item.status === 'draft' || singapore);
+    const canAmend = canDecide && singapore && item.queue?.delivery !== 'manual_review';
+    const label = fixture ? fixture.status + ' · ' + fixture.supplierTrader
+      : item.outcome || (item.queue ? deliveryLabel(item.queue) : item.status);
+    const name = item.vessel || 'Enquiry';
+    const context = own ? item.port?.portName : [item.ownerName, ...item.products.map(({ grade, quantityText }) =>
+      grade + ' ' + quantityText + (/\b(?:MTS?|metric tonnes?)\b/i.test(quantityText) ? '' : ' MT'))].join(' · ');
+    const summary = <span><strong>{name}</strong><br />
+      {context && <>{context}<br /></>}
+      {own ? label + ' · ' + date(item.updatedAt) : item.eta + ' · ' + label}
+    </span>;
+    return <article key={item.id} className={'center-incoming-row' + (selection.id === item.id || drafts.current.get(key)?.savedId === item.id ? ' is-selected' : '')} data-commercial-id={item.id}>
+      {own ? <button className="center-incoming-open" aria-label={'Open ' + name} onClick={() => chooseRecord(item.id)}>{summary}</button>
+        : <div className="center-incoming-open">{summary}</div>}
+      {(canAssign || canCancelStem || canDecide) && <div className="center-lifecycle" aria-label={name + ' actions'}>
+        {canAmend && open && <button type="button" onClick={() => chooseRecord(item.id, 'amend')}>AMEND</button>}
         {canAssign && <button type="button" onClick={() => setHandoff({ ...item, fixture })}>{fixture ? 'EDIT' : 'STEM'}</button>}
-        {canCancel && <button type="button" onClick={() => setPendingCancellation({ enquiry: item, fixture })}>
+        {canDecide && singapore && open && <>
+          <button type="button" onClick={() => void openDecision(item, 'lost')}>LOST</button>
+          <button type="button" onClick={() => void openDecision(item, 'postpone')}>POSTPONE</button>
+        </>}
+        {canAmend && item.outcome === 'postponed' && <button type="button" onClick={() => chooseRecord(item.id, 'reoffer')}>REOFFER</button>}
+        {canDecide && <button type="button" onClick={() => void openDecision(item, 'cancel')}>CANCEL</button>}
+        {canCancelStem && <button type="button" onClick={() => setPendingCancellation({ enquiry: item, fixture })}>
           {fixture.status === 'cancelled' ? 'REINSTATE' : 'CANCEL STEM'}
         </button>}
       </div>}
     </article>;
+  }
+  async function openDecision(item: CommercialEnquirySummary, action: CommercialEnquiryDecision['action']) {
+    const active = drafts.current.get(key);
+    if (active?.savedId === item.id && flushDraft.current && !await flushDraft.current()) return;
+    const latest = drafts.current.get(key)?.shared;
+    setDecision({ enquiry: latest?.id === item.id && latest.revision >= item.revision ? latest : item, action });
+  }
+  function finishDecision(item: CommercialEnquiry) {
+    setDecision(undefined);
+    sharedSaved(item);
+    const selected = recordId === item.id || drafts.current.get(key)?.savedId === item.id;
+    for (const [savedKey, value] of drafts.current)
+      if (value.savedId === item.id) drafts.current.delete(savedKey);
+    if (selected) {
+      clearSelection();
+      setSelection({ kind: 'record', id: item.id });
+      setRemote({ key: 'record:' + item.id, item });
+      setEpoch(value => value + 1);
+    }
   }
   function amend(enquiry: Enquiry) {
     if (
@@ -360,6 +412,8 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
   }
   return (
     <div className={`enquiry-center${tab === "Intelligence" ? " enquiry-center-intelligence" : ""}`}>
+      {decision && <EnquiryDecisionDialog enquiry={decision.enquiry} action={decision.action}
+        onClose={() => setDecision(undefined)} onSaved={finishDecision} />}
       {handoff && <FixtureHandoff enquiry={handoff} onClose={() => setHandoff(undefined)} onSaved={fixture => {
         setAssignments(current => ({ ...current, [handoff.id]: fixture }));
         setHandoff(undefined);
@@ -388,41 +442,38 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
           ))}
         </div>
         {detailLoading ? <p role="status">Loading enquiry…</p> : detailError ? <div role="alert"><p>{detailError}</p><button className="button secondary" onClick={() => reloadRecord()}>Retry</button></div> : <Composer
-          key={`${key}:${epoch}`}
+          key={[key, epoch, selection.edit ?? 'view'].join(':')}
           initial={initial()}
           incoming={incoming}
           tab={tab}
           open={open}
           onOpen={onOpen}
           onChange={remember}
-          onClear={clearParser}
+          onNew={newEnquiry}
+          editMode={selection.edit}
+          flushDraft={flushDraft}
+          onDecision={openDecision}
           onSaved={sharedSaved}
           onReload={reloadRecord}
         />}
       </div>
       <aside className="center-sidebar" hidden={tab === "Intelligence"}>
-        <section className="center-credit-indicator" aria-label="Client credit" hidden={!buyerCreditAvailable && tab === "Credit"}>
-          {buyerCreditAvailable ? <><strong className="center-client-name">
-            {buyer?.name.toUpperCase() || "—"}
-          </strong>
-          <CreditUsage enquiry limit={creditLimit} used={buyer?.exposure ?? 0} available={creditAvailable} known={Boolean(buyer)} /></> : <ReleaseNotice compact />}
-        </section>
+        {buyerCreditAvailable && buyer && <section className="center-credit-indicator" aria-label="Client credit">
+          <strong className="center-client-name">{buyer.name.toUpperCase()}</strong>
+          <CreditUsage enquiry limit={creditLimit} used={buyer.exposure} available={creditAvailable} />
+        </section>}
         <section className="center-incoming" aria-label="Incoming Enquiries">
           <header>
-            <h3>{commercial.scope === 'singapore' && live ? 'Singapore queue' : 'Incoming Enquiries'}</h3>
+            <h3>Incoming enquiries</h3>
           </header>
-          {live && (user?.isAdmin || user?.isSpcTrader) && <div className="enquiry-terms" aria-label="Enquiry lists">
-            <button type="button" aria-pressed={commercial.scope === 'mine'} disabled={Boolean(preview)} onClick={() => commercial.setScope('mine')}>My enquiries</button>
-            <button type="button" aria-pressed={commercial.scope === 'singapore'} disabled={Boolean(preview)} onClick={() => commercial.setScope('singapore')}>Singapore queue</button>
-          </div>}
-          {live && <div aria-busy={commercial.busy}>
+          {live && !unreadOnly && <div aria-busy={commercial.busy}>
             {commercial.error && <div role="alert"><p>{commercial.error}</p><button className="button secondary" onClick={() => void commercial.reload()}>Retry</button></div>}
             {commercial.busy && <p role="status">Loading enquiries…</p>}
             {commercial.rows.map(sharedRow)}
             {commercial.cursor && <button className="button secondary" disabled={commercial.busy} onClick={() => void commercial.more()}>Load more</button>}
           </div>}
           {unreadOnly && <div className="enquiry-unread-filter"><span>Unread</span><button className="text-button" onClick={() => setUnreadOnly(false)}>Show all</button></div>}
-          <div className="center-incoming-list" hidden={live && commercial.scope === 'singapore'}>
+          <div className="center-incoming-list">
             {unreadOnly && !unlinked.length && <p className="enquiry-unread-filter">No unread enquiries</p>}
             <div className="center-queue-new" aria-label="Incoming enquiries">
               {[...drafts.current.entries()]
@@ -441,11 +492,7 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
                     <button
                       className="center-incoming-open"
                       aria-label={`Open ${draft.fields.vessel || "New enquiry"}`}
-                      onClick={() => {
-                        clearSelection();
-                        setSelection({ kind: "new", id: draftKey.slice(4) });
-                        setTab("Enquiry");
-                      }}
+                      onClick={() => void navigate({ kind: 'new', id: draftKey.slice(4) })}
                     >
                       <strong>{draft.fields.vessel || "New enquiry"}</strong>
                       <span>
@@ -471,11 +518,7 @@ function EnquiryWorkspace({ open, onOpen, context }: { open: OpenModal; onOpen: 
                   <button
                     className="center-incoming-open"
                     aria-label={`Open ${incomingVessel(item)}`}
-                    onClick={() => {
-                      select(item.id);
-                      setSelection({ kind: "incoming", id: item.id });
-                      setTab("Enquiry");
-                    }}
+                    onClick={() => void navigate({ kind: 'incoming', id: item.id })}
                   >
                     <strong>{incomingVessel(item)}</strong>
                     <span>{incomingBuyer(item)}</span>
@@ -562,7 +605,10 @@ function Composer({
   open,
   onOpen,
   onChange,
-  onClear,
+  onNew,
+  editMode,
+  flushDraft,
+  onDecision,
   onSaved,
   onReload,
 }: {
@@ -572,7 +618,10 @@ function Composer({
   open: OpenModal;
   onOpen: OpenWorkspace;
   onChange: (draft: Draft) => void;
-  onClear: () => void;
+  onNew: () => void;
+  editMode?: EnquiryEdit;
+  flushDraft: { current: (() => Promise<boolean>) | null };
+  onDecision: (enquiry: CommercialEnquirySummary, action: CommercialEnquiryDecision['action']) => Promise<void>;
   onSaved: (item: CommercialEnquiry) => void;
   onReload: (id?: string) => void;
 }) {
@@ -583,13 +632,21 @@ function Composer({
   const revision = useRef({ value: "", id: crypto.randomUUID() });
   const buyerCreditAvailable = useBuyerCreditAvailable();
   const { markLinked } = useInbox();
-  const [draft, setDraft] = useState(initial);
+  const [draft, renderDraft] = useState(initial);
+  const currentDraft = useRef(initial);
+  const setDraft = useCallback((next: Draft | ((current: Draft) => Draft)) => {
+    const updated = typeof next === 'function' ? next(currentDraft.current) : next;
+    currentDraft.current = updated;
+    renderDraft(updated);
+  }, []);
+  const [operation, setOperation] = useState(editMode);
+  const [sending, setSending] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveConflict, setSaveConflict] = useState(false);
   const [reloadPrompt, setReloadPrompt] = useState(false);
-  const saveRequest = useRef<{ body: string; input: CommercialEnquiryMutation } | null>(initial.pendingSave ?? null);
-  const newId = useRef(initial.sharedId ?? crypto.randomUUID());
+  const writeInFlight = useRef<Promise<boolean> | null>(null);
+  const [newId] = useState(() => initial.pendingSave?.input.id ?? crypto.randomUUID());
   const saveEpoch = useRef(0);
   const saveController = useRef<AbortController | null>(null);
   useEffect(() => () => { saveEpoch.current++; saveController.current?.abort(); }, []);
@@ -610,35 +667,26 @@ function Composer({
   useEffect(() => {
     onChange(draft);
   }, [draft, onChange]);
+  function reparse(current: Draft): Draft {
+    if (current.raw === current.parsedRaw) return current;
+    const { companies, ports } = directories.current;
+    const fields = current.raw.trim() ? parseEnquiry(current.raw, companies, ports) : blank();
+    return {
+      ...current, fields, parsedRaw: current.raw, preview: null, aiRequest: undefined,
+      original: captureParserSnapshot(current.raw, fields, companies, ports),
+      originalRevision: crypto.randomUUID(), parseOrigin: 'initial',
+      rmk: fields.rmk, viscosity: fields.vlsfoMaxRemarks,
+    };
+  }
+  function editDraft(change: (current: Draft) => Draft) {
+    if (!saveConflict && !currentDraft.current.pendingSave) setSaveError('');
+    setDraft(current => ({ ...change(current), editVersion: (current.editVersion ?? 0) + 1 }));
+  }
   useEffect(() => {
     if (raw === draft.parsedRaw) return;
-    const timer = window.setTimeout(() => {
-      const fields = raw.trim()
-        ? parseEnquiry(
-            raw,
-            directories.current.companies,
-            directories.current.ports,
-          )
-        : blank();
-      setDraft((current) =>
-        current.raw !== raw
-          ? current
-          : {
-              ...current,
-              fields,
-              parsedRaw: raw,
-              original: captureParserSnapshot(raw, fields, directories.current.companies, directories.current.ports),
-              originalRevision: crypto.randomUUID(),
-              parseOrigin: 'initial',
-              aiRequest: undefined,
-              preview: null,
-              rmk: fields.rmk,
-              viscosity: fields.vlsfoMaxRemarks,
-            },
-      );
-    }, 280);
+    const timer = window.setTimeout(() => setDraft(current => current.raw === raw ? reparse(current) : current), 280);
     return () => window.clearTimeout(timer);
-  }, [raw, draft.parsedRaw]);
+  }, [raw, draft.parsedRaw, setDraft]);
   const pending = raw !== draft.parsedRaw;
   const buyer = state.companies.find((item) => item.id === fields.buyerId);
   const port = state.ports.find((item) => item.id === fields.portId);
@@ -648,16 +696,27 @@ function Composer({
     (item) => item.id === savedId && item.owner === actor.id,
   ) : undefined;
   const shared = draft.shared;
-  const editable = !preview && canTrade(actor) && !saveBusy && (dataMode === 'live' ? !shared || shared.status === 'draft' : !saved || saved.status === "draft");
+  const finalWrite = draft.pendingSave && draft.pendingSave.input.action !== 'save';
+  const acceptsDraft = !preview && canTrade(actor) && !operation &&
+    (dataMode === 'live' ? !shared || shared.status === 'draft' && !shared.outcome : !saved || saved.status === 'draft');
+  const acceptsAmendment = !preview && canTrade(actor) && shared && (
+    operation === 'amend' && !shared.outcome || operation === 'reoffer' && shared.outcome === 'postponed');
+  const editable = !sending && !finalWrite && Boolean(acceptsDraft || acceptsAmendment);
   const canonicalPort = port ? supplierPortForLocation(port) : undefined;
   const singapore = dataMode === 'live' && canonicalPort?.countryCode === 'SG';
   const snapshot = (value: ParsedEnquiry): ParserFields => ({ vessel: value.vessel, imo: value.imo,
     buyerText: state.companies.find(item => item.id === value.buyerId)?.name || value.buyerText,
     portText: state.ports.find(item => item.id === value.portId)?.name || unmatchedPort,
     eta: value.eta, hsfo: value.hsfo, vlsfo: value.vlsfo, lsmgo: value.lsmgo, remarks: value.remarks });
-  const reviewWarnings = dataMode === 'live'
-    ? fields.warnings.filter(warning => warning !== 'Buyer is not matched. Select an entity or request a new customer.')
-    : fields.warnings;
+  const etaReview = reviewEnquiryEta(fields.eta);
+  const etaCaution = (warning: string) => /\bdelivery (?:date|window|month)\b/i.test(warning);
+  const reviewWarnings = [...new Set([
+    ...fields.warnings.filter(warning =>
+      (!etaReview.eta || !etaCaution(warning)) &&
+      (dataMode !== 'live' || warning !== 'Buyer is not matched. Select an entity or request a new customer.')),
+    ...etaReview.warnings,
+  ])];
+  const etaWarning = reviewWarnings.find(etaCaution);
   const currentSnapshot = snapshot(fields);
   const fingerprint = JSON.stringify([raw, currentSnapshot, draft.preview, rmk, viscosity, dataMode, generation]);
   if (revision.current.value !== fingerprint) revision.current = { value: fingerprint, id: crypto.randomUUID() };
@@ -665,16 +724,23 @@ function Composer({
   const products = productsFromFields(fields);
   const peers = dataMode === 'test' ? activeAccountTraders(state, fields.buyerId, actor.id, savedId) : [];
   const history = dataMode === 'test' ? enquiryImoHistory(state, fields.imo, savedId) : { wins: [], losses: [] };
-  const generated = raw.trim()
-    ? formatEnquiry({
-        ...fields,
-        products,
-        buyerName: buyer?.name || fields.buyerText,
-        portName: port?.name || unmatchedPort,
-        vlsfoMaxRemarks: viscosity,
-        rmk,
-      })
-    : "";
+  function hasContent(input: Draft) {
+    const { fields, raw, preview } = input;
+    return input.rmk || input.viscosity.length > 0 || [
+      raw, preview, fields.vessel, fields.imo, fields.buyerText, fields.buyerId, fields.portId, fields.eta,
+      fields.remarks, fields.hsfo, fields.vlsfo, fields.lsmgo,
+    ].some(value => value?.trim());
+  }
+  function standard(input: Draft) {
+    if (!hasContent(input)) return '';
+    const { fields } = input;
+    const place = directories.current.ports.find(item => item.id === fields.portId);
+    return formatEnquiry({
+      ...fields, products: productsFromFields(fields), buyerName: fields.buyerText, portName: place?.name || input.original?.fields.portText || '',
+      rmk: input.rmk, vlsfoMaxRemarks: input.viscosity,
+    });
+  }
+  const generated = standard(draft);
   const formatted = draft.preview ?? generated;
   const previewMismatch =
     editable &&
@@ -698,11 +764,14 @@ function Composer({
   const complete = Boolean(
     editable &&
       !pending &&
+      !saveBusy &&
+      !saveError &&
       !previewMismatch &&
+      (!operation || singapore) &&
       (dataMode === 'live' || buyer) &&
       (dataMode === 'live' ? canonicalPort : port) &&
       fields.vessel.trim() &&
-      fields.eta.trim() &&
+      etaReview.eta &&
       products.length &&
       products.every((product) => parseProductQuantity(product.quantityText)) &&
       stripCommercialDetails(formatted).trim(),
@@ -713,7 +782,7 @@ function Composer({
   ) {
     const protectedKey = key === 'buyerId' ? 'buyerText' : key === 'portId' ? 'portText' : key;
     if (parserFieldKeys.includes(protectedKey as ParserField)) manualFields.current.add(protectedKey as ParserField);
-    setDraft((current) => ({
+    editDraft((current) => ({
       ...current,
       fields: { ...current.fields, [key]: value },
       preview: null,
@@ -729,77 +798,139 @@ function Composer({
       ).join(" / "),
     );
   }
-  async function saveShared(action: 'save' | 'confirm') {
-    if (dataMode !== 'live' || !editable || pending || aiBusy || saveBusy || !raw.trim() || action === 'confirm' && !complete) return;
+  function write(pendingWrite: PendingEnquiryWrite): Promise<boolean> {
+    if (writeInFlight.current) return writeInFlight.current;
+    const { input, version } = pendingWrite;
+    const final = input.action !== 'save';
     setSaveError(''); setSaveConflict(false);
-    const payload: Omit<CommercialEnquiryMutation, 'requestId'> = {
-      dataMode: 'live', id: shared?.id ?? newId.current, expectedRevision: shared?.revision ?? 0, action,
-      source: shared?.source ?? { rawText: raw, parsed: draft.original ?? null, parserVersion: PARSER_VERSION, inboxId: incoming?.id ?? null },
-      reviewed: { vessel: fields.vessel.trim(), imo: fields.imo.trim(), eta: fields.eta.trim(), portId: canonicalPort?.id ?? null,
-        buyerText: fields.buyerText.trim() || null, buyerId: null, products,
-        remarks: fields.remarks, rmk, viscosity: [...viscosity], formattedText: formatted, warnings: [...fields.warnings] },
-    };
-    const body = JSON.stringify(payload);
-    if (saveRequest.current?.body !== body) saveRequest.current = { body, input: { ...payload, requestId: crypto.randomUUID() } };
-    // Keep uncertain writes in this scope's in-memory draft when the composer is
-    // remounted by navigation. A retry must not create a second manual enquiry.
-    const pendingDraft = { ...draft, sharedId: newId.current, pendingSave: saveRequest.current };
-    setDraft(pendingDraft); onChange(pendingDraft);
-    const request = saveRequest.current.input;
+    setDraft(current => ({ ...current, pendingSave: pendingWrite }));
+    onChange(currentDraft.current);
     const epoch = ++saveEpoch.current;
-    const controller = new AbortController(); saveController.current = controller;
+    const controller = new AbortController();
+    saveController.current = controller;
     setSaveBusy(true);
-    try {
-      const result = await commercialEnquiryApi.mutate(actor.id, request, controller.signal);
-      if (epoch !== saveEpoch.current || controller.signal.aborted) return;
-      setDraft(current => ({ ...current, shared: result.item, sharedId: result.item.id, pendingSave: undefined, savedId: result.item.id, preview: result.item.reviewed.formattedText }));
-      saveRequest.current = null;
-      onSaved(result.item);
-      notify(result.item.queue ? `${deliveryLabel(result.item.queue)}.` : action === 'save' ? 'Draft saved.' : 'Enquiry confirmed.');
-    } catch (error) {
-      if (epoch !== saveEpoch.current || controller.signal.aborted) return;
-      setSaveError(error instanceof Error ? error.message : 'Enquiry could not be saved. Try again.');
-      setSaveConflict(Boolean(error && typeof error === 'object' && 'status' in error && error.status === 409));
-    } finally { if (epoch === saveEpoch.current && !controller.signal.aborted) setSaveBusy(false); }
+    if (final) setSending(true);
+    const flight = (async () => {
+      try {
+        const { item } = await commercialEnquiryApi.mutate(actor.id, input, controller.signal);
+        if (epoch !== saveEpoch.current || controller.signal.aborted) return false;
+        setDraft(current => ({ ...current, shared: item, savedId: item.id,
+          pendingSave: undefined, savedVersion: version }));
+        onChange(currentDraft.current);
+        onSaved(item);
+        if (final) {
+          setOperation(undefined);
+          notify(item.queue ? deliveryLabel(item.queue) + '.' : 'Enquiry confirmed.');
+        }
+        return true;
+      } catch (failure) {
+        if (epoch !== saveEpoch.current || controller.signal.aborted) return false;
+        const status = failure && typeof failure === 'object' && 'status' in failure ? Number(failure.status) : 0;
+        if (status >= 400 && status < 500) setDraft(current => ({ ...current, pendingSave: undefined }));
+        setSaveError(failure instanceof Error ? failure.message : 'Enquiry could not be saved. Try again.');
+        setSaveConflict(status === 409);
+        return false;
+      } finally {
+        if (epoch === saveEpoch.current && !controller.signal.aborted) {
+          writeInFlight.current = null;
+          setSaveBusy(false);
+          setSending(false);
+        }
+      }
+    })();
+    writeInFlight.current = flight;
+    return flight;
   }
-  function confirm() {
-    if (dataMode === 'live') { void saveShared('confirm'); return; }
-    if (!complete) return;
+
+  function saveLive(input: Draft, action: CommercialEnquiryMutation['action']) {
+    const { fields, raw, shared } = input;
+    const source = shared?.source ?? input.source ?? {
+      rawText: raw, parsed: input.original ?? null, parserVersion: PARSER_VERSION, inboxId: incoming?.id ?? null,
+    };
+    const place = directories.current.ports.find(item => item.id === fields.portId);
+    return write({ version: input.editVersion ?? 0, input: {
+      action, dataMode: 'live', requestId: crypto.randomUUID(), id: shared?.id ?? newId,
+      expectedRevision: shared?.revision ?? 0, source, workingText: raw,
+      reviewed: { vessel: fields.vessel.trim(), imo: fields.imo.trim(), eta: fields.eta.trim(),
+        portId: (place && supplierPortForLocation(place)?.id) || null, buyerText: fields.buyerText.trim() || null,
+        buyerId: null, products: productsFromFields(fields), remarks: fields.remarks, rmk: input.rmk,
+        viscosity: input.viscosity, formattedText: input.preview ?? standard(input), warnings: fields.warnings },
+    } });
+  }
+
+  function saveTest(input: Draft, submit = false) {
+    const { fields, raw, savedId } = input;
     const id = savedId || uid("enquiry");
-    const quantity =
-      products.length === 1
-        ? parseProductQuantity(products[0].quantityText)
-        : null;
-    const safeFormat = stripCommercialDetails(formatted);
+    const products = productsFromFields(fields);
+    const quantity = products.length === 1 ? parseProductQuantity(products[0].quantityText) : null;
+    const safeFormat = stripCommercialDetails(input.preview ?? standard(input));
     const enquiry: Enquiry = {
       ...(saved || {}),
-      id,
-      owner: actor.id,
-      buyerId: fields.buyerId,
-      portId: fields.portId,
-      vessel: fields.vessel.trim(),
-      imo: fields.imo.trim(),
-      eta: fields.eta.trim(),
-      grade: products.map((product) => product.grade).join(" / "),
+      id, owner: actor.id, buyerId: fields.buyerId, portId: fields.portId,
+      vessel: fields.vessel.trim(), imo: fields.imo.trim(), eta: fields.eta.trim(),
+      grade: products.map(product => product.grade).join(" / "),
       quantity: quantity?.min === quantity?.max ? quantity?.min || 0 : 0,
-      price: 0,
-      margin: 0,
-      products,
-      remarks: stripCommercialDetails(fields.remarks),
-      rmk,
-      vlsfoMaxRemarks: viscosity,
-      rawText: raw,
-      formattedText: safeFormat,
-      status: "draft",
-      createdAt: saved?.createdAt || new Date().toISOString(),
-      complianceChecked: false,
-      creditChecked: false,
-      creditConfirmations: [],
+      price: 0, margin: 0, products, remarks: stripCommercialDetails(fields.remarks),
+      rmk: input.rmk, vlsfoMaxRemarks: input.viscosity, rawText: raw, formattedText: safeFormat,
+      status: "draft", createdAt: saved?.createdAt || new Date().toISOString(),
+      complianceChecked: false, creditChecked: false, creditConfirmations: [],
     };
-    if (!run({ type: "save-enquiry", enquiry })) return;
-    setDraft((current) => ({ ...current, savedId: id, preview: safeFormat }));
+    if (!run({ type: "save-enquiry", enquiry })) return false;
+    setDraft(current => ({ ...current, savedId: id, savedVersion: input.editVersion ?? 0 }));
+    onChange(currentDraft.current);
     if (incoming) markLinked(incoming.id, id);
-    run({ type: "confirm-enquiry", id }, "Enquiry confirmed.");
+    if (submit) run({ type: "confirm-enquiry", id }, "Enquiry confirmed.");
+    return true;
+  }
+
+  async function saveDraft(force = false): Promise<boolean> {
+    if (!acceptsDraft) return !sending;
+    if (writeInFlight.current && !await writeInFlight.current) return false;
+    if (saveConflict) return false;
+    let current = currentDraft.current;
+    if (current.pendingSave?.input.action === 'save') {
+      if (!await write(current.pendingSave)) return false;
+      current = currentDraft.current;
+    }
+    if (current.pendingSave) return true; // Retry an outbound submission only on explicit action.
+    if (!force && ((current.editVersion ?? 0) === (current.savedVersion ?? 0) || (!current.savedId && !hasContent(current)))) return true;
+    const parsed = reparse(current);
+    setDraft(parsed);
+    return dataMode === 'live' ? saveLive(parsed, 'save') : saveTest(parsed);
+  }
+
+  useEffect(() => {
+    if (!acceptsDraft || pending || saveBusy || saveError || draft.pendingSave ||
+      (draft.editVersion ?? 0) === (draft.savedVersion ?? 0)) return;
+    const timer = window.setTimeout(() => void saveDraft(), 850);
+    return () => window.clearTimeout(timer);
+  }, [draft.editVersion, draft.savedVersion, draft.pendingSave, pending, acceptsDraft, saveBusy, saveError]);
+  useEffect(() => {
+    const flush = () => saveDraft();
+    flushDraft.current = flush;
+    return () => { if (flushDraft.current === flush) flushDraft.current = null; };
+  });
+
+  function clear() {
+    manualFields.current.clear();
+    editDraft(current => ({ ...current, raw: '', parsedRaw: '', fields: blank(), preview: null, rmk: false, viscosity: [],
+      aiRequest: undefined, original: undefined, originalRevision: undefined }));
+  }
+
+  async function cancelDraft() {
+    if (!acceptsDraft || finalWrite) return;
+    if (!await saveDraft(!currentDraft.current.savedId)) return;
+    const item = currentDraft.current.shared;
+    if (item) await onDecision(item, 'cancel');
+    else if (currentDraft.current.savedId && run({ type: 'cancel-enquiry', id: currentDraft.current.savedId }, 'Enquiry cancelled.')) {
+      onNew();
+    }
+  }
+
+  function confirm() {
+    if (!complete) return;
+    if (dataMode === 'live') void saveLive(currentDraft.current, operation ?? 'confirm');
+    else saveTest(currentDraft.current, true);
   }
   async function copy() {
     try {
@@ -829,7 +960,7 @@ function Composer({
     // AI changes to structured fields do not resolve cautions present in the original message.
     const sourceCautions = (draft.original?.warnings ?? fields.warnings).filter(warning => /^WARNING:/i.test(warning.trim()));
     next.warnings = [...new Set([...sourceCautions, ...checked.warnings, ...warnings])];
-    setDraft(current => ({ ...current, fields: next, preview: null, aiRequest: { ...current.aiRequest, id: requestId, raw, state: 'complete' } }));
+    editDraft(current => ({ ...current, fields: next, preview: null, aiRequest: { ...current.aiRequest, id: requestId, raw, state: 'complete' } }));
     notify('Selected suggestions applied.');
   }
   function report() {
@@ -867,38 +998,24 @@ function Composer({
       >
         <div className="center-editor-grid">
           <div className="center-parser-column">
-            <label className="center-field-heading" htmlFor="center-raw">
-              Parser
-            </label>
-            <div className="center-parser-wrap">
-              <textarea
-                id="center-raw"
-                className="center-parser"
-                aria-label="Raw enquiry"
-                placeholder="Paste enquiry"
-                value={raw}
-                disabled={!editable}
-                readOnly={Boolean(shared || incoming)}
-                maxLength={20000}
-                onChange={(event) => {
-                  if (event.target.value !== raw) manualFields.current.clear();
-                  setDraft((current) => ({
-                    ...current,
-                    raw: event.target.value,
-                    preview: null,
-                  }));
-                }}
-              />
-              <button
-                className="parser-clear"
-                type="button"
-                aria-label="Clear parser"
-                disabled={Boolean(preview) || saveBusy || !raw}
-                onClick={onClear}
-              >
-                Clear
-              </button>
+            <div className="center-parser-actions">
+              <button type="button" className="ui-button ui-button--secondary" disabled={Boolean(preview) || sending} onClick={onNew}>NEW ENQUIRY</button>
+              <button type="button" className="ui-button ui-button--secondary" disabled={!editable || !hasContent(draft)} onClick={clear}>CLEAR</button>
             </div>
+            <textarea
+              id="center-raw"
+              className="center-parser"
+              aria-label="Raw enquiry"
+              placeholder="Paste enquiry"
+              value={raw}
+              disabled={!editable}
+              maxLength={20000}
+              onChange={(event) => {
+                const value = event.target.value;
+                manualFields.current.clear();
+                editDraft(current => ({ ...current, raw: value, preview: null }));
+              }}
+            />
             <div className="center-format-heading">
               <label htmlFor="center-standard">Standard format</label>
               <div>
@@ -921,7 +1038,7 @@ function Composer({
               disabled={pending}
               onChange={(event) => {
                 manualFields.current = new Set(parserFieldKeys);
-                setDraft(current => ({ ...current, preview: event.target.value }));
+                editDraft(current => ({ ...current, preview: event.target.value }));
               }}
             />
             {previewMismatch && (
@@ -947,20 +1064,27 @@ function Composer({
                 onClick={confirm}
               >
                 <Check size={15} />
-                {singapore ? 'Send to SPC' : 'Confirm'}
+                {operation === 'amend' ? 'SEND AMENDMENT' : operation === 'reoffer' ? 'SEND REOFFER' : singapore ? 'Send to SPC' : 'Confirm'}
               </button>
             </div>
-            {dataMode === 'live' && <div className="enquiry-terms">
-              <button className="button secondary" disabled={!editable || pending || aiBusy || !raw.trim()} onClick={() => void saveShared('save')}>Save draft</button>
+            {(shared || saveBusy || acceptsDraft && !finalWrite && (hasContent(draft) || saved)) && <div className="enquiry-terms">
+              {acceptsDraft && !finalWrite && (hasContent(draft) || shared || saved) &&
+                <button className="ui-button ui-button--secondary" type="button" disabled={sending} onClick={() => void cancelDraft()}>CANCEL ENQUIRY</button>}
               {saveBusy && <span role="status">Saving…</span>}
-              {shared && <span>{shared.reference} · {shared.queue ? 'Awaiting connection' : shared.status}</span>}
+              {shared && <span>{shared.outcome || (shared.queue ? deliveryLabel(shared.queue) : shared.status)}</span>}
             </div>}
             {saveError && <div className="enquiry-format-error" role="alert">
               <p>{saveError}</p>
+              {!saveConflict && <button className="button secondary" onClick={() => {
+                const job = currentDraft.current.pendingSave;
+                if (job) void write(job);
+                else if (acceptsDraft) void saveDraft();
+                else setSaveError('');
+              }}>Retry</button>}
               {saveConflict && !reloadPrompt && <button className="button secondary" onClick={() => setReloadPrompt(true)}>Load latest</button>}
               {reloadPrompt && <><p>Discard these unsaved changes?</p><div className="enquiry-terms">
                 <button className="button secondary" onClick={() => setReloadPrompt(false)}>Keep editing</button>
-                <button className="button secondary" onClick={() => onReload(shared?.id ?? newId.current)}>Discard and load latest</button>
+                <button className="button secondary" onClick={() => onReload(shared?.id ?? newId)}>Discard and load latest</button>
               </div></>}
             </div>}
             {buyerCreditAvailable && buyer && (buyer.status !== "approved" || buyer.creditStatus && buyer.creditStatus !== "Active" || availableCredit(buyer) < 0 || buyer.overdue > 0) && <section className="center-enquiry-alerts" aria-label="Credit alerts">
@@ -1092,14 +1216,14 @@ function Composer({
               </div>
             )}
             {reviewWarnings.length > 0 && (
-              <details key={draft.parsedRaw} className="enquiry-review" open={reviewWarnings.some(warning => warning.startsWith("WARNING:"))}>
-                <summary>Review ({reviewWarnings.length})</summary>
+              <section className="enquiry-review" aria-labelledby="enquiry-review-heading">
+                <h4 id="enquiry-review-heading">Review ({reviewWarnings.length})</h4>
                 <ul>
                   {reviewWarnings.map((warning) => (
                     <li key={warning}>{warning}</li>
                   ))}
                 </ul>
-              </details>
+              </section>
             )}
           </div>
           <div className="center-details-column">
@@ -1163,6 +1287,8 @@ function Composer({
                 <Field label="ETA">
                   <input
                     value={fields.eta}
+                    aria-invalid={Boolean(etaWarning)}
+                    aria-describedby={etaWarning ? 'enquiry-review-heading' : undefined}
                     onChange={(event) => update("eta", event.target.value)}
                   />
                 </Field>
@@ -1194,7 +1320,7 @@ function Composer({
                   type="button"
                   aria-pressed={rmk}
                   onClick={() =>
-                    setDraft((current) => ({
+                    editDraft((current) => ({
                       ...current,
                       rmk: !current.rmk,
                       preview: null,
@@ -1209,7 +1335,7 @@ function Composer({
                     type="button"
                     aria-pressed={viscosity.includes(term)}
                     onClick={() =>
-                      setDraft((current) => ({
+                      editDraft((current) => ({
                         ...current,
                         preview: null,
                         viscosity: current.viscosity.includes(term)

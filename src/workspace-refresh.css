@@ -213,12 +213,9 @@
   border-bottom: 0;
   padding: 10px 19px;
 }
-.workspace-window :is(.center-field-heading, .center-format-heading > label) {
+.workspace-window .center-format-heading > label {
   color: #415e76;
   letter-spacing: 0.015em;
-}
-.workspace-window .parser-clear {
-  border-radius: 5px;
 }
 .workspace-window .enquiry-buyer-field > .enquiry-icon {
   border-radius: 7px;

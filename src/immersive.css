@@ -786,8 +786,9 @@ body {
   margin: 10px 0 0;
   color: #89632e;
 }
-.enquiry-review summary {
-  cursor: pointer;
+.enquiry-review h4 {
+  font-size: inherit;
+  margin: 0;
 }
 .enquiry-review ul {
   padding-left: 16px;
@@ -983,7 +984,6 @@ body {
 .center-details-column {
   min-width: 0;
 }
-.center-field-heading,
 .center-format-heading > label {
   display: block;
   font-size: 11px;
@@ -1236,33 +1236,9 @@ body {
   font-size: 9px;
   font-weight: 650;
 }
-.center-parser-wrap {
-  position: relative;
-}
 .center-parser {
   height: 325px;
   min-height: 260px;
-  padding-top: 38px;
-}
-.parser-clear {
-  position: absolute;
-  right: 8px;
-  top: 7px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 4px 7px;
-  border: 1px solid #cbd6c4;
-  border-radius: 3px;
-  background: #f3f6e9;
-  color: #58705d;
-  cursor: pointer;
-}
-.parser-clear:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-@media (max-width: 760px), (pointer: coarse) {
-  .center-parser { padding-top: calc(var(--ui-control-height, 44px) + 14px); }
 }
 .center-standard {
   height: 78px;

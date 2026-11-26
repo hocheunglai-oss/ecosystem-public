@@ -54,7 +54,7 @@ for(const [engine,kind] of [['chromium',chromium],['webkit',webkit]]){
       const dialog=await openEnquiry(page);
       await expect(dialog.getByRole('button',{name:'CHECK IMO',exact:true})).toBeDisabled();
       await dialog.getByLabel('Raw enquiry',{exact:true}).fill('VESSEL: CAUTION TEST\nIMO: 9074729\nPORT: SINGAPORE\nETA: 20 OCT 2026\nRMK: 300 MT\nVLSFO: 500 MT 120 CST MAX / 180 CST MAX\nLSMGO: 40 CBM');
-      const caution=dialog.locator('.enquiry-review');await expect(caution).toHaveAttribute('open','');
+      const caution=dialog.locator('.enquiry-review');await expect(caution.getByRole('list')).toBeVisible();
       for(const term of ['RMK','120','180','CBM'])await expect(caution).toContainText(term);
       const lookup=dialog.getByRole('link',{name:'CHECK IMO',exact:true});
       await expect(lookup).toHaveAttribute('href','https://www.google.com/search?q=CAUTION%20TEST%20IMO%209074729');

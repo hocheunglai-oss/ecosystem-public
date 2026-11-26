@@ -12,12 +12,14 @@ function item(value: unknown, owner: string): IncomingEnquiry {
   if (!object(value) || !text(value.id, 36) || !uuid.test(value.id) || value.owner !== owner ||
     !text(value.providerMessageId, 1024) || !['whatsapp', 'email'].includes(value.channel as string) ||
     !text(value.sender, 320) || !text(value.rawText, 20000) || !text(value.receivedAt, 40) || !Number.isFinite(Date.parse(value.receivedAt)) ||
+    (value.enquiryId !== undefined && (typeof value.enquiryId !== 'string' || !uuid.test(value.enquiryId))) ||
     typeof value.read !== 'boolean' || typeof value.dismissed !== 'boolean' ||
     (value.subject !== undefined && (typeof value.subject !== 'string' || value.subject.length > 1000))) throw unavailable();
-  // Explicit projection excludes any browser-local enquiry relation or unexpected server fields.
+  // Preserve the server-verified link and ignore unexpected fields.
   return { id: value.id, providerMessageId: value.providerMessageId, owner, channel: value.channel as IncomingEnquiry['channel'], sender: value.sender,
     rawText: value.rawText, receivedAt: value.receivedAt, read: value.read,
-    dismissed: value.dismissed, ...(value.subject === undefined ? {} : { subject: value.subject as string }) };
+    dismissed: value.dismissed, ...(typeof value.enquiryId === 'string' ? { enquiryId: value.enquiryId } : {}),
+    ...(value.subject === undefined ? {} : { subject: value.subject as string }) };
 }
 export function parseInboxPage(value: unknown, owner: string): InboxPage {
   if (!uuid.test(owner) || !object(value) || !Array.isArray(value.items) || value.items.length > 50 || !count(value.unreadCount) ||

@@ -1,7 +1,7 @@
 import type { AdministrationGateway } from '../admin/handler.ts';
 import type { AuthConfig } from '../auth/config.ts';
 import { ApiError } from '../auth/validation.ts';
-import { commercialMutation, commercialQuery } from './validation.ts';
+import { commercialWrite, commercialQuery } from './validation.ts';
 import { fixtureQuery, fixtureWrite } from './fixtures.ts';
 
 export async function handleCommercialEnquiries(request: Request, config: AuthConfig, gateway: AdministrationGateway): Promise<Response> {
@@ -25,7 +25,7 @@ export async function handleCommercialEnquiries(request: Request, config: AuthCo
       const raw = await request.text();
       if (Buffer.byteLength(raw,'utf8') > 131072) throw new ApiError(413,'Request too large.');
       try { input = JSON.parse(raw); } catch { throw new ApiError(400,'Invalid enquiry request.'); }
-      input = fixtures ? fixtureWrite(input) : commercialMutation(input);
+      input = fixtures ? fixtureWrite(input) : commercialWrite(input);
     }
     const query = request.method === 'GET' ? fixtures ? fixtureQuery(url) : commercialQuery(url) : null;
     const actor = await gateway.currentUser();

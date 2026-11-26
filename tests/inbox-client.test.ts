@@ -6,9 +6,11 @@ import { setWorkspaceDataMode } from '../src/lib/testWorkspaceGuard';
 const owner = '10000000-0000-4000-8000-000000000001';
 const item = { id: '20000000-0000-4000-8000-000000000001', providerMessageId: 'fixture-email-1', owner, channel: 'email', sender: 'trader@example.test', rawText: 'Vessel: FIXTURE ONE', receivedAt: '2026-10-15T01:02:03.000Z', read: false, dismissed: false };
 const page = { items: [item], unreadCount: 80, nextCursor: 'opaque-token' };
-test('LIVE inbox validates owner, fields, bounds and count without accepting server enquiry links', () => {
+test('LIVE inbox validates owner, fields, bounds and count and accepts only a valid server enquiry link', () => {
   assert.equal(parseInboxPage(page, owner).unreadCount, 80);
-  assert.equal('enquiryId' in parseInboxPage({ ...page, items: [{ ...item, enquiryId: 'unverified' }] }, owner).items[0], false);
+  const enquiryId = '30000000-0000-4000-8000-000000000001';
+  assert.equal(parseInboxPage({ ...page, items: [{ ...item, enquiryId }] }, owner).items[0].enquiryId, enquiryId);
+  assert.throws(() => parseInboxPage({ ...page, items: [{ ...item, enquiryId: 'unverified' }] }, owner));
   for (const patch of [{ owner: 'someone-else' }, { rawText: 'x'.repeat(20001) }, { providerMessageId: 'x'.repeat(1025) }, { sender: 'x'.repeat(321) }, { receivedAt: 'bad' }, { read: 'false' }, { dismissed: undefined }, { subject: 'x'.repeat(1001) }, { id: 'not-uuid' }])
     assert.throws(() => parseInboxPage({ ...page, items: [{ ...item, ...patch }] }, owner));
   for (const patch of [{ items: [item, item] }, { items: Array(51).fill(item) }, { unreadCount: -1 }, { nextCursor: '' }]) assert.throws(() => parseInboxPage({ ...page, ...patch }, owner));

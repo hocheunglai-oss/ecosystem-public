@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { ecoConnections } from '../../config/ecoConnections.ts';
-import { formatEnquiry } from '../../src/lib/parser.ts';
+import { formatEnquiry, specialEnquiryRemarks } from '../../src/lib/parser.ts';
 import type { CommercialProduct } from '../../shared/commercialEnquiries.ts';
 import type { AuthConfig } from '../auth/config.ts';
 import type { createAuthGateway } from '../auth/gateway.ts';
@@ -10,18 +10,21 @@ type AccountGateway = Pick<ReturnType<typeof createAuthGateway>, 'authenticatedR
 type DispatchRpc = (args: { p_token_hash: string; p_action: string; p_enquiry?: string; p_claim?: string }) => Promise<unknown>;
 type Delivery = {
   id: string; claimToken: string; groupName: string; reference: string; vessel: string; imo: string; eta: string;
-  products: CommercialProduct[]; rmk: boolean; viscosity: string[];
+  products: CommercialProduct[]; rmk: boolean; viscosity: string[]; specialTerms?: string[]; event?: 'created' | 'amend' | 'reoffer';
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
 function outgoingText(job: Delivery): string {
   // Limit the device to the reviewed operational fields. The private source,
-  // buyer, notes and user-editable preview never enter the delivery payload.
+  // buyer and free-form notes stay private, including when the format is edited.
   const message = formatEnquiry({ vessel: job.vessel.replace(/\s+/g, ' '), imo: job.imo, eta: job.eta.replace(/\s+/g, ' '),
-    portName: 'Singapore', buyerName: '', products: job.products, rmk: job.rmk, vlsfoMaxRemarks: job.viscosity });
+    portName: 'Singapore', buyerName: '', products: job.products, rmk: job.rmk, vlsfoMaxRemarks: job.viscosity,
+    remarks: specialEnquiryRemarks.filter(term => job.specialTerms?.includes(term)).join(' / ') });
   if (message.includes('[CONFIRM ') || !/^ECO-\d{8,}$/.test(job.reference)) throw new ApiError(422, 'Review the delivery details.');
-  return message + '\n' + job.reference;
+  if (job.event === 'amend') return '*AMENDED*\n' + message;
+  if (job.event === 'reoffer') return '*REOFFER*\n' + message;
+  return message;
 }
 
 export async function handleWhatsAppDispatch(request: Request, config: AuthConfig, account: AccountGateway, run: DispatchRpc): Promise<Response> {

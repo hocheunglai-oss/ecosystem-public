@@ -1,4 +1,4 @@
-/** Durable LIVE intake metadata. Browser-only enquiry links never enter this contract. */
+/** Durable LIVE intake metadata, including a verified owned enquiry link when available. */
 export interface IncomingEnquiry {
   id: string;
   providerMessageId: string;
@@ -10,6 +10,7 @@ export interface IncomingEnquiry {
   read: boolean;
   dismissed: boolean;
   subject?: string;
+  enquiryId?: string;
 }
 export interface InboxPage { items: IncomingEnquiry[]; nextCursor: string | null; unreadCount: number }
 export type InboxAction = 'read' | 'dismiss' | 'dismiss-all';

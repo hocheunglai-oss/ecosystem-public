@@ -1,5 +1,5 @@
 /* Wider context column, compact credit summary and queue records. */
-.workspace-window .enquiry-center:not(.enquiry-center-intelligence) { grid-template-columns: minmax(0,1fr) minmax(280px,320px); gap: 18px; }
+.workspace-window .enquiry-center:not(.enquiry-center-intelligence) { grid-template-columns: minmax(0,1fr) minmax(300px,390px); gap: 18px; }
 .workspace-window .enquiry-buyer-field { display: block; }
 .workspace-window .center-detail-grid { grid-template-columns: minmax(0,1fr); }
 .workspace-window .center-credit-indicator { padding: 11px 12px 9px; }
@@ -17,8 +17,8 @@
 .workspace-window .center-incoming-open > strong { grid-column: 1; grid-row: 1; }
 .workspace-window .center-incoming-open > small { grid-column: 2; grid-row: 1; justify-content: flex-end; white-space: nowrap; }
 .workspace-window .center-incoming-open > span { grid-column: 1 / -1; grid-row: 2; }
-.workspace-window .center-lifecycle { padding: 3px 9px 7px; gap: 5px; }
-.workspace-window .center-lifecycle button { flex: 1; padding: 4px 5px; }
+.workspace-window .center-lifecycle { padding: 3px 9px 7px; gap: 5px; flex-wrap: wrap; }
+.workspace-window .center-lifecycle button { flex: 0 1 auto; padding: 4px 10px; }
 @media(max-width:1120px) {
   .workspace-window .enquiry-center:not(.enquiry-center-intelligence) { grid-template-columns: minmax(0,1fr) 280px; gap: 14px; }
 }
@@ -41,3 +41,7 @@
 
 /* Keep the manual vessel lookup next to its field at phone and desktop widths. */
 .enquiry-imo-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 8px; min-width: 0; }
+
+.center-parser-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.workspace-window .enquiry-fields input[aria-invalid="true"] { border-color: var(--theme-amber, #89632e); }
+.workspace-window .enquiry-review { padding: 9px 11px; border: 1px solid; border-radius: 5px; }

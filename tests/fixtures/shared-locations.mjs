@@ -122,3 +122,16 @@ export function sharedLocations(pageOrContext) {
   if (!fixture) throw new Error('Install the isolated shared location fixture before opening the workspace.');
   return fixture;
 }
+
+// Stage 1 opens Singapore immediately. The staging directory still needs a selection.
+export async function selectSingaporeProfile(workspace) {
+  const index = workspace.getByRole('button', { name: 'Port Index', exact: true });
+  const singapore = workspace.getByRole('heading', { name: 'Singapore', exact: true });
+  await index.or(singapore).first().waitFor();
+  if (!(await singapore.isVisible())) {
+    await index.click();
+    await workspace.getByLabel('Country or port', { exact: true }).fill('Singapore');
+    await workspace.locator('.location-table').getByRole('button', { name: 'Singapore', exact: true }).click();
+  }
+  await singapore.waitFor();
+}

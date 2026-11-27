@@ -26,7 +26,10 @@ function AccountPrivacy() {
     <h2>Privacy</h2>
     {error ? <div role="alert"><p>{error}</p><button className="ui-button" onClick={() => setAttempt(value => value + 1)}>Retry</button></div>
       : !notice ? <p role="status">Loading…</p>
-      : notice.sections.map(section => <section key={section.title}><h3>{section.title}</h3>
-        {section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}</section>)}
+      : <>
+        {notice.sections.map(section => <section key={section.title}><h3>{section.title}</h3>
+          {section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}</section>)}
+        <p><a href="/privacy.html" target="_blank" rel="noreferrer">Privacy notice</a></p>
+      </>}
   </article>;
 }

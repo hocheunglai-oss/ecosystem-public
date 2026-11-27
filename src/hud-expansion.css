@@ -84,9 +84,7 @@
   max-height: max(120px, calc(100svh - 290px));
   scrollbar-gutter: stable;
 }
-.trader-hud .inbox-heading-actions { display: flex; align-items: center; gap: 8px; }
 .trader-hud .inbox-scenarios { max-height: none; overflow: visible; }
-.trader-hud .account-inline-panel .inbox-list { max-height: none; overflow: visible; }
 .trader-hud .inbox-arrivals { flex-wrap: wrap; }
 .hud-inline-scroll :is(.resource-wallet) { color: var(--ink); }
 .hud-inline-scroll .resource-history { max-height: none; overflow: visible; }

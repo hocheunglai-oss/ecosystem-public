@@ -1,0 +1,55 @@
+.inbox-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-block-end: 10px;
+  padding-block-end: 10px;
+  border-block-end: 1px solid var(--ui-line);
+}
+.inbox-heading h2 { margin: 0; font-size: var(--ui-text-action); }
+.inbox-heading-actions { display: flex; align-items: center; gap: 4px; }
+.inbox-heading-actions .inbox-clear-all { font-size: var(--ui-text-label); }
+.inbox-list {
+  max-height: min(350px, 52svh);
+  overflow-y: auto;
+  padding: 3px;
+  overscroll-behavior: contain;
+}
+.inbox-notifications { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.inbox-notification-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-inline-end: 4px;
+  border: 1px solid var(--ui-line);
+  border-inline-start-width: 3px;
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface);
+}
+.inbox-notification-row.is-unread { border-inline-start-color: var(--ui-focus); background: var(--ui-raised); }
+.inbox-notification-row:focus-within, .inbox-notification-row:hover { background: var(--ui-selection); }
+.inbox-item {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 6px;
+  padding: 9px 7px 9px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--ui-ink);
+  text-align: start;
+  cursor: pointer;
+}
+.inbox-item:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: -2px; border-radius: var(--ui-radius-control); }
+.inbox-source, .inbox-sender { grid-column: 1 / -1; color: var(--ui-muted); font-size: var(--ui-text-meta); }
+.inbox-source { display: flex; justify-content: space-between; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+.inbox-source > span { display: inline-flex; align-items: center; gap: 5px; }
+.inbox-preview { grid-column: 1; font-size: var(--ui-text-body); overflow-wrap: anywhere; }
+.inbox-sender { grid-row: 3; overflow-wrap: anywhere; }
+.inbox-item > svg { grid-column: 2; grid-row: 2; align-self: start; }
+.inbox-message { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--ui-danger); }
+.inbox-list > p { margin: 8px 4px; color: var(--ui-muted); font-size: var(--ui-text-body); }
+.inbox-list > .ui-button { margin-block-start: 8px; }

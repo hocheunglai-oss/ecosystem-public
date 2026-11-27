@@ -76,7 +76,6 @@
   inset: -1.5%; width: 103%; height: 103%;
 }
 /* Personal display preferences live inside Settings, never over the artwork. */
-.personal-display-settings { display: grid; gap: 24px; min-width: 0; }
 .background-choice { position: relative; display: grid; gap: 8px; max-width: 280px; color: var(--ui-ink); font-size: var(--ui-text-action); }
 .background-choice select { appearance: none; -webkit-appearance: none; width: 100%; height: 44px; min-height: 44px; padding: 8px 32px 8px 12px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-control); background-color: var(--ui-field); color: var(--ui-ink); font: inherit; text-transform: uppercase; }
 .background-choice::after { content: ""; position: absolute; right: 15px; bottom: 20px; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
@@ -146,8 +145,10 @@
 #root .immersive-app[data-design="flowing-water"] .launcher-menu > .launcher-menu-row { margin: 0; background: transparent; border: 0; border-radius: var(--ui-radius-control); color: var(--flow-panel-ink); }
 #root .immersive-app[data-design="flowing-water"] .launcher-link { min-height: 46px; padding: 9px 8px; font-size: 13px; border-radius: var(--ui-radius-control); }
 #root .immersive-app[data-design="flowing-water"] .launcher-menu-row > .launcher-link:hover { background: var(--flow-panel-hover); }
-#root .immersive-app[data-design="flowing-water"] .launcher-release-remark { margin-top: 10px; padding: 0 15px; background: transparent; color: var(--flow-footer); text-align: left; font-size: 11px; line-height: 1.6; }
-#root .immersive-app[data-design="flowing-water"] .launcher-heading { opacity: .8; }
+#root .immersive-app[data-design="flowing-water"] .launcher-toggle.launcher-heading {
+  flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px;
+  padding-block: 8px; background: var(--flow-account); color: var(--flow-panel-ink);
+}
 
 #root .immersive-app[data-design="flowing-water"] .home-hud-stack { align-self: start; justify-self: end; width: 100%; max-width: 384px; margin: 0; }
 #root .immersive-app[data-design="flowing-water"] .trader-hud[data-trader-hud] { padding: 14px 16px 8px; background: var(--flow-account); border: 1px solid var(--flow-edge); border-radius: var(--ui-radius-window); color: var(--flow-panel-ink); box-shadow: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: none; }
@@ -167,8 +168,12 @@
 #root .immersive-app[data-design="flowing-water"] .world-controls { position: static; order: 0; width: auto; max-width: none; margin: 0; padding: 0; color: inherit; font-size: 10px; letter-spacing: .06em; text-shadow: none; }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls { position: static; order: 0; width: auto; max-width: none; margin: 0; padding: 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px 18px; }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls :is(.theme-toggle,.test-workspace-control,.role-preview-controls > button) { min-height: 44px; padding: 6px 0; background: transparent; border: 0; box-shadow: none; color: var(--flow-footer); font-size: var(--ui-text-action); border-radius: 6px; }
-#root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback { --ui-control-padding: 8px 14px; min-height: 44px; padding: 8px 14px; font-size: var(--ui-text-action); border-radius: var(--ui-radius-action); background: var(--ui-contribution); border: 1px solid var(--ui-contribution-border); color: var(--ui-contribution-ink); }
-#root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback:hover { background: var(--ui-contribution-hover); color: var(--ui-contribution-ink); }
+#root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback { min-height: 44px; padding: var(--ui-control-padding); font-size: var(--ui-text-action); border-radius: var(--ui-radius-action); background: var(--ui-control-surface); border: 1px solid var(--ui-control-border); color: var(--ui-control-ink); }
+#root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback:hover { background: var(--ui-selection); }
+#root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback.ui-button--contribution { background: var(--ui-contribution); border-color: var(--ui-contribution-border); color: var(--ui-contribution-ink); }
+#root .immersive-app[data-design="flowing-water"] .home-display-controls button.ecosystem-feedback.ui-button--contribution:hover { background: var(--ui-contribution-hover); }
+#root .immersive-app[data-design="flowing-water"] .entry-privacy-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--flow-footer); font-size: var(--ui-text-label); text-underline-offset: 3px; }
+#root .immersive-app[data-design="flowing-water"] .entry-privacy-link:focus-visible { outline: 2px solid var(--flow-footer); outline-offset: 2px; }
 #root .immersive-app[data-design="flowing-water"] .home-display-controls :is(.theme-toggle,.test-workspace-control,.role-preview-controls > button):hover:not(.ecosystem-feedback):not(.theme-mode-toggle) { color: var(--flow-footer); background: var(--flow-footer-hover); }
 #root .immersive-app[data-design="flowing-water"] :is(.world-launcher,.home-hud-stack,.entry-screen,.flowing-footer) :focus-visible { outline: 2px solid var(--flow-focus); outline-offset: 4px; }
 #root .immersive-app[data-design="flowing-water"] :is(.launcher-menu, .hud-header-actions, .hud-points-row) :focus-visible { outline-color: var(--flow-panel-ink); }
@@ -197,7 +202,6 @@
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .launcher-toggle { min-height: 56px; justify-content: space-between; padding: 15px 24px; font-size: 16px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .launcher-expansion { position: static; margin-top: 0; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .is-open .launcher-expansion { margin-top: 8px; }
-:root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .launcher-release-remark { padding: 0 12px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .flowing-footer { padding: 12px max(22px,env(safe-area-inset-right)) max(22px,env(safe-area-inset-bottom)) max(22px,env(safe-area-inset-left)); gap: 14px; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-display-controls { gap: 0 16px; justify-content: center; }
 :root[data-interface="mobile"] #root .immersive-app[data-design="flowing-water"] .home-display-controls .ecosystem-feedback { flex-basis: auto; margin: 0; }

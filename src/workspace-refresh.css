@@ -17,8 +17,7 @@
   letter-spacing: -0.015em;
 }
 .workspace-window .window-toolbar .live-dot {
-  background: var(--ws-cyan);
-  box-shadow: 0 0 12px #2da8b833;
+  background: #39c433;
 }
 .workspace-window .window-tool {
   border-radius: 8px;

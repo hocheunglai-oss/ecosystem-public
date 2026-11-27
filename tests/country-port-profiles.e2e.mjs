@@ -1,4 +1,5 @@
-import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
+import { installSharedLocations, selectSingaporeProfile, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -8,7 +9,7 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 
 const base = process.env.ECO_COUNTRY_PORT_ORIGIN || 'http://127.0.0.1:4323';
 const out = resolve(process.env.ECO_COUNTRY_PORT_OUTPUT || '/private/tmp/eco-country-port-profiles');
-const user = { id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'LOCATION FIXTURE ADMIN', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const user = { capabilities: { appearancePreview: false, testWorkspace: true },  id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'LOCATION FIXTURE ADMIN', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const countryKey = 'country:Netherlands', portKey = 'port:port-rotterdam';
 const countryTarget = { kind: 'country', id: 'Netherlands' }, portTarget = { kind: 'port', id: 'port-rotterdam' };
 const privateTitles = ['COUNTRY OWNER NOTE', 'PORT OWNER NOTE'];
@@ -41,7 +42,6 @@ async function fixture(context) {
   });
   await installEmptyLiveInbox(context);
   await installSharedLocations(context, { user: () => state.user, preview: () => state.preview });
-  await context.route('**/api/enquiries/test-policy', route => route.fulfill({ json: { enabled: true, generation: '10000000-0000-4000-8000-000000000010' } }));
   await context.route('**/api/access/**', route => {
     const path = new URL(route.request().url()).pathname.split('/api/access/')[1];
     if (!state.user) return route.fulfill({ status: 401, json: { message: 'Sign in required.' } });
@@ -315,7 +315,8 @@ async function verifyPrivacy(page, workspace, state, shot) {
   await refreshAuthority();
   await expect(page.getByRole('status', { name: 'Role preview' }).first()).toBeVisible();
   workspace = await openWorkspace(page);
-  profile = await openFromIndex(workspace, 'country', 'Netherlands');
+  await selectSingaporeProfile(workspace);
+  profile = workspace.locator('.knowledge').first();
   for (const title of [...privateTitles, 'DUPLICATE OWNER NOTE']) await expect(profile.getByRole('tab').filter({ hasText: title })).toHaveCount(0);
   await expect(profile).not.toContainText('UNSAVED INHERITED SECRET');
   await expect(btn(profile, 'Manage tabs')).toHaveCount(0);
@@ -325,6 +326,7 @@ async function verifyPrivacy(page, workspace, state, shot) {
   state.user = { ...user, id: '10000000-0000-4000-8000-000000000002', displayName: 'OTHER LOCATION ADMIN' };
   await refreshAuthority();
   await expect(page.locator('.hud-identity')).toContainText('OTHER LOCATION ADMIN');
+  await activateDeveloperMode(page);
   workspace = await openWorkspace(page);
   profile = await openFromIndex(workspace, 'country', 'Netherlands');
   for (const title of [...privateTitles, 'DUPLICATE OWNER NOTE']) await expect(profile.getByRole('tab').filter({ hasText: title })).toHaveCount(0);
@@ -346,6 +348,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await installStagingCookies(context, base);
       const state = await fixture(context);
       await context.addInitScript(theme => localStorage.setItem('ecosystem.theme.v1', theme), theme);
+      await installTestWorkspacePolicy(context);
       const page = await context.newPage(), errors = [];
       await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
       page.on('pageerror', error => errors.push(error.message));
@@ -359,6 +362,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         // fetch produces a WebKit navigation error unrelated to this profile flow.
         await seed(page);
         await page.goto(base);
+        await activateDeveloperMode(page);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
         const workspace = await openWorkspace(page);
         await verifyPortCountries(workspace, shot);

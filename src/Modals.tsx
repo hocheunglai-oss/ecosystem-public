@@ -2,7 +2,6 @@ import { useLocationContribution } from './lib/useLocationContribution';
 import { supplierName } from './lib/supplierPresentation';
 import { ReleaseNotice, useBuyerCreditAvailable } from './ReleaseGate';
 import { isBuyerCreditModal } from '../shared/ecoRelease';
-import KnowledgeUpdateButton from "./KnowledgeUpdateButton";
 import { FeedbackPortal } from "./Administration";
 import { CreditRequestForm, DecisionForm, CompanyForm } from "./CreditForms";
 import "./credit-records.css";
@@ -296,84 +295,6 @@ function OutcomeForm({
   );
 }
 
-function ContributionForm({
-  spec,
-  close,
-}: {
-  spec: Extract<ModalSpec, { type: "contribute" }>;
-  close: Close;
-}) {
-  const { state, runKnowledge } = useDemo();
-  const [saving, setSaving] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [source, setSource] = useState("");
-  if (spec.targetType === "feedback") return <Frame title="Feedback for ecosystem" close={close}><FeedbackPortal /></Frame>;
-  const target = spec.targetType === "port" ? state.ports.find(p => p.id === spec.targetId)?.name
-    : spec.targetType === "company" ? state.companies.find(c => c.id === spec.targetId)?.name
-    : spec.targetType === "country" ? spec.targetId : "Shared case study";
-  return (
-    <Frame
-      title={spec.targetType === "country" ? "Contribute" : spec.targetType === "case-study" ? "Share a case study" : "Contribute your knowledge"}
-      close={close}
-    >
-      <div className="contribution-reward">
-        <span>{target}</span>
-      </div>
-      <form
-        aria-busy={saving}
-        inert={saving}
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (saving) return;
-          setSaving(true);
-          try {
-          if (
-            await runKnowledge(
-              {
-                type: "submit-contribution",
-                targetType: spec.targetType,
-                targetId: spec.targetId,
-                title,
-                body: body + (source ? `\nSource: ${source}` : ""),
-              },
-              "Updated.",
-            )
-          )
-            close();
-          } finally { setSaving(false); }
-        }}
-      >
-        <Field label="Title">
-          <input
-            required
-            minLength={5}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </Field>
-        <Field label="Details">
-          <textarea
-            required
-            minLength={30}
-            rows={5}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-        </Field>
-        {<Field label="Source">
-          <input value={source} onChange={(e) => setSource(e.target.value)} />
-        </Field>}
-        <div className="modal-actions">
-          <button type="button" className="button secondary" onClick={close}>
-            Cancel
-          </button>
-          <KnowledgeUpdateButton type="submit" />
-        </div>
-      </form>
-    </Frame>
-  );
-}
 function ContributionReview({id,close}:{id:string;close:Close}) {
  const {state}=useDemo();const {item:c,error,refresh}=useLocationContribution(id,state.contributions.find(item=>item.id===id));
  if(!c)return <Frame title="Update details" close={close}>{error ? <p role="alert">{error} <button className="button secondary small" onClick={refresh}>Retry</button></p> : <p role="status">Loading update…</p>}</Frame>;
@@ -640,7 +561,7 @@ export default function Modals({
 }) {
   const buyerCreditAvailable = useBuyerCreditAvailable();
   if (!buyerCreditAvailable && isBuyerCreditModal(spec)) {
-    return <Frame title={spec.type === 'company' || spec.type === 'contribute' ? 'Buyer Profiles' : 'Credit Requests'} close={close}><ReleaseNotice /></Frame>;
+    return <Frame title={spec.type === 'company' ? 'Buyer Profiles' : 'Credit Requests'} close={close}><ReleaseNotice /></Frame>;
   }
   switch (spec.type) {
     case "credit":
@@ -651,8 +572,8 @@ export default function Modals({
       return <OutcomeForm spec={spec} close={close} />;
     case "company":
       return <CompanyForm name={spec.name} close={close} />;
-    case "contribute":
-      return <ContributionForm spec={spec} close={close} />;
+    case "feedback":
+      return <Frame title="Feedback for ecosystem" close={close}><FeedbackPortal /></Frame>;
     case "review-contribution":
       return <ContributionReview id={spec.id} close={close} />;
     case "actual-volume":

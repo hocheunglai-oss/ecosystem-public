@@ -139,7 +139,7 @@ async function ordinaryScreens(page,shot) {
   await neutral(button(workspace,'NEW ENQUIRY'));await neutral(button(workspace,'CLEAR'));await neutral(button(workspace,'Confirm'));await shot('ordinary-parser');
   await expect(button(workspace,'Singapore queue')).toHaveCount(0);await expect(button(workspace,'My enquiries')).toHaveCount(0);await button(workspace,'Close workspace').click();
   workspace=await openWorkspace(page,null,'Settings');
-  await neutral(button(workspace,'Add user'));await workspace.locator('.users-access-list button').filter({hasText:'FIXTURE ADMIN'}).click();await neutral(button(workspace,'Save changes'));const permission=workspace.getByRole('checkbox',{name:'SPC Trader',exact:true});assert.ok(await permission.evaluate(node=>{const probe=document.createElement('i');probe.style.color='var(--ui-focus)';node.parentElement.append(probe);const matches=getComputedStyle(node).accentColor===getComputedStyle(probe).color;probe.remove();return matches;}),'Permission checkbox uses the neutral selection accent');await button(workspace,'Save changes').scrollIntoViewIfNeeded();await shot('ordinary-admin');
+  await button(workspace,'User Management').click();await neutral(button(workspace,'Add user'));await workspace.locator('.users-access-list button').filter({hasText:'FIXTURE ADMIN'}).click();await neutral(button(workspace,'Save changes'));const permission=workspace.getByRole('checkbox',{name:'SPC Trader',exact:true});assert.ok(await permission.evaluate(node=>{const probe=document.createElement('i');probe.style.color='var(--ui-focus)';node.parentElement.append(probe);const matches=getComputedStyle(node).accentColor===getComputedStyle(probe).color;probe.remove();return matches;}),'Permission checkbox uses the neutral selection accent');await button(workspace,'Save changes').scrollIntoViewIfNeeded();await shot('ordinary-admin');
   await button(workspace.locator('.users-access-editor'),'Close').click();await button(workspace,'Personal details').click();await neutral(button(workspace,'Change password'));await button(workspace,'Change password').scrollIntoViewIfNeeded();await shot('ordinary-password');await button(workspace,'Close workspace').click();
 }
 
@@ -159,6 +159,8 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
     try {
       await page.goto(base);await expect(page.getByRole('navigation',{name:'Workspace navigation'})).toBeVisible();
       const feedback=page.locator('.home-display-controls').getByRole('button',{name:'Feedback for ecosystem',exact:true});
+      await neutral(feedback);
+      await activateDeveloperMode(page);
       await credited(feedback);await swappedInside(feedback,page);
       await expect(feedback.locator('.contribution-action-hint')).toBeVisible();await shot('feedback-hint');
       await feedback.click();const modal=page.getByRole('dialog',{name:'Feedback for ecosystem',exact:true});

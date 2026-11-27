@@ -1,7 +1,7 @@
 import { useLocationActivity } from './lib/useLocationActivity';
 import KnowledgeUpdateButton from './KnowledgeUpdateButton';
 import { useBuyerCreditAvailable } from './ReleaseGate';
-import { ECO_2_RELEASE_NOTICE, isBuyerCreditWorkspace } from '../shared/ecoRelease';
+import { ECO_2_RELEASE_NOTICE, ECO_VERSION_LABEL, isBuyerCreditWorkspace } from '../shared/ecoRelease';
 import { useSharedFeedback } from './lib/useSharedFeedback';
 import {
   useEffect,
@@ -117,6 +117,10 @@ function Login() {
   );
 }
 
+function FooterIdentity({ className }: { className?: string }) {
+  return <span className={className}>ECOSYSTEM | FRATELLI COSULICH <span className="footer-version">· {ECO_VERSION_LABEL}</span></span>;
+}
+
 function TraderHud({
   onOpen,
   onSignOut,
@@ -128,14 +132,17 @@ function TraderHud({
 }) {
   const { actor, state } = useDemo();
   const { user, realUser, previewPerson } = useAccess();
+  const { developerMode } = useTestWorkspace();
   const [accountPanel, setAccountPanel] = useState<"inbox" | "hats" | "activity" | null>(null);
   const [contributionPreview, setContributionPreview] = useState<ContributionStatusKey | null>(null);
   const [hatsPreview, setHatsPreview] = useState<HatsAppearancePreview | null>(null);
   const canPreview = canPreviewAppearance(realUser);
   const [panelTarget, setPanelTarget] = useState<HTMLDivElement | null>(null);
   const panelToggle = useRef<HTMLButtonElement | null>(null);
-  const activityPanel = useRef<HTMLElement | null>(null);
   const closePanel = useCallback(() => { setAccountPanel(null); setContributionPreview(null); setHatsPreview(null); panelToggle.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => {
+    if (!developerMode && accountPanel === 'activity') closePanel();
+  }, [developerMode, accountPanel, closePanel]);
   useEffect(() => {
     if (accountPanel !== "hats" && accountPanel !== "activity") return;
     // Safari does not necessarily focus clicked buttons. Escape must also work
@@ -154,12 +161,12 @@ function TraderHud({
     setAccountPanel(current => current === panel ? null : panel);
   };
   const activityNow = useActivityNow();
-  const sharedLocations = useLocationActivity(actor.id, "7d", activityNow);
+  const showContribution = developerMode && user?.officeId !== "CREDIT";
+  const sharedLocations = useLocationActivity(actor.id, "7d", activityNow, undefined, showContribution);
   const localActivity = sharedLocations.activity;
-  const { summary: sharedFeedback, status: feedbackStatus } = useSharedFeedback();
+  const { summary: sharedFeedback, status: feedbackStatus } = useSharedFeedback('7d', showContribution);
   const sharedFeedbackStatus = feedbackStatus === 'unavailable' || sharedLocations.status === 'unavailable' ? 'unavailable' : feedbackStatus === 'loading' || sharedLocations.status === 'loading' ? 'loading' : 'ready';
   const activity = { ...localActivity, total: localActivity.total + (sharedFeedback?.count ?? 0) };
-  const showContribution = user?.officeId !== "CREDIT";
   const visiblePreview = canPreview && accountPanel === "activity" ? contributionPreview : null;
   const visibleHatsPreview = canPreview && !previewPerson && accountPanel === "hats" ? hatsPreview : null;
   const contributionTier = contributionStatus(visiblePreview ? contributionPreviewCounts[visiblePreview] : activity.total);
@@ -169,10 +176,8 @@ function TraderHud({
   const team = teamForActor(actor);
   const admin = isAdmin(actor);
   const utilityActions = <>
-    <InboxMenu onOpen={() => onOpen("enquiry")} presentation={{
-      inline: true, target: panelTarget, expanded: accountPanel === "inbox",
-      onExpandedChange: (expanded) => setAccountPanel(expanded ? "inbox" : null),
-    }} />
+    <InboxMenu onOpen={() => onOpen("enquiry")} target={panelTarget} expanded={accountPanel === "inbox"}
+      setExpanded={expanded => setAccountPanel(expanded ? "inbox" : null)} />
     {<button
       className="hud-settings"
       aria-label="Settings"
@@ -240,7 +245,7 @@ function TraderHud({
           <div className="hud-inline-scroll"><HatsOffPanel preview={visibleHatsPreview} canPreview={canPreview}
             onPreviewChange={canPreview ? setHatsPreview : undefined} /></div>
         </section>}
-        {showContribution && accountPanel === "activity" && <section ref={activityPanel} tabIndex={-1} id="hud-contribution-activity" className="hud-inline-section" aria-label="Contribution activity panel"
+        {showContribution && accountPanel === "activity" && <section tabIndex={-1} id="hud-contribution-activity" className="hud-inline-section" aria-label="Contribution activity panel"
           onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); closePanel(); } }}>
           <header className="hud-inline-heading"><h2>Contribution</h2><button aria-label="Close contribution activity" onClick={closePanel}><X size={16} /></button></header>
           <div className="hud-inline-scroll"><ResourceWallet statusPreview={visiblePreview}
@@ -334,7 +339,7 @@ function WorkspaceWindow({
     >
       <header className="window-toolbar">
         <div>
-          <i className="live-dot" />
+          <i className="live-dot" aria-hidden="true" />
           <span>
             ECOSYSTEM <b>/</b>
           </span>
@@ -367,13 +372,13 @@ function WorkspaceWindow({
       <div ref={contentRef} className="window-content">
         {visited.map((id) => (
           <section className="workspace-module" key={id} hidden={active !== id}>
-            <WorkspaceModule id={id} open={open} onOpen={onOpen} context={contexts[id]} onAdminOperationPending={onAdminOperationPending} />
+            <WorkspaceModule id={id} visible={active === id} open={open} onOpen={onOpen} context={contexts[id]} onAdminOperationPending={onAdminOperationPending} />
           </section>
         ))}
       </div>
-      <div className="window-foot"><span>ECOSYSTEM | FRATELLI COSULICH</span>
+      <div className="window-foot"><FooterIdentity />
         <div className="window-foot-actions">
-        <KnowledgeUpdateButton className="window-theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => open({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
+        <KnowledgeUpdateButton className="window-theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => open({ type: "feedback" })}>
           <MessageSquare size={13} aria-hidden="true" /> Feedback for ecosystem
         </KnowledgeUpdateButton>
         <ThemeToggle className="window-theme-toggle" theme={themeControl.requested} onToggle={themeControl.toggle} pending={themeControl.pending} error={themeControl.error} />
@@ -421,7 +426,7 @@ function Workspace() {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }
   function openWorkspace(id: WorkspaceId, context?: WorkspaceNavigationContext) {
-    if (pendingAdminRequest && id !== "settings") { notify("Resolve the pending account request in Users & Access first.", true); return; }
+    if (pendingAdminRequest && id !== "settings") { notify("Resolve the pending account request in User Management first.", true); return; }
     if (id === "countries") { id = "ports"; if (context?.country) context = { country: context.country }; }
     // Clone each request so even a previously visited detail follows the new link.
     setWorkspaceContexts((previous) => ({ ...previous, [id]: context ? { ...context } : undefined }));
@@ -474,8 +479,10 @@ function Workspace() {
                 const menuId = `menu-${group.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
                 const deferred = group.items.some(item => isBuyerCreditWorkspace(item.id)) && !buyerCreditAvailable;
                 if (deferred) return <div className="launcher-group launcher-group--deferred" data-group={group.name} key={group.name}>
-                  <div className="lime-control launcher-toggle launcher-heading" role="heading" aria-level={2} aria-describedby={`${menuId}-release`}><span>{group.name}</span></div>
-                  <p className="launcher-release-remark" id={`${menuId}-release`}>{ECO_2_RELEASE_NOTICE}</p>
+                  <div className="lime-control launcher-toggle launcher-heading" role="heading" aria-level={2} aria-labelledby={`${menuId}-title`} aria-describedby={`${menuId}-release`}>
+                    <span id={`${menuId}-title`}>{group.name}</span>
+                    <small className="launcher-release-remark" id={`${menuId}-release`}>{ECO_2_RELEASE_NOTICE}</small>
+                  </div>
                 </div>;
                 const expanded = expandedGroup === group.name;
                 return (
@@ -543,11 +550,12 @@ function Workspace() {
         </main>
       )}
       <footer className="flowing-footer">
-      <span className="world-controls">ECOSYSTEM | FRATELLI COSULICH</span>
+      <FooterIdentity className="world-controls" />
       <div className="home-display-controls">
-        {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "contribute", targetType: "feedback", targetId: "ecosystem" })}>
+        {session && <KnowledgeUpdateButton className="theme-toggle ecosystem-feedback" aria-label="Feedback for ecosystem" onClick={() => setModal({ type: "feedback" })}>
           <MessageSquare size={15} aria-hidden="true" /> Feedback for ecosystem
         </KnowledgeUpdateButton>}
+        {!session && <a className="entry-privacy-link" href="/privacy.html">Privacy</a>}
         <ThemeToggle className="theme-toggle" theme={requested} onToggle={toggleTheme} pending={themePending} error={themeError} />
         {session && <><TestWorkspaceControl pending={Boolean(pendingAdminRequest)} /><RolePreview pending={Boolean(pendingAdminRequest)} /></>}
       </div>

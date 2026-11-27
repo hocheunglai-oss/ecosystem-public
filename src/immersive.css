@@ -567,24 +567,6 @@ body {
   font-size: 10px;
   font-weight: 800;
 }
-.inbox-dropdown {
-  position: absolute;
-  z-index: 20;
-  right: -15px;
-  top: 43px;
-  width: 310px;
-  max-width: calc(100vw - 38px);
-  background: #143745;
-  border: 1px solid #769792;
-  box-shadow: 0 18px 60px #00162470;
-  color: white;
-  padding: 14px;
-}
-.inbox-heading {
-  font-size: 14px;
-  font-weight: 750;
-  margin-bottom: 10px;
-}
 .inbox-arrivals {
   display: flex;
   gap: 6px;
@@ -600,51 +582,6 @@ body {
   border: 1px solid #ffffff30;
   color: white;
   cursor: pointer;
-}
-.inbox-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-.inbox-item {
-  position: relative;
-  display: grid;
-  gap: 5px;
-  width: 100%;
-  text-align: left;
-  padding: 12px 18px 12px 10px;
-  color: white;
-  background: transparent;
-  border: 0;
-  border-top: 1px solid #ffffff25;
-  cursor: pointer;
-}
-.inbox-item:hover,
-.inbox-item.is-unread {
-  background: #ffffff0c;
-}
-.inbox-item.is-unread {
-  border-left: 2px solid #c9f34c;
-}
-.inbox-source {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 10px;
-  color: #d4e4df;
-}
-.inbox-preview {
-  font-size: 12px;
-  letter-spacing: 0.03em;
-}
-.inbox-sender {
-  font-size: 10px;
-  color: #bed2d4;
-  overflow-wrap: anywhere;
-}
-.inbox-item > svg {
-  position: absolute;
-  right: 0;
-  top: 36px;
 }
 .inbox-banner {
   display: flex;
@@ -1065,48 +1002,6 @@ body {
 }
 .center-saved-status {
   margin-top: 10px;
-}
-.inbox-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.inbox-clear-all {
-  border: 0;
-  background: none;
-  color: #cce78a;
-  font-size: 10px;
-  cursor: pointer;
-  padding: 3px;
-}
-.inbox-clear-all:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.inbox-notification-row {
-  display: flex;
-  align-items: stretch;
-  border-top: 1px solid #ffffff25;
-}
-.inbox-notification-row .inbox-item {
-  flex: 1;
-  width: auto;
-  min-width: 0;
-  border-top: 0;
-}
-.inbox-item-clear {
-  flex: 0 0 26px;
-  border: 0;
-  background: transparent;
-  color: #c6d9d5;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.inbox-item-clear:hover {
-  background: #ffffff15;
-  color: white;
 }
 @media (max-width: 1120px) {
   .enquiry-center {

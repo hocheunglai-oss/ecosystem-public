@@ -1,5 +1,5 @@
 import { activateDeveloperMode } from './fixtures/test-workspace.mjs';
-import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedLocations, sharedLocations, selectSingaporeProfile } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -118,11 +118,7 @@ async function openPort(page) {
   if (await button(nav, 'Ports & Suppliers').getAttribute('aria-expanded') !== 'true') await button(nav, 'Ports & Suppliers').click();
   await button(nav, 'Countries & Ports').click();
   const dialog = page.getByRole('dialog', { name: 'Countries & Ports', exact: true });
-  const input = dialog.getByLabel('Country or port', { exact: true });
-  await expect(input).toBeVisible();
-  await button(dialog, 'Port Index').click();
-  await input.fill('Singapore');
-  await dialog.locator('.location-table').getByRole('button', { name: 'Singapore', exact: true }).click();
+  await selectSingaporeProfile(dialog);
   await dialog.getByRole('tab', { name: /Port Information/i }).first().click();
   return dialog;
 }
@@ -209,12 +205,13 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
 
       await dialog.getByRole('tab', { name: 'Price History', exact: true }).click();
       const prices = dialog.getByRole('region', { name: 'Price History', exact: true });
-      await expect(prices.getByText('SYNTHETIC VESSEL', { exact: true })).toBeVisible();
-      await expect(prices.getByText('$610.25 / MT', { exact: true })).toBeVisible();
+      await expect(prices.getByText('SYNTHETIC VESSEL', { exact: true })).toHaveCount(0);
+      await expect(prices.getByRole('columnheader')).toHaveText(['DATE', 'SUPPLIER', 'QUANTITY (MT)', 'HSFO', 'VLSFO', 'LSMGO']);
+      await expect(prices.getByRole('row').nth(1).getByRole('cell').nth(4)).toHaveText('$610.25 / MT');
       await prices.getByPlaceholder('Search price history').fill('unavailable');
       await expect(prices).toContainText('NO PRICES FOUND.');
       await prices.getByPlaceholder('Search price history').fill('vessel');
-      await expect(prices.getByText('SYNTHETIC VESSEL', { exact: true })).toBeVisible();
+      await expect(prices.getByText('$610.25 / MT', { exact: true })).toBeVisible();
       await shot('prices');
 
       await button(dialog, 'Close workspace').click();

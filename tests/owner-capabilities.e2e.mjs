@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
+import { activateDeveloperMode } from './fixtures/test-workspace.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 const base = process.env.ECO_OWNER_UI_ORIGIN || 'http://127.0.0.1:4398';
 const out = resolve(process.env.ECO_OWNER_UI_OUTPUT || 'output/owner-capabilities');
@@ -46,6 +47,8 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    const storageKey=`ecosystem.live.v1:${owner.id}:state:v2`;
    const readState=()=>page.evaluate(key=>localStorage.getItem(key),storageKey);
    await expect.poll(readState).not.toBeNull();const before=await readState();
+   await expect(page.locator('.hud-resource-activity')).toHaveCount(0);
+   await activateDeveloperMode(page);
    await page.locator('.hud-resource-activity').click();await expect(contribution).toBeVisible();
    for(const status of ['inactive','active','outstanding']){
     await contribution.selectOption(status);await expect(page.locator('#hud-contribution-activity .activity-preview-label')).toHaveText('PREVIEW');
@@ -58,12 +61,12 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
    assert.equal(await readState(),before,'Appearance previews never change stored records');
    user={...owner,capabilities:{appearancePreview:false,testWorkspace:false}};await invalidateFixtureAuthority(page,{user,preview});
    await expect(hats).toHaveCount(0);await expect(testControl).toHaveCount(0);await expect(page.locator('.hats-off-total strong')).toHaveText('0');
-   await page.locator('.hud-resource-activity').click();await expect(contribution).toHaveCount(0);
-   await shot('revoked',page.locator('#hud-contribution-activity'));
+   await expect(page.locator('.hud-resource-activity')).toHaveCount(0);await expect(contribution).toHaveCount(0);
+   await shot('revoked',page.locator('#hud-hats-off'));
    user={...owner,id:'10000000-0000-4000-8000-000000000002',displayName:'OTHER ADMIN',capabilities:undefined};
    preview={role:'admin',officeId:'HONG KONG',officeName:'HONG KONG',readOnly:true};
    await page.reload();await expect(page.locator('.hud-identity')).toContainText('OTHER ADMIN');
-   await page.locator('.hud-resource-activity').click();await expect(contribution).toHaveCount(0);await expect(testControl).toHaveCount(0);
+   await expect(page.locator('.hud-resource-activity')).toHaveCount(0);await expect(contribution).toHaveCount(0);await expect(testControl).toHaveCount(0);
    await page.locator('.hud-resource-hats').click();await expect(hats).toHaveCount(0);await shot('other-admin',page.locator('#hud-hats-off'));
    user=null;preview=null;await invalidateFixtureAuthority(page,{user,preview});await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
    await expect(testControl).toHaveCount(0);await expect(contribution).toHaveCount(0);await expect(hats).toHaveCount(0);await shot('signed-out');

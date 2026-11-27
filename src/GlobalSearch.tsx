@@ -8,9 +8,11 @@ import type { OpenModal } from './types';
 import type { OpenWorkspace } from './workspaceNavigation';
 import './main-menu.css';
 import { useSupplierList } from './lib/supplierApi';
+import { useTestWorkspace } from './TestWorkspace';
 
 export function GlobalSearch({ open, onOpen }: { open: OpenModal; onOpen: OpenWorkspace }) {
   const { state, actor } = useDemo();
+  const { developerMode } = useTestWorkspace();
   const buyerCreditAvailable = useBuyerCreditAvailable();
   const { items, select } = useInbox();
   const [query, setQuery] = useState('');
@@ -22,7 +24,7 @@ export function GlobalSearch({ open, onOpen }: { open: OpenModal; onOpen: OpenWo
   const input = useRef<HTMLInputElement>(null);
   const supplierResults = useSupplierList({ search: deferred.trim(), limit: 25 }, expanded && Boolean(deferred.trim()));
   const incomingKey = items.map(item => `${item.id}:${item.enquiryId ?? ''}:${Boolean(item.dismissed)}`).join('|');
-  const records = useMemo(() => globalSearchRecords(state, actor, items, supplierResults.data?.items ?? [], buyerCreditAvailable), [state.companies, state.ports, state.locationAreas, state.locationCountries, state.enquiries, state.outcomes, actor.id, incomingKey, supplierResults.data, buyerCreditAvailable]);
+  const records = useMemo(() => globalSearchRecords(state, actor, items, supplierResults.data?.items ?? [], buyerCreditAvailable, developerMode), [state.companies, state.ports, state.locationAreas, state.locationCountries, state.enquiries, state.outcomes, actor.id, incomingKey, supplierResults.data, buyerCreditAvailable, developerMode]);
   const results = useMemo(() => queryGlobalSearch(records, deferred), [records, deferred]);
   const focused = Math.min(active, Math.max(0, results.length - 1));
   const visible = expanded && Boolean(query.trim());

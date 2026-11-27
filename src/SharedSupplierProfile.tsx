@@ -44,7 +44,7 @@ export default function SharedSupplierProfile(props: SharedSupplierProfileProps)
 }
 function SupplierProfileContent({ id, initialTab = 'information', onBack, backLabel = 'Supplier results', onOpenDirectory }: SharedSupplierProfileProps) {
   const { realUser, preview } = useAccess();
-  const { dataMode } = useTestWorkspace();
+  const { dataMode, developerMode } = useTestWorkspace();
   const [item, setItem] = useState<SupplierRecord | null>(null), [tab, setTab] = useState(initialKey(initialTab));
   const [draft, setDraft] = useState<Draft | null>(null), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
   const [error, setError] = useState(''), [message, setMessage] = useState(''), [conflict, setConflict] = useState(false), [generation, setGeneration] = useState(0);
@@ -109,7 +109,7 @@ function SupplierProfileContent({ id, initialTab = 'information', onBack, backLa
     const changes = { ...fields, ...(isClosed === Boolean(item.isClosed) ? {} : { isClosed }), background: !item.background && draft.background === supplierBackground(item).map(fact => fact.value).join(' ') ? '' : draft.background };
     const body = JSON.stringify(changes); if (attempt.current?.body !== body) attempt.current = { body, id: crypto.randomUUID() };
     setSaving(true); setError(''); setMessage(''); setConflict(false);
-    try { const result = await supplierApi.update({ ...changes, requestId: attempt.current.id }); if (!alive.current) return; setItem(result.item); setDraft(null); attempt.current = null; setMessage('CONTRIBUTION +1'); announceSupplierUpdate(); announceFeedbackUpdate(); }
+    try { const result = await supplierApi.update({ ...changes, requestId: attempt.current.id }); if (!alive.current) return; setItem(result.item); setDraft(null); attempt.current = null; setMessage(developerMode ? 'CONTRIBUTION +1' : 'SAVED'); announceSupplierUpdate(); announceFeedbackUpdate(); }
     catch (failure) { if (alive.current) { setError((failure as Error).message); setConflict((failure as { status?: number }).status === 409); if ((failure as { status?: number }).status === 422) { attempt.current = null; picOptions.refresh(); } } }
     finally { if (alive.current) setSaving(false); }
   }

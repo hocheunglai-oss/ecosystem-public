@@ -1,3 +1,4 @@
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -9,7 +10,7 @@ import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs'
 
 const base = process.env.ECO_TABLE_PASTE_ORIGIN || 'http://127.0.0.1:4340';
 const out = process.env.ECO_TABLE_PASTE_OUTPUT || '/private/tmp/eco-table-paste';
-const user = { id: '10000000-0000-4000-8000-000000000001', email: 'table@example.test', displayName: 'TABLE FIXTURE', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const user = { capabilities: { appearancePreview: false, testWorkspace: true },  id: '10000000-0000-4000-8000-000000000001', email: 'table@example.test', displayName: 'TABLE FIXTURE', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const url = 'https://Example.test/Path?Key=AbC';
 const btn = (scope, name) => scope.getByRole('button', { name, exact: true });
 const results = [];
@@ -61,7 +62,8 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       if (window.__deferClipboard) return new Promise(resolve => { window.__resolveClipboard = resolve; });
       throw new DOMException('Denied', 'NotAllowedError');
     } } }); }, theme);
-    const page = await context.newPage(), errors = []; page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
+    await installTestWorkspacePolicy(context);
+      const page = await context.newPage(), errors = []; page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png` }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Page must not overflow'); };
     try {
       sharedLocations(context).seed(saved => {
@@ -71,6 +73,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
         ] }] };
       });
       await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+        await activateDeveloperMode(page);
       let workspace = await openProfile(page), editor = await edit(page, workspace);
       await btn(editor.locator('.knowledge-sheet-toolbar'), 'PASTE TABLE').click();
       let dialog = page.getByRole('dialog', { name: 'PASTE TABLE', exact: true });

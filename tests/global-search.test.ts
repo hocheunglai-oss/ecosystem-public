@@ -7,7 +7,7 @@ import type { IncomingEnquiry } from '../src/inbox';
 
 test('global search resolves stable buyer, supplier and location identities', () => {
   const state = createSeedState();
-  const index = globalSearchRecords(state, actors[0], [], [], true);
+  const index = globalSearchRecords(state, actors[0], [], [], true, true);
   const buyer = queryGlobalSearch(index, 'eco20001')[0];
   assert.equal(buyer.category, 'Buyer');
   assert.deepEqual(buyer.context, { buyerId: 'company-meridian' });
@@ -21,7 +21,7 @@ test('global search resolves stable buyer, supplier and location identities', ()
 test('combined country and port aliases produce one result retaining both names and the port code', () => {
   const state = createSeedState();
   const before = structuredClone(state);
-  const index = globalSearchRecords(state, actors[0], []);
+  const index = globalSearchRecords(state, actors[0], [], [], false, true);
   const locations = (query: string) => queryGlobalSearch(index, query).filter(record => record.workspace === 'ports');
   const country = locations('Netherlands');
   assert.equal(country.length, 1);
@@ -40,10 +40,17 @@ test('registering a second port restores the independent country search result w
   const state = createSeedState();
   const port = state.ports.find(port => port.id === 'port-rotterdam')!;
   state.ports.push({ ...port, id: 'port-amsterdam', name: 'Amsterdam', code: 'NLAMS' });
-  const index = globalSearchRecords(state, actors[0], []);
+  const index = globalSearchRecords(state, actors[0], [], [], false, true);
   const results = queryGlobalSearch(index, 'Netherlands').filter(record => record.workspace === 'ports');
   assert.deepEqual(results.map(record => record.id).sort(), ['country:Netherlands', 'port:port-amsterdam', 'port:port-rotterdam']);
   assert.deepEqual(queryGlobalSearch(index, 'NLAMS')[0].context, { portId: 'port-amsterdam' });
+});
+
+test('Stage 1 location search shows Singapore only', () => {
+  const index = globalSearchRecords(createSeedState(), actors[0], []);
+  const locations = index.filter(record => record.workspace === 'ports');
+  assert.deepEqual(locations.map(record => record.context), [{ portId: 'port-singapore' }]);
+  assert.deepEqual(queryGlobalSearch(index, 'jptyo'), []);
 });
 
 test('global search excludes another trader active work and private notes', () => {

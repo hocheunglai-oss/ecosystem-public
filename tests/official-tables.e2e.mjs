@@ -1,4 +1,4 @@
-import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedLocations, sharedLocations, selectSingaporeProfile } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -14,7 +14,7 @@ const rows = ['LNG','Methanol','Ammonia','Ethanol'].map(fuel => ({ id:fuel.toLow
 const reports=[]; await mkdir(out,{recursive:true});
 async function openTable(page) {
  const nav=page.getByRole('navigation',{name:'Workspace navigation'});await btn(nav,'Ports & Suppliers').click();await btn(nav,'Countries & Ports').click();
- const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});await btn(workspace,'Port Index').click();await workspace.getByLabel('Country or port',{exact:true}).fill('Singapore');await btn(workspace.locator('.location-table'),'Singapore').click();
+ const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});await selectSingaporeProfile(workspace);
  await workspace.getByRole('tab',{name:'Grades and delivery modes',exact:true}).click();return workspace;
 }
 for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {

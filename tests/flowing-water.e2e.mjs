@@ -76,6 +76,7 @@ async function mocks(context) {
       assert.equal(request.headers()['x-eco-data-mode'], 'live');
       return route.fulfill({ json: { items: [], total: 0 } });
     }
+    if (path === '/api/access/port-fixtures') return route.fulfill({ json: { items: [], supplierCount: 0 } });
     if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
     if (path === '/api/access/users') return route.fulfill({ json: { users: [state.user], offices: [{ id: 'HONG KONG', name: 'HONG KONG' }] } });
     if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
@@ -666,16 +667,15 @@ async function originalLogoColours(page) {
   assert.equal(tagline.weight, 600);
   assert.ok(tagline.left >= tagline.frame.left - 1 && tagline.right <= tagline.frame.right + 1 && tagline.top >= tagline.frame.top - 1 && tagline.bottom <= tagline.frame.bottom + 1, 'The stronger solid tagline fits its existing SVG lockup without clipping');
 }
-async function contributionColours(page) {
-  const actions = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => {
-    const style = getComputedStyle(node), channels = style.backgroundColor.match(/[\d.]+/g)?.slice(0, 3).map(Number) || [];
-    return { text: node.textContent.trim(), credited: node.classList.contains('ui-button--contribution'), channels, ink: style.color };
-  }));
-  assert.ok(actions.some(action => action.credited), 'Signed-in homepage retains credited Feedback');
-  for (const action of actions) {
-    const [r, g, b] = action.channels, blue = b > r + 50 && b > g + 45;
-    assert.equal(blue, action.credited, `Only contribution actions use blue: ${action.text}`);
-    if (action.credited) assert.equal(action.ink, 'rgb(255, 255, 255)', 'Credited homepage label has white text');
+async function stageOneActionColours(page) {
+  await expect(page.getByRole('button', { name: 'Feedback for ecosystem', exact: true })).toBeVisible();
+  await expect(page.locator('.ui-button--contribution:visible, .contribution-action-hint:visible')).toHaveCount(0);
+  const actions = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => ({
+    text: node.textContent.trim(),
+    channels: getComputedStyle(node).backgroundColor.match(/[\d.]+/g)?.slice(0, 3).map(Number) || [],
+  })));
+  for (const { text, channels: [r, g, b] } of actions) {
+    assert.ok(!(b > r + 50 && b > g + 45), `Stage 1 homepage actions use neutral colours: ${text}`);
   }
 }
 async function verifyNightContrast(page) {
@@ -713,7 +713,8 @@ async function verifyNightContrast(page) {
         const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data;
         return { rgb: [r / 255, g / 255, b / 255], alpha: alpha / 255 };
       };
-      return { label: node.textContent.trim(), fill: rgba(style.backgroundColor), ink: rgba(style.color), image: style.backgroundImage };
+      const surface = node.matches('.launcher-release-remark') ? getComputedStyle(node.parentElement) : style;
+      return { label: node.textContent.trim(), fill: rgba(surface.backgroundColor), ink: rgba(style.color), image: surface.backgroundImage };
     });
     assert.equal(style.image, 'none', 'Entry contrast uses a measurable shared solid/translucent fill');
     const fill = style.fill.rgb.map((channel, index) => channel * style.fill.alpha + backdrop[index] * (1 - style.fill.alpha));
@@ -724,7 +725,7 @@ async function verifyNightContrast(page) {
   };
   const navigation = await page.locator('.launcher-group:not([data-group="Trading"]) button.launcher-toggle').all();
   const deferred = page.locator('.world-launcher .launcher-group--deferred');
-  const footer = await page.locator('.home-display-controls button:visible:not(.ecosystem-feedback)').all();
+  const footer = await page.locator('.home-display-controls button:visible').all();
   assert.equal(navigation.length, Object.keys(groups).length - 1, 'All available secondary entry actions are checked');
   assert.ok(footer.length >= 2, 'Ordinary theme and account-view footer controls are checked');
   for (const action of [...navigation, ...footer]) {
@@ -850,13 +851,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     const shot = async name => { await noOverflow(page, name);
       const footer = await page.locator('.home-display-controls button:visible').evaluateAll(nodes => nodes.map(node => ({ label:node.textContent.trim(), size:parseFloat(getComputedStyle(node).fontSize), height:node.getBoundingClientRect().height })));
       assert.ok(footer.every(control => control.size >= 14 && control.height >= 44), `Readable footer actions: ${JSON.stringify(footer)}`);
-      const textInk = await page.locator('.access-login label:visible, .access-login p:not([role="alert"]):visible, .launcher-release-remark:visible').evaluateAll(nodes => nodes.map(node => {
+      const textInk = await page.locator('.access-login label:visible, .access-login p:not([role="alert"]):visible').evaluateAll(nodes => nodes.map(node => {
         const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
         const context = canvas.getContext('2d'); context.fillStyle = getComputedStyle(node).color; context.fillRect(0, 0, 1, 1);
         const [red, green, blue] = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(value => { const s = value / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
         return { text: node.textContent.trim(), luminance: .2126 * red + .7152 * green + .0722 * blue };
       }));
-      assert.ok(textInk.every(label => theme === 'light' ? label.luminance < .04 : label.luminance > .5), `Sign-in labels and release remarks use dark ink on the bright day image and light ink at night: ${JSON.stringify(textInk)}`);
+      assert.ok(textInk.every(label => theme === 'light' ? label.luminance < .04 : label.luminance > .5), `Sign-in labels use dark ink on the bright day image and light ink at night: ${JSON.stringify(textInk)}`);
       await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); };
     const background = page.locator('.flowing-water-background');
     const toggle = () => page.locator('.home-display-controls').getByRole('switch', { name: 'Dark mode', exact: true, includeHidden: true });
@@ -922,7 +923,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect.poll(() => page.locator('.world-interface').evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity).length)).toBe(0);
       const geometry = await homepageGeometry(page, width);
       await originalLogoColours(page);
-      await contributionColours(page);
+      await stageOneActionColours(page);
       const nightContrastMinimum = theme === 'dark' ? await verifyNightContrast(page) : null;
       await expect(background).toHaveAttribute('data-paused', 'false');
       const internalMotion = await verifyInternalMotion(page, background);
@@ -990,7 +991,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.locator('.hud-identity')).toContainText(member.displayName);
       const deferred = page.locator('.launcher-group--deferred');
       await expect(deferred.getByRole('heading', { name: 'Buyers and Credit', exact: true })).toBeVisible();
-      await expect(deferred).toContainText('UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0');
+      await expect(deferred).toContainText('COMING IN ECO 2.0');
       await expect(deferred.locator('button, [aria-expanded]')).toHaveCount(0);
       await shot('member-gate');
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();

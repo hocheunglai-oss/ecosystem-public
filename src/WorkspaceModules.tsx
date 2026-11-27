@@ -20,11 +20,8 @@ import Administration, { FeedbackWorkspace } from './Administration';
 import { PasswordSettings } from './PasswordSettings';
 import PrivacyDetails from './PrivacyDetails';
 import { PersonalDetails } from './ProfileMenu';
-import { useWaterBackground, type WaterBackground } from './backgroundPreference';
 import { useAccess } from './auth';
-import {
-  ManagementPage,
-} from "./OperationsPages";
+import { ContributionPage } from "./OperationsPages";
 import type { OpenModal } from "./types";
 import type { OpenWorkspace, WorkspaceId, WorkspaceNavigationContext } from "./workspaceNavigation";
 export type { WorkspaceId } from "./workspaceNavigation";
@@ -33,13 +30,14 @@ export { workspaceTitles } from "./workspaceNavigation";
 
 type Props = {
   id: WorkspaceId;
+  visible: boolean;
   open: OpenModal;
   onOpen: OpenWorkspace;
   context?: WorkspaceNavigationContext;
   onAdminOperationPending?: (reference: string | null) => void;
 };
 
-export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPending }: Props) {
+export function WorkspaceModule({ id, visible, open, onOpen, context, onAdminOperationPending }: Props) {
   const buyerCreditAvailable = useBuyerCreditAvailable();
   const { dataMode } = useTestWorkspace();
   if (isBuyerCreditWorkspace(id) && !buyerCreditAvailable) return <ReleaseNotice />;
@@ -54,17 +52,16 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
     case "lost":
       content = dataMode === "live" ? <LiveLostRecords onOpen={onOpen} /> : <RecordsPage open={open} kind="lost" />;
       break;
-    case "ports":
-      content = <LocationWorkspace open={open} onOpen={onOpen} context={context} />;
-      break;
+
     case "counterparties":
       content = <BuyerProfileDirectory open={open} initialBuyerId={context?.buyerId} />;
       break;
     case "feedback":
       content = <FeedbackWorkspace />;
       break;
+    case "ports":
     case "countries":
-      content = <LocationWorkspace open={open} onOpen={onOpen} context={context} />;
+      content = <LocationWorkspace visible={visible} open={open} onOpen={onOpen} context={context} />;
       break;
     case "singapore-suppliers":
       content = <SupplierWorkspace open={open} onOpen={onOpen} context={context} singapore />;
@@ -93,60 +90,42 @@ export function WorkspaceModule({ id, open, onOpen, context, onAdminOperationPen
 
 function SettingsWorkspace({ open, onAdminOperationPending }: { open: OpenModal; onAdminOperationPending?: (reference: string | null) => void }) {
   const { user, preview } = useAccess();
-  const { background, chooseBackground, canChooseBackground } = useWaterBackground();
+  const { developerMode } = useTestWorkspace();
   const [tab, setTab] = useState<
-    "users" | "management" | "administration" | "lost-reasons" | "password" | "privacy"
-  >(user?.isAdmin ? "users" : "password");
+    'personal' | 'privacy' | 'users' | 'lost-reasons' | 'administration' | 'contribution'
+  >('personal');
   const [pendingReference, setPendingReference] = useState<string | null>(null);
   const onPendingChange = useCallback((reference: string | null) => {
     setPendingReference(reference); onAdminOperationPending?.(reference);
   }, [onAdminOperationPending]);
   if (!user) return null;
+  const accountTabs = [['personal', 'Personal details'], ['privacy', 'Privacy']] as const;
+  const adminTabs = [['users', 'User Management'], ['lost-reasons', 'Lost reasons'], ['administration', 'Administration'], ['contribution', 'Contribution']] as const;
+  const visibleAdminTabs = user.isAdmin && !preview ? adminTabs.filter(([id]) => id !== 'contribution' || developerMode) : [];
+  const selectedTab = [...accountTabs, ...visibleAdminTabs].some(([id]) => id === tab) ? tab : 'personal';
+  function tabButton([id, label]: (typeof accountTabs | typeof adminTabs)[number]) {
+    return <button key={id} type="button" disabled={Boolean(pendingReference)} className={selectedTab === id ? 'active' : ''}
+      aria-current={selectedTab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+      {id === 'administration' && <History size={15} aria-hidden="true" />}{label}
+    </button>;
+  }
   return (
     <>
       <div className="module-settings-toolbar">
-        <div className="tabs" aria-label="Settings">
-          <button disabled={Boolean(pendingReference)} className={tab === "password" ? "active" : ""} onClick={() => setTab("password")}>Personal details</button>
-          <button disabled={Boolean(pendingReference)} className={tab === 'privacy' ? 'active' : ''} onClick={() => setTab('privacy')}>Privacy</button>
-          {user.isAdmin && !preview && <>
-          <button disabled={Boolean(pendingReference)} className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users &amp; Access</button>
-          <button
-            disabled={Boolean(pendingReference)}
-            className={tab === "management" ? "active" : ""}
-            onClick={() => setTab("management")}
-          >
-            Management
-          </button>
-          <button
-            disabled={Boolean(pendingReference)}
-            className={tab === "lost-reasons" ? "active" : ""}
-            onClick={() => setTab("lost-reasons")}
-          >
-            Lost reasons
-          </button>
-          <button
-            disabled={Boolean(pendingReference)}
-            className={tab === "administration" ? "active" : ""}
-            onClick={() => setTab("administration")}
-          >
-            <History size={15} /> Administration
-          </button>
-          </>}
-        </div>
+        <nav className="tabs settings-nav" aria-label="Settings">
+          <div className="settings-nav-group">{accountTabs.map(tabButton)}</div>
+          {visibleAdminTabs.length > 0 && <div className="settings-nav-group">{visibleAdminTabs.map(tabButton)}</div>}
+        </nav>
       </div>
-      {tab === 'password' ? <div className="personal-settings"><div className="personal-display-settings"><PersonalDetails /><label className="background-choice">
-        <span>Background</span>
-        <select aria-label="Background" value={background} disabled={!canChooseBackground} onChange={event => chooseBackground(event.target.value as WaterBackground)}>
-          <option value="watercolour">Watercolour</option>
-          <option value="diffuse">Diffuse</option>
-        </select>
-      </label></div><section className="personal-password" aria-label="Change password"><h2>Change password</h2><PasswordSettings /></section></div> : tab === 'privacy' ? <PrivacyDetails /> : !user.isAdmin || preview ? null : tab === 'users' ? <UsersAccess onPendingChange={onPendingChange} /> : tab === "management" ? (
-        <ManagementPage open={open} />
-      ) : tab === "lost-reasons" ? (
-        <LostReasonSettings />
-      ) : (
-        <Administration />
-      )}
+      {selectedTab === 'personal' && <div className="personal-settings">
+        <PersonalDetails />
+        <section className="personal-password" aria-labelledby="password-heading"><h2 id="password-heading">Change password</h2><PasswordSettings /></section>
+      </div>}
+      {selectedTab === 'privacy' && <PrivacyDetails />}
+      {selectedTab === 'users' && <UsersAccess onPendingChange={onPendingChange} />}
+      {selectedTab === 'lost-reasons' && <LostReasonSettings />}
+      {selectedTab === 'administration' && <Administration />}
+      {selectedTab === 'contribution' && <ContributionPage open={open} />}
     </>
   );
 }

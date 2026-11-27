@@ -3,6 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
+import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
+import { installProfileTabMocks } from './fixtures/profile-tabs.mjs';
 import { installSharedLocations } from './fixtures/shared-locations.mjs';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 
@@ -34,13 +36,17 @@ async function mocks(context) {
     if (path === '/api/enquiries/dispatcher') return route.fulfill({ json: { routes: [] } });
     if (path === '/api/enquiries/inbox') return route.fulfill({ json: { items: [], nextCursor: null, unreadCount: 0 } });
     if (path === '/api/enquiries/records') return route.fulfill({ json: { items: [], nextCursor: null } });
+    if (path === '/api/access/port-fixtures') return route.fulfill({ json: { items: [], supplierCount: 0 } });
     if (path === '/api/intelligence/snapshot') return route.fulfill({ json: { available: false, snapshot: null } });
     if (path.startsWith('/api/suppliers/')) return route.fulfill({ json: { items: [], page: 1, pageSize: 100, total: 0 } });
     if (path.startsWith('/api/admin/')) return route.fulfill({ json: { items: [], count: 0, nextCursor: null, periodStart: '2026-10-20T00:00:00Z', periodEnd: '2026-10-27T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } });
     state.unexpected.push(`${request.method()} ${path}`);
     return route.fulfill({ status: 503, json: { message: 'Unmatched synthetic test request.' } });
   });
-  await installSharedLocations(context, { user: () => state.signedIn ? member : null });
+  const user = () => state.signedIn ? member : null;
+  await installSharedLocations(context, { user });
+  await installSharedAttachments(context, { user });
+  await installProfileTabMocks(context, { ownerId: () => user()?.id });
   return state;
 }
 const controlIn = scope => scope.getByRole('switch', { name: 'Dark mode', exact: true, includeHidden: true });
@@ -156,7 +162,7 @@ async function workspacePaint(workspace, name, theme) {
   const dark = theme === 'dark';
   await expect(workspace).toHaveCSS('background-color', dark ? 'rgb(0, 0, 0)' : 'rgb(245, 245, 245)');
   const selectors = name === 'Enquiries' ? ['.center-tabs > button', '[aria-selected="true"]']
-    : name === 'Settings' ? ['.tabs > button', '.active'] : null;
+    : name === 'Settings' ? ['.settings-nav-group > button', '.active'] : null;
   if (!selectors) return;
   const [tab, active] = selectors;
   const selected = workspace.locator(tab + active);
@@ -228,7 +234,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await authentication(page, 'session', () => page.reload({ waitUntil: 'domcontentloaded' })); await mode(page, theme);
       await translucent(page.locator('.trader-hud[data-trader-hud], .world-launcher button.launcher-toggle'));
       const contributionTier = page.locator('.hud-resource-activity > .contribution-tier');
-      await expect(contributionTier).toHaveCSS('color', theme === 'dark' ? 'rgb(174, 174, 178)' : 'rgb(93, 93, 93)');
+      await expect(contributionTier).toHaveCount(0);
       for (const name of ['Enquiries', 'Countries & Ports', 'Supplier Profiles', 'Settings']) {
         const workspace = await openWorkspace(page, name), control = controlIn(workspace.locator('.window-foot'));
         await mode(page, theme); await usable(page, control);

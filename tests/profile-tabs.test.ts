@@ -35,7 +35,7 @@ test('buyer tab APIs require local staging, developer authority and a real admin
  const staging={...config,localStaging:true} as const;
  for(const options of [{},{spc:true},{admin:true},{admin:true,developer:true,activated:false},...['admin','trader','spc-trader','manager','credit'].map(previewRole=>({admin:true,developer:true,preview:true,previewRole}))]){
   const {g,calls}=gateway(options);const response=await handleProfileTabs(request('list?kind=buyer&id=buyer-fixture'),staging,g);
-  assert.equal(response.status,403);assert.match(await response.text(),/UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0/);assert.match(response.headers.get('cache-control')!,/no-store/);
+  assert.equal(response.status,403);assert.match(await response.text(),/COMING IN ECO 2.0/);assert.match(response.headers.get('cache-control')!,/no-store/);
   for(const [path,input] of mutations)assert.equal((await handleProfileTabs(request(path,input),staging,g)).status,403);
   assert.equal(calls.length,0);
  }

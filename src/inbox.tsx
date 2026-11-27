@@ -323,7 +323,7 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   const requestVersion = useRef(0);
   const readController = useRef<AbortController | null>(null);
   const polling = useRef<ReturnType<typeof createInboxPolling> | null>(null);
-  const mutations = useRef(new Map<string, { input: InboxMutation; controller?: AbortController }>());
+  const mutations = useRef(new Map<string, { input: InboxMutation; targets?: Set<string>; controller?: AbortController }>());
   const links = useRef<Record<string, string>>({});
   const storageFailed = useRef(false);
   const current = useCallback(() => mounted.current && allowed && currentScope.current === scope && isCurrentWorkspace(namespace) && !isPreviewReadOnly(), [allowed, scope, namespace]);
@@ -423,21 +423,31 @@ export function InboxProvider({ children }: { children: ReactNode }) {
     const previous = mutations.current.get(operationKey);
     if (previous?.controller && !previous.controller.signal.aborted) return;
     const input: InboxMutation = previous?.input ?? { requestId: crypto.randomUUID(), action, ...(id ? { id } : {}) };
-    const controller = new AbortController(); const operation = { input, controller };
+    const targets = previous?.targets ?? (action === 'dismiss-all' ? new Set(snapshotRef.current.items.map(item => item.id)) : undefined);
+    const controller = new AbortController();
+    const operation = { input, targets, controller };
     mutations.current.set(operationKey, operation);
     const loop = polling.current; loop?.pause();
     readController.current?.abort(); requestVersion.current++;
     setStatus(value => ({ ...value, scope, busy: true, loading: false, error: '' }));
     try {
-      await inboxApi.mutate(owner, input, controller.signal);
+      const receipt = await inboxApi.mutate(owner, input, controller.signal);
       if (!current() || controller.signal.aborted) return;
       mutations.current.delete(operationKey);
+      const before = snapshotRef.current;
+      let clearedUnread = 0;
+      const items = before.items.map(item => {
+        if (!targets?.has(item.id) && receipt.item?.id !== item.id) return item;
+        if (!item.read && !item.dismissed) clearedUnread++;
+        return action === 'read' ? { ...item, read: true } : { ...item, dismissed: true };
+      });
+      publish({ ...before, items, unreadCount: previous ? Math.max(0, before.unreadCount - clearedUnread) : receipt.unreadCount });
       // A replayed receipt is immutable; fetch today's count instead of applying its stale total.
       await loop?.refreshAfterCurrent();
     } catch (failure) {
       if (!current() || controller.signal.aborted) return;
       if ([401, 403].includes((failure as { status?: number }).status ?? 0)) { publish(emptySnapshot(scope)); setSelection(null); mutations.current.delete(operationKey); }
-      else mutations.current.set(operationKey, { input });
+      else mutations.current.set(operationKey, { input, targets });
       setStatus(value => ({ ...value, scope, error: 'Inbox update failed. Try again.' }));
     } finally {
       if (current() && !controller.signal.aborted) {

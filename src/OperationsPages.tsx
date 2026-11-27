@@ -2,7 +2,6 @@ import { creditRequestType } from "./lib/credit";
 import {
   ArrowUpRight,
   ClipboardCheck,
-  LockKeyhole,
 } from "lucide-react";
 import {
   actors,
@@ -16,7 +15,6 @@ import {
   Badge,
   CardHeading,
   date,
-  Empty,
   money,
   PageHeading,
   Status,
@@ -131,17 +129,13 @@ export function RequestCard({
   );
 }
 
-export function ManagementPage({ open }: { open: OpenModal }) {
+export function ContributionPage({ open }: { open: OpenModal }) {
   const { state, actor } = useDemo();
   const { dataMode } = useTestWorkspace();
-  if (!isAdmin(actor)) return <>
-    <PageHeading title="MANAGEMENT" />
-    <section className="card"><Empty title="ADMIN ACCESS"><LockKeyhole size={20} /> ADMIN ACCESS REQUIRED</Empty></section>
-  </>;
   const contributions = state.contributions.filter(item => item.status === "approved");
   const requests = state.requests.filter(request => request.status === "pending");
   return <>
-    <PageHeading title="MANAGEMENT" />
+    <PageHeading title="CONTRIBUTION" />
     <ContributionPerformance />
     {dataMode === 'test' && <details className="card management-demo-records">
       <summary>DEMO BUSINESS RECORDS</summary>

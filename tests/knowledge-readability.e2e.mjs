@@ -1,3 +1,4 @@
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -10,7 +11,7 @@ import { installIntelligence } from './fixtures/intelligence.mjs';
 
 const base = process.env.ECO_READABILITY_ORIGIN || 'http://127.0.0.1:4398';
 const out = process.env.ECO_READABILITY_OUTPUT || '/private/tmp/eco-knowledge-readability-oct21';
-const user = { id:'10000000-0000-4000-8000-000000000001', email:'readability@example.test', displayName:'READABILITY FIXTURE', phone:'', officeId:'HONG KONG', officeName:'HONG KONG', isAdmin:true, isSpcTrader:true, isManager:false, isActive:true, activated:true, passwordChangeSuggested:false, revision:1 };
+const user = { capabilities: { appearancePreview: false, testWorkspace: true }, id:'10000000-0000-4000-8000-000000000001', email:'readability@example.test', displayName:'READABILITY FIXTURE', phone:'', officeId:'HONG KONG', officeName:'HONG KONG', isAdmin:true, isSpcTrader:true, isManager:false, isActive:true, activated:true, passwordChangeSuggested:false, revision:1 };
 const paragraph = 'OPERATING INFORMATION SHOULD REMAIN EASY TO READ WHEN AN ENTRY CONTAINS SEVERAL SENTENCES. KEEP THE TEXT AT A COMFORTABLE LINE LENGTH WHILE LETTING COMPARISON TABLES USE THE AVAILABLE SPACE. ';
 const referenceUrl = 'https://Example.test/PortData?Key=AbC';
 const text = `REFERENCE ${referenceUrl}\n\n${Array(8).fill(paragraph).join('\n\n')}`;
@@ -64,7 +65,9 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
     const context=await browser.newContext({viewport:{width,height:width<760?844:1000},isMobile:width<760,hasTouch:width<760,reducedMotion:'reduce'});
     await installStagingCookies(context,base);
     await context.addInitScript(theme=>localStorage.setItem('ecosystem.theme.v1',theme),theme);
-    const authority=await fixture(context),page=await context.newPage(),errors=[];
+    const authority=await fixture(context);
+    await installTestWorkspacePolicy(context);
+    const page=await context.newPage(),errors=[];
     page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.stack||error.message));
     const shot=async name=>{await page.screenshot({path:`${out}/${engine}-${width}-${theme}-${name}.png`});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No viewport overflow');};
     try {
@@ -80,6 +83,7 @@ for (const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
         return port.id;
       },{text});
       await page.goto(base);await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();
+      await activateDeveloperMode(page);
       const nav=page.getByRole('navigation',{name:'Workspace navigation'});
       if(await btn(nav,'Ports & Suppliers').getAttribute('aria-expanded')!=='true')await btn(nav,'Ports & Suppliers').click();
       await btn(nav,'Countries & Ports').click();

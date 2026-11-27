@@ -1,3 +1,4 @@
+import { selectSingaporeProfile } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -26,7 +27,7 @@ for(const engine of (process.env.ECO_SHARED_ATTACHMENTS_ENGINES||'chromium,webki
    await installSharedLocations(context,{user:()=>sessionUser});fixture=await installSharedAttachments(context,{user:()=>sessionUser});
    await page.goto(base);await page.getByRole('main',{name:'ECOSYSTEM workspace'}).waitFor();await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
    const nav=page.getByRole('navigation',{name:'Workspace navigation'});await nav.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();await nav.getByRole('button',{name:'Countries & Ports',exact:true}).click();
-   const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});await workspace.getByRole('button',{name:'Port Index',exact:true}).click();await workspace.getByLabel('Country or port',{exact:true}).fill('Singapore');await workspace.locator('.location-table').getByRole('button',{name:'Singapore',exact:true}).click();await workspace.locator('.knowledge-header .attachments-trigger').first().click();
+   const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});await selectSingaporeProfile(workspace);await workspace.locator('.knowledge-header .attachments-trigger').first().click();
    const files=page.getByRole('dialog',{name:'Attachments',exact:true});
    await page.evaluate(async owner=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('ecosystem.attachments.v1',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const bytes=new Uint8Array(50*1024*1024+1);bytes[0]=17;bytes[bytes.length-1]=29;await new Promise((resolve,reject)=>{const tx=db.transaction(['items','blobs'],'readwrite');tx.objectStore('items').put({id:'oversized-local-original',folderId:'port:port-singapore',scope:{target:{kind:'port',id:'port-singapore'}},name:'Oversized browser original.bin',type:'file',size:bytes.length,mime:'application/octet-stream',createdBy:owner,createdAt:'2026-01-01T00:00:00Z'});tx.objectStore('blobs').put({id:'oversized-local-original',bytes:bytes.buffer,mime:'application/octet-stream'});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();const channel=new BroadcastChannel('ecosystem.attachments.v1');channel.postMessage('refresh');channel.close();},user.id);
    await expect(files.getByText(/1 ABOVE 50 MB/)).toBeVisible();fixture.failPrepareResponseOnce=true;

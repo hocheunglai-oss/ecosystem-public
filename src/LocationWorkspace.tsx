@@ -25,6 +25,8 @@ import "./locations.css";
 import KnowledgeExtractor from "./KnowledgeExtractor";
 import LocationStorageStatus from './LocationStorageStatus';
 import { useAccess } from './auth';
+import { useTestWorkspace } from './TestWorkspace';
+import { ECO_STAGE_ONE_PORT_ID } from '../shared/ecoRelease';
 
 type NewLocation = {
   kind: "country" | "port";
@@ -57,16 +59,19 @@ function contextTarget(
   if (context?.portId) return { kind: "port", id: context.portId };
 }
 export default function LocationWorkspace({
+  visible,
   open,
   onOpen,
   context,
 }: {
+  visible: boolean;
   open: OpenModal;
   onOpen: OpenWorkspace;
   context?: WorkspaceNavigationContext;
 }) {
   const { state, actor, locations } = useDemo();
   const { preview } = useAccess();
+  const { developerMode } = useTestWorkspace();
   const records = useMemo(
     () => locationRecords(state),
     [state],
@@ -96,7 +101,8 @@ export default function LocationWorkspace({
     return `${target.kind}:${target.id}`;
   }
   const visibleRecent = [...new Set(recent.map(profileKey))];
-  const current = records.find((r) => r.key === (selected ? profileKey(selected) : undefined));
+  const currentKey = developerMode ? selected && profileKey(selected) : 'port:' + ECO_STAGE_ONE_PORT_ID;
+  const current = records.find(record => record.key === currentKey);
   function choose(record: LocationRecord) {
     record = records.find(item => item.key === profileKey(record.key)) ?? record;
     if (record.key !== current?.key && !leaveProfile()) return;
@@ -130,6 +136,7 @@ export default function LocationWorkspace({
     setIndex(kind);
   }
   useEffect(() => {
+    if (!developerMode) return;
     const target = contextTarget(context, state.legacyLocationAreas);
     if (target) {
       const actual = locationProfileTarget(state, target);
@@ -138,7 +145,7 @@ export default function LocationWorkspace({
       );
       if (record) choose(record);
     } else showLanding();
-  }, [context]);
+  }, [context, developerMode]);
   useEffect(() => {
     if (!created) return;
     const record = records.find(
@@ -163,14 +170,14 @@ export default function LocationWorkspace({
   const ancestors = current
     ? locationAncestors(state, current.target)
     : [];
-  const directory = !!index || !!normalized;
-  const landing = !current && !directory;
+  const directory = developerMode && Boolean(index || normalized);
+  const landing = developerMode && !current && !directory;
   return (
     <div className={`location-workspace${current && !directory ? " location-workspace-profile" : ""}`}>
       <LocationStorageStatus />
       <div className="location-toolbar">
-        {!landing && <button className="location-back" aria-label="Back to Countries & Ports" title="Back to Countries & Ports" onClick={showLanding}><ArrowLeft size={17} /></button>}
-        <label className="location-search">
+        {developerMode && !landing && <button className="location-back" aria-label="Back to Countries & Ports" title="Back to Countries & Ports" onClick={showLanding}><ArrowLeft size={17} /></button>}
+        {developerMode && <label className="location-search">
           <Search size={16} />
           <input
             aria-label="Country or port"
@@ -187,11 +194,12 @@ export default function LocationWorkspace({
               <X size={15} />
             </button>
           )}
-        </label>
+        </label>}
         <div className="location-toolbar-actions">
-          <button className="button secondary" disabled={!locations.ready || Boolean(preview)} onClick={() => { if (leaveProfile()) setExtracting(true); }}>
+          <button className="button secondary" disabled={!locations.ready || Boolean(preview) || (!developerMode && !current)} onClick={() => { if (leaveProfile()) setExtracting(true); }}>
             <ClipboardPaste size={14} /> Information extractor
           </button>
+          {developerMode && <>
           <button
             className="button secondary location-add"
             disabled={!locations.ready || Boolean(preview)}
@@ -213,6 +221,7 @@ export default function LocationWorkspace({
           >
             Port Index
           </button>
+          </>}
         </div>
       </div>
       {landing ? (
@@ -266,20 +275,22 @@ export default function LocationWorkspace({
             target={current.target}
             onDirtyChange={dirty => { profileDirty.current = dirty; }}
             open={open}
+            visible={visible}
             onOpenSupplier={(portId, supplierId) => onOpen("suppliers", { portId, supplierId, returnTo: "ports" })}
-            onOpenPort={portId => { const record = records.find(item => item.kind === "port" && item.target.id === portId); if (record) choose(record); }}
+            onOpenPort={developerMode ? portId => { const record = records.find(item => item.kind === "port" && item.target.id === portId); if (record) choose(record); } : undefined}
             fixedLayout
-            navigation={(ancestors.length > 0) ? <nav className="location-parent-path" aria-label="Location breadcrumb">
+            navigation={(developerMode && ancestors.length > 0) ? <nav className="location-parent-path" aria-label="Location breadcrumb">
               {ancestors.map(record => <button key={record.key} onClick={() => choose(record)}>{record.name}</button>)}
             </nav> : undefined}
           />
       ) : null}
-      {extracting && <KnowledgeExtractor current={current} onClose={() => setExtracting(false)} onSaved={key => {
+      {extracting && <KnowledgeExtractor key={developerMode ? 'directory' : current?.key} current={current}
+        locationKey={developerMode ? undefined : current?.key} onClose={() => setExtracting(false)} onSaved={key => {
           setExtracting(false);
           const record = records.find(item => item.key === key);
           if (record) choose(record);
         }} />}
-      {adding && (
+      {developerMode && adding && (
         <AddLocation
           current={current}
           onClose={() => setAdding(false)}

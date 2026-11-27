@@ -44,7 +44,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     try {
       await page.goto(base, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
-      await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveAttribute('href', '/privacy.html');
       await expect(page.getByRole('button', { name: 'Privacy', exact: true })).toHaveCount(0);
       assert.equal(privacyReads, 0); assert.equal(locations.reads,0,'Signed-out page never reads shared location data');
       await expect(page.locator('.immersive-app')).toHaveAttribute('data-design', 'flowing-water');
@@ -76,6 +76,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       const article = dialog.getByRole('article', { name: 'Privacy', exact: true });
       await expect(article.getByRole('heading', { name: 'Sign-in and browser storage', exact: true })).toBeVisible();
       await expect(article).toContainText('Private profile tabs belong to their owner.');
+      await expect(article.getByRole('link', { name: 'Privacy notice', exact: true })).toHaveAttribute('href', '/privacy.html');
       await shot(page, 'settings-privacy');
       const ending = article.locator('p').last();
       await ending.scrollIntoViewIfNeeded(); await expect(ending).toBeInViewport();
@@ -89,4 +90,4 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     finally { await context.close(); }
   } } finally { await browser.close(); }
 }
-await writeFile(resolve(out, 'results.json'), JSON.stringify({ base, results, checked: 'No public Privacy action/account fetch; minimal static notice, keyboard/email/200% text; trader Settings privacy, retry, revocation cleanup.', limits: 'Isolated Chromium/WebKit with synthetic API. No real application credentials or business writes.' }, null, 2));
+await writeFile(resolve(out, 'results.json'), JSON.stringify({ base, results, checked: 'Sign-in privacy link without private account fetch; static notice, keyboard/email/200% text; trader Settings privacy, retry, revocation cleanup.', limits: 'Isolated Chromium/WebKit with synthetic API. No real application credentials or business writes.' }, null, 2));

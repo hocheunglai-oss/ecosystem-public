@@ -58,7 +58,7 @@ export function HatsOffPanel({ preview = null, canPreview = false, onPreviewChan
           {standing.tied && <small>SHARED</small>}</div>
       </div>
       <p className="hats-off-guidance">{count === 0
-        ? "EARN HATS BY SHARING USEFUL CONTRIBUTIONS. COLLEAGUES CAN SELECT HATS OFF ON YOUR UPDATES."
+        ? "COLLEAGUES CAN SELECT HATS OFF ON YOUR UPDATES."
         : "EVERY HAT IS A COLLEAGUE’S THANKS FOR KNOWLEDGE WORTH SHARING."}</p>
       <div className="hats-off-next">
         {standing.next ? <>

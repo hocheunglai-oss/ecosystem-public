@@ -1,6 +1,7 @@
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -99,6 +100,7 @@ for (const [engine, type] of [
           (theme) => localStorage.setItem("ecosystem.theme.v1", theme),
           theme,
         );
+        await installTestWorkspacePolicy(context);
         const page = await context.newPage(),
           errors = [];
         page.on("pageerror", (error) => errors.push(error.message));
@@ -153,6 +155,8 @@ for (const [engine, type] of [
           await page
             .getByRole("main", { name: "ECOSYSTEM workspace" })
             .waitFor();
+          await expect(trigger).toHaveCount(0);
+          await activateDeveloperMode(page);
           await expect(trigger.locator(".contribution-tier")).toHaveText(
             "CHECKING",
           );
@@ -246,6 +250,7 @@ for (const [engine, type] of [
           );
           mode = "error";
           await page.reload();
+          await activateDeveloperMode(page);
           await expect(trigger.locator(".contribution-tier")).toHaveText(
             "UNAVAILABLE",
           );

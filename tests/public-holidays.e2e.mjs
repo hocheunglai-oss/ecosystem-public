@@ -1,3 +1,4 @@
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -8,7 +9,7 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 
 const base = process.env.ECO_HOLIDAY_ORIGIN || 'http://127.0.0.1:4340';
 const out = resolve(process.env.ECO_HOLIDAY_OUTPUT || 'output/holiday-status');
-const user = { id: '10000000-0000-4000-8000-000000000001', email: 'holiday@example.test', displayName: 'HOLIDAY FIXTURE', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: false, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const user = { capabilities: { appearancePreview: false, testWorkspace: true },  id: '10000000-0000-4000-8000-000000000001', email: 'holiday@example.test', displayName: 'HOLIDAY FIXTURE', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const btn = (scope, name) => scope.getByRole('button', { name, exact: true });
 const results = [];
 await mkdir(out, { recursive: true });
@@ -58,6 +59,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await installStagingCookies(context, base);
       const state = await fixture(context);
       await context.addInitScript(theme => localStorage.setItem('ecosystem.theme.v1', theme), theme);
+      await installTestWorkspacePolicy(context);
       const page = await context.newPage(), errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
@@ -84,6 +86,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         state.user = structuredClone(user);
         await page.reload();
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+        await activateDeveloperMode(page);
         const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
         await btn(nav, 'Ports & Suppliers').click();
         await btn(nav, 'Countries & Ports').click();

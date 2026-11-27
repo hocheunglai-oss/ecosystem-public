@@ -133,6 +133,7 @@ export function KnowledgePanel({
   onOpen,
   onOpenSupplier,
   fixedLayout = false,
+  visible = true,
   navigation,
   supplierInformation,
   supplierInformationSearch,
@@ -144,6 +145,7 @@ export function KnowledgePanel({
   onOpen?: OpenWorkspace;
   onOpenSupplier?: (portId: string, supplierId: string) => void;
   fixedLayout?: boolean;
+  visible?: boolean;
   navigation?: ReactNode;
   supplierInformation?: ReactNode;
   supplierInformationSearch?: string;
@@ -260,12 +262,12 @@ export function KnowledgePanel({
   const supplierSearch = query.trim();
   const supplierScope = port ? supplierPortForLocation(port) : undefined;
   const supplierSections = tabs.filter(section => section.role === "suppliers");
-  const rankReport = usePortFixtureReport('ranking', supplierScope?.id, Boolean(overview && (searching || active === overview)
+  const rankReport = usePortFixtureReport('ranking', supplierScope?.id, Boolean(visible && overview && (searching || active === overview)
     && !activePrivate && !panel && !showingStatistics));
   const priceSection = tabs.find(section => section.role === 'price-history');
   const priceSearch = priceSection && matchesKnowledgeSearch(query, priceSection.title) ? '' : query.trim();
   const deferredPriceSearch = useDeferredValue(priceSearch);
-  const priceSearchReport = usePortFixtureReport('prices', supplierScope?.id, Boolean(priceSection && searching), deferredPriceSearch);
+  const priceSearchReport = usePortFixtureReport('prices', supplierScope?.id, Boolean(visible && priceSection && searching), deferredPriceSearch);
   const checkSupplierMatches = Boolean(searching && supplierScope && supplierSections.some(section => !matchesKnowledgeSearch(supplierSearch, section.title)));
   const supplierMatches = useSupplierList({ portId: supplierScope?.id, search: supplierSearch, limit: 1 }, checkSupplierMatches);
   const matchingPorts = hasPortsTab && searching ? countryPorts.filter(item => matchesKnowledgeSearch(query, "Ports", item.name, item.country)) : [];
@@ -507,7 +509,7 @@ export function KnowledgePanel({
           ) : showingStatistics ? (
             <Suspense fallback={<p className="knowledge-empty" role="status">Loading statistics…</p>}><SpcPortStatistics /></Suspense>
           ) : showingPrices && port ? (
-            <PortBuyPrices portId={port.id} scopeId={supplierScope?.id} title={active.title} />
+            <PortBuyPrices portId={port.id} scopeId={visible ? supplierScope?.id : undefined} title={active.title} />
           ) : showingFixtures ? (
             <SupplierFixtures supplierId={actual.id} open={open} />
           ) : active ? (
@@ -566,7 +568,7 @@ export function KnowledgeEntryAttribution({ update, label = "information", hatTa
   const contributorLabel = (id: string) => {
     const person = id === viewer.id ? viewer : id === actor.id ? actor : actors.find(candidate => candidate.id === id);
     const email = person ? undefined : state.profiles?.[id]?.email?.trim() || undefined;
-    return { text: person?.name ?? email ?? "CONTRIBUTOR", email: Boolean(email) };
+    return { text: person?.name ?? email ?? "USER", email: Boolean(email) };
   };
   const updatedBy = contributorLabel(update.updatedBy);
   const formattedDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(update.updatedAt));

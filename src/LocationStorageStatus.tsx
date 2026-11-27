@@ -4,11 +4,13 @@ import { useAccess } from './auth';
 import { locationImportAssessment } from './lib/useSharedLocationKnowledge';
 import { Modal } from './ui';
 import { KnowledgeComparison } from './KnowledgeEditor';
+import { useTestWorkspace } from './TestWorkspace';
 import './location-storage.css';
 
 export default function LocationStorageStatus() {
   const { locations } = useDemo();
   const { preview } = useAccess();
+  const { developerMode } = useTestWorkspace();
   const [review, setReview] = useState(false);
   const assessment = useMemo(() => locationImportAssessment(locations.data?.snapshot, locations.migration), [locations.data, locations.migration]);
   const conflicts = assessment.conflicts;
@@ -45,7 +47,7 @@ export default function LocationStorageStatus() {
           <summary>{key.slice(key.indexOf(':') + 1)} · {document.sections.length} TABS</summary>
           <KnowledgeComparison before={locations.data?.snapshot.knowledgeRecords[key] ?? { version: 0, sections: [] }} after={document} />
         </details>)}
-        <p>{migration.knowledgeHistory.length} HISTORY ENTRIES · {migration.contributions.length} HISTORICAL CONTRIBUTIONS</p>
+        <p>{migration.knowledgeHistory.length} HISTORY ENTRIES{developerMode && <> · {migration.contributions.length} HISTORICAL CONTRIBUTIONS</>}</p>
         {locations.error && <p className="notice rose" role="alert">{locations.error}</p>}
         <div className="modal-actions"><button type="button" className="button secondary" disabled={locations.busy} onClick={() => setReview(false)}>CLOSE</button>
           <button type="button" className="button secondary" disabled={Boolean(assessment.error) || conflicts.length > 0 || locations.busy || locations.pending || Boolean(preview)} onClick={async () => { if (await locations.importLegacy()) setReview(false); }}>IMPORT</button>

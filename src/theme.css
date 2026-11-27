@@ -39,9 +39,6 @@
 :is(.resource-balance) { background: var(--ws-surface, #eef3f9); }
 
 /* Shared dark working surfaces; semantic status colours retain their meaning. */
-:root[data-theme="dark"] :is(.workspace-window, .modal) .contribution-reward {
-  color: var(--theme-amber);
-}
 :root[data-theme="dark"] {
   color-scheme: dark;
   background: var(--ui-canvas);
@@ -199,12 +196,8 @@
 .workspace-window .window-foot-actions .ecosystem-feedback,
 :root .home-display-controls .theme-toggle.ecosystem-feedback {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
-  border: 1px solid var(--ui-contribution-border); border-radius: var(--ui-radius-action); background: var(--ui-contribution); color: var(--ui-contribution-ink);
   min-height: 30px; white-space: nowrap;
 }
-.workspace-window .window-foot-actions .ecosystem-feedback:hover,
-:root .home-display-controls .theme-toggle.ecosystem-feedback:hover { background: var(--ui-contribution-hover); color: var(--ui-contribution-ink); }
-.feedback-reward { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; }
 :root[data-interface="mobile"] .home-display-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

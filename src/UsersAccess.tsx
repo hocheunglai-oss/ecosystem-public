@@ -208,7 +208,7 @@ export default function UsersAccess({ onPendingChange }: { onPendingChange?: (re
       </div>
     </aside> : null;
 
-  return <section className="users-access" aria-label="Users & Access" aria-busy={busy || loading}>
+  return <section className="users-access" aria-label="User Management" aria-busy={busy || loading}>
     <PhoneChangeRequestQueue disabled={mutationLocked || loading} onReviewed={phoneRequestReviewed} />
     <div className="users-access-toolbar">
       <label className="sr-only" htmlFor="access-user-search">Search users</label>

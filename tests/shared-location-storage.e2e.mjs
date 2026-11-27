@@ -4,14 +4,15 @@ import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 import { tsImport } from 'tsx/esm/api';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
-import { locationHistoryPage } from './fixtures/shared-locations.mjs';
+import { locationHistoryPage, selectSingaporeProfile } from './fixtures/shared-locations.mjs';
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 const domain = await tsImport('./fixtures/shared-location-domain.ts', import.meta.url);
 const { handleLocationKnowledge, createLiveState } = domain;
 const base = process.env.ECO_SHARED_LOCATION_ORIGIN || 'http://127.0.0.1:4288';
 const out = resolve(process.env.ECO_SHARED_LOCATION_OUTPUT || '/private/tmp/eco-shared-location-ui');
-const admin = { id:'10000000-0000-4000-8000-000000000001',email:'owner@example.test',displayName:'STORAGE FIXTURE OWNER',phone:'',officeId:'HK',officeName:'HONG KONG',isAdmin:true,isSpcTrader:true,isManager:false,isActive:true,activated:true,passwordChangeSuggested:false,revision:1 };
+const admin = { id:'10000000-0000-4000-8000-000000000001',email:'owner@example.test',displayName:'STORAGE FIXTURE OWNER',phone:'',officeId:'HK',officeName:'HONG KONG',isAdmin:true,isSpcTrader:true,isManager:false,isActive:true,activated:true,passwordChangeSuggested:false,revision:1,capabilities:{testWorkspace:true} };
 const colleague = { ...admin,id:'10000000-0000-4000-8000-000000000002',email:'colleague@example.test',displayName:'STORAGE FIXTURE COLLEAGUE',isAdmin:false,isSpcTrader:false };
 const sessionId = '10000000-0000-4000-8000-000000000003';
 const portKey = 'port:port-singapore';
@@ -38,7 +39,7 @@ async function fixture(context,db,theme,initialUser=admin,legacy) {
     const path=new URL(route.request().url()).pathname.split('/').at(-1);
     return route.fulfill({json:path==='session'?{user:state.user,preview:state.preview}:path==='users'?{users:[admin,colleague],offices:[{id:'HK',name:'HONG KONG'}]}:{requests:[]}});
   });
-  await context.route('**/api/enquiries/test-policy',route=>route.fulfill({json:{enabled:false}}));
+  await installTestWorkspacePolicy(context);
   await context.route('**/api/admin/**',route=>route.fulfill({json:{items:[],count:0,source:'shared-feedback'}}));
   await context.route('**/api/suppliers/**',route=>route.fulfill({json:{items:[],total:0,page:1,pageSize:100}}));
   await context.route('**/api/official-tables/**',route=>route.fulfill({status:503,json:{message:'No synthetic source configured.'}}));
@@ -94,8 +95,7 @@ async function openProfile(page) {
   if(!await button(nav,'Countries & Ports').isVisible())await button(nav,'Ports & Suppliers').click();await button(nav,'Countries & Ports').click();
   const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});
   await expect(workspace.getByText('LOADING SHARED DATA…',{exact:true})).toHaveCount(0);
-  await button(workspace,'Port Index').click();await workspace.getByLabel('Country or port',{exact:true}).fill('Singapore');
-  await workspace.locator('.location-table').getByRole('button',{name:'Singapore',exact:true}).click();
+  await selectSingaporeProfile(workspace);
   const profile=workspace.locator('.knowledge').first();await profile.getByRole('tab',{name:'OPERATIONS',exact:true}).click();
   return {workspace,profile};
 }
@@ -125,7 +125,7 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       return page.screenshot({path:`${out}/${name}-${label}.png`});
     };
     try {
-      await page.goto(base);let {workspace,profile}=await openProfile(page);
+      await page.goto(base);await activateDeveloperMode(page);let {workspace,profile}=await openProfile(page);
       const before=await page.evaluate(id=>localStorage.getItem(`ecosystem.live.v1:${id}:state`),admin.id);
       await expect(profile).toContainText('ORIGINAL SHARED NOTE');
       await button(workspace,'REVIEW IMPORT').click();const review=page.getByRole('dialog',{name:'Import browser data',exact:true});
@@ -150,7 +150,7 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       // These reloads verify persistence, so complete activity reads first.
       // Authority-change cancellation remains exercised independently below.
       await activityReadyForReload('inactive');
-      await page.reload();({workspace,profile}=await openProfile(page));
+      await page.reload();await activateDeveloperMode(page);({workspace,profile}=await openProfile(page));
       await expect(button(workspace,'REVIEW IMPORT')).toHaveCount(0);
       let editor=await edit(profile,'SHARED EDIT FROM FIRST ACCOUNT');await button(editor,/^SAVE$/i).click();await expect(editor).toHaveCount(0);
       assert.equal(db.envelope.snapshot.knowledgeRecords[portKey].sections[0].blocks[0].text,'SHARED EDIT FROM FIRST ACCOUNT');
@@ -170,7 +170,7 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       assert.equal(db.historyRequests.length,2);assert.equal(db.historyRequests[0].p_cursor,null);assert.ok(db.historyRequests[1].p_cursor!==null);
       await workspace.getByRole('button',{name:'Close workspace',exact:true}).click();
       await page.getByRole('button',{name:'Settings',exact:true}).click();const settings=page.getByRole('dialog',{name:'Settings',exact:true});
-      await button(settings,'Management').click();const performance=settings.getByRole('region',{name:'User contribution performance',exact:true}),ownRow=performance.locator(`[data-performance-user="${admin.id}"]`);
+      await button(settings,'Contribution').click();const performance=settings.getByRole('region',{name:'User contribution performance',exact:true}),ownRow=performance.locator(`[data-performance-user="${admin.id}"]`);
       await expect(ownRow.locator('[data-label="CONTRIBUTIONS"]')).toHaveText('1');
       await ownRow.getByRole('button',{name:`View contribution records for ${admin.displayName}`,exact:true}).click();
       const ownRecords=performance.getByRole('region',{name:`Contribution records for ${admin.displayName}`,exact:true});
@@ -207,7 +207,7 @@ for(const engine of (process.env.ECO_SHARED_LOCATION_ENGINES||'chromium,webkit')
       assert.equal(await page.evaluate(id=>localStorage.getItem(`ecosystem.live.v1:${id}:state`),admin.id),before);
       assert.ok(await workspace.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'No horizontal workspace overflow');
       await activityReadyForReload('active');
-      page.once('dialog',dialog=>dialog.accept());await page.reload();({workspace,profile}=await openProfile(page));
+      page.once('dialog',dialog=>dialog.accept());await page.reload();await activateDeveloperMode(page);({workspace,profile}=await openProfile(page));
       // Deliver authority changes through the application's cross-tab session
       // refresh, allowing its effects to abort old activity reads before the
       // account view unmounts. Reloads above still verify persisted data; tearing

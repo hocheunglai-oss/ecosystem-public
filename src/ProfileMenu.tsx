@@ -4,14 +4,8 @@ import { normalizeAccessPhone } from "../shared/access";
 import { useAccess } from "./auth";
 import { usePhoneChangeRequests } from "./PhoneChangeRequests";
 import { WhatsAppRouteDetails } from "./WhatsAppRouteDetails";
+import { useWaterBackground, type WaterBackground } from './backgroundPreference';
 import "./personal-details.css";
-
-export type AccountPanel = {
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-  inline: boolean;
-  target: HTMLElement | null;
-};
 
 export function ProfileMenu({ onSignOut }: { onSignOut: () => void }) {
   return <div className="hud-personal-menu">
@@ -24,6 +18,7 @@ export function ProfileMenu({ onSignOut }: { onSignOut: () => void }) {
 /** Account identity comes from the access service, never the browser-local demo profile. */
 export function PersonalDetails() {
   const { realUser, preview } = useAccess();
+  const { background, chooseBackground, canChooseBackground } = useWaterBackground();
   const { requests, loading, error: loadError, busy, submitRequest, refresh } = usePhoneChangeRequests();
   const [editing, setEditing] = useState(false);
   const [phone, setPhone] = useState('');
@@ -48,15 +43,18 @@ export function PersonalDetails() {
   }
   return <section className="personal-details" aria-label="Personal details">
     <h2>Personal details</h2>
-    <dl>
+    <dl className="personal-identity">
       <div><dt>Name</dt><dd>{realUser.displayName}</dd></div>
+      <div><dt>Office</dt><dd>{realUser.officeName}</dd></div>
       <div><dt>Email</dt><dd data-email-value>{realUser.email}</dd></div>
+    </dl>
+    <dl className="personal-routing">
       <div className="personal-phone"><dt>WhatsApp phone</dt><dd><div className="personal-phone-value"><span>{realUser.phone || "—"}</span>
         {!editing && !pending && <button type="button" className="ui-button" disabled={busy || loading || Boolean(preview) || Boolean(loadError)} onClick={() => {
           setEditing(true); setPhone(''); setError(''); setNotice(''); requestId.current = crypto.randomUUID();
         }}>Request change</button>}</div>
         {pending && <p className="personal-phone-status" role="status"><strong>Awaiting admin approval</strong><span>{pending.requestedPhone}</span></p>}
-        {!pending && !editing && latest && <p className="personal-phone-status"><strong>{latest.status === 'approved' ? 'Approved' : latest.status === 'declined' ? 'Declined' : 'Request superseded'}</strong><span>{latest.requestedPhone}</span></p>}
+        {!pending && !editing && latest && latest.status !== 'approved' && <p className="personal-phone-status"><strong>{latest.status === 'declined' ? 'Declined' : 'Request superseded'}</strong><span>{latest.requestedPhone}</span></p>}
         {editing && !pending && <form className="personal-phone-form" onSubmit={event => void requestChange(event)}>
           <label>New WhatsApp phone<input type="tel" autoComplete="tel" inputMode="tel" value={phone} required disabled={busy || Boolean(preview)}
             onChange={event => { setPhone(event.target.value); requestId.current = crypto.randomUUID(); }}
@@ -67,8 +65,15 @@ export function PersonalDetails() {
         {(error || loadError) && <div className="personal-phone-error" role="alert"><p>{error || loadError}</p>{loadError && <button type="button" className="ui-button" disabled={busy} onClick={() => void refresh()}>Refresh</button>}</div>}
         {notice && <p className="personal-phone-status" role="status">{notice}</p>}
       </dd></div>
-      <div><dt>Office</dt><dd>{realUser.officeName}</dd></div>
       {!preview && <WhatsAppRouteDetails key={realUser.id} />}
     </dl>
+    <label className="background-choice">
+      <span>Background</span>
+      <select aria-label="Background" value={background} disabled={!canChooseBackground}
+        onChange={event => chooseBackground(event.target.value as WaterBackground)}>
+        <option value="watercolour">Watercolour</option>
+        <option value="diffuse">Diffuse</option>
+      </select>
+    </label>
   </section>;
 }

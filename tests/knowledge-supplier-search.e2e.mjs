@@ -1,4 +1,4 @@
-import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedLocations, sharedLocations, selectSingaporeProfile } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit, expect } from '@playwright/test';
@@ -72,8 +72,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
       await btn(nav, 'Ports & Suppliers').click(); await btn(nav, 'Countries & Ports').click();
       const workspace = page.getByRole('dialog', { name: 'Countries & Ports', exact: true });
-      await btn(workspace, 'Port Index').click(); await workspace.getByLabel('Country or port', { exact: true }).fill('Singapore');
-      await btn(workspace.locator('.location-table'), 'Singapore').click();
+      await selectSingaporeProfile(workspace);
       const search = workspace.getByRole('textbox', { name: 'Search all tabs', exact: true });
       const supplierSection = workspace.locator('.knowledge-search-section').filter({ has: page.locator('.knowledge-search-section-head').getByRole('button', { name: 'SUPPLIERS', exact: true }) });
       await search.fill(' SS:600 ');

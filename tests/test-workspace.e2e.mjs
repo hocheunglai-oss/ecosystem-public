@@ -80,8 +80,8 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await page.getByRole('button', { name: 'Back to OWNER FIXTURE', exact: true }).first().click();
       await expect(developerModeControl(page)).toHaveAttribute('aria-pressed', 'false'); await expect(control(page)).toHaveCount(0);
       assert.equal(JSON.stringify(await readState(page, liveKey)), liveBefore);
+      await expect(page.locator('.contribution-tier')).toHaveCount(0);
       // This reload checks persisted LIVE data, not interruption of activity reads.
-      await expect(page.locator('.contribution-tier')).toHaveAttribute('data-tier', 'inactive');
       await expect.poll(() => activityReads.size, { message: 'Activity reads finish before persistence reload' }).toBe(0);
       await page.reload(); await expect(developerModeControl(page)).toHaveAttribute('aria-pressed', 'false'); await expect(control(page)).toHaveCount(0);
       await activateTestWorkspace(page);

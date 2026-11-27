@@ -42,7 +42,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
         await page.goto(base);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
-        await page.getByRole('button', { name: 'Users & Access', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'User Management', exact: true }).waitFor();
         await page.getByRole('button', { name: 'Close workspace', exact: true }).click();
         await expect(page.getByRole('button', {name: 'Reset demo',exact:true})).toHaveCount(0);
         await expect(page.locator('.home-hat-ranking')).toHaveCount(0);
@@ -59,7 +59,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
           await expect(page.locator('.hud-identity')).toContainText(realUser.displayName);
           await expect(page.locator('.hud-achievements-toggle, .hud-office-performance')).toHaveCount(0);
           await page.getByRole('button', { name: 'Settings', exact: true }).click();
-          await expect(page.getByRole('button', { name: 'Users & Access', exact: true })).toHaveCount(role === 'admin' ? 1 : 0);
+          await expect(page.getByRole('button', { name: 'User Management', exact: true })).toHaveCount(role === 'admin' ? 1 : 0);
           if (role === 'admin') await expect(page.getByRole('button', { name: 'Add user', exact: true })).toBeDisabled();
           else await expect(page.locator('.users-access')).toHaveCount(0);
           await expect(page.getByRole('button', { name: 'Team performance', exact: true })).toHaveCount(0);

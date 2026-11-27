@@ -6,6 +6,7 @@ import type { SupplierSummary } from '../../shared/suppliers';
 import type { IncomingEnquiry } from '../inbox';
 import type { ModalSpec } from '../types';
 import type { WorkspaceId, WorkspaceNavigationContext } from '../workspaceNavigation';
+import { ECO_STAGE_ONE_PORT_ID } from '../../shared/ecoRelease';
 
 export interface GlobalSearchRecord {
   id: string;
@@ -21,7 +22,7 @@ export interface GlobalSearchRecord {
 const normalized = (text: string) => text.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
 
 /** Index public directories and shared outcomes, but only the current trader's active work. */
-export function globalSearchRecords(state: DemoState, actor: Actor, incoming: IncomingEnquiry[], suppliers: readonly SupplierSummary[] = [], buyerCreditAvailable = false): GlobalSearchRecord[] {
+export function globalSearchRecords(state: DemoState, actor: Actor, incoming: IncomingEnquiry[], suppliers: readonly SupplierSummary[] = [], buyerCreditAvailable = false, allLocations = false): GlobalSearchRecord[] {
   const buyers = new Map(state.companies.map(buyer => [buyer.id, buyer]));
   const ports = new Map(state.ports.map(port => [port.id, port]));
   const records: GlobalSearchRecord[] = (buyerCreditAvailable ? state.companies : []).map(buyer => ({
@@ -41,6 +42,7 @@ export function globalSearchRecords(state: DemoState, actor: Actor, incoming: In
   const locationResults = new Map<string, GlobalSearchRecord>();
   for (const location of locations) {
     const target = locationProfileTarget(state, location.target);
+    if (!allLocations && (target.kind !== 'port' || target.id !== ECO_STAGE_ONE_PORT_ID)) continue;
     const key = `${target.kind}:${target.id}`;
     const profile = locationsByKey.get(key) ?? location;
     const text = [location.name, location.path, location.kind === 'port' ? ports.get(location.target.id)?.code : ''].join(' ');

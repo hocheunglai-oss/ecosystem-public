@@ -10,7 +10,7 @@ const admin: AccessUser = { id: 'release-admin', email: 'release@example.test', 
 const preview = (role: PreviewRole): RolePreview => ({ role, officeId: role === 'credit' ? 'CREDIT' : 'HONG KONG', officeName: role === 'credit' ? 'CREDIT' : 'HONG KONG', readOnly: true });
 
 test('buyer and credit availability requires the staging administrator in developer mode', () => {
-  assert.equal(ECO_2_RELEASE_NOTICE, 'UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0');
+  assert.equal(ECO_2_RELEASE_NOTICE, 'COMING IN ECO 2.0');
   assert.equal(canUseBuyerCredit(admin), false);
   assert.equal(canUseBuyerCredit(admin, null, true), true);
   assert.equal(canUseBuyerCredit({ ...admin, capabilities: undefined }, null, true), false);
@@ -29,8 +29,7 @@ test('workspace and contextual modal entry points share the buyer/credit release
   for (const id of ['counterparties', 'credit-request']) assert.equal(isBuyerCreditWorkspace(id), true);
   for (const id of ['enquiry', 'fixtures', 'lost', 'suppliers', 'ports', 'settings']) assert.equal(isBuyerCreditWorkspace(id), false);
   for (const type of ['credit', 'decision', 'company']) assert.equal(isBuyerCreditModal({ type }), true);
-  for (const targetType of ['company', 'buyer-group', 'buyer-team', 'buyer-competition']) assert.equal(isBuyerCreditModal({ type: 'contribute', targetType }), true);
-  for (const spec of [{ type: 'outcome' }, { type: 'enquiry-detail' }, { type: 'contribute', targetType: 'port' }, { type: 'contribute', targetType: 'feedback' }]) assert.equal(isBuyerCreditModal(spec), false);
+  for (const type of ['outcome', 'enquiry-detail', 'feedback']) assert.equal(isBuyerCreditModal({ type }), false);
 });
 
 test('non-admin search cannot expose buyer directory results; operational records remain searchable', () => {
@@ -40,7 +39,8 @@ test('non-admin search cannot expose buyer directory results; operational record
     const records = globalSearchRecords(state, actor, [], [], canUseBuyerCredit(user, selected));
     assert.equal(records.some(item => item.category === 'Buyer' || item.workspace === 'counterparties'), false);
     assert.equal(queryGlobalSearch(records, 'ECO20001').length, 0);
-    assert.equal(queryGlobalSearch(records, 'jptyo')[0]?.context?.portId, 'port-tokyo');
+    assert.equal(queryGlobalSearch(records, 'sgsin')[0]?.context?.portId, 'port-singapore');
+    assert.equal(queryGlobalSearch(records, 'jptyo').length, 0);
   }
   const adminResults = globalSearchRecords(state, actorFromAccess(admin), [], [], canUseBuyerCredit(admin, null, true));
   assert.equal(queryGlobalSearch(adminResults, 'ECO20001')[0].category, 'Buyer');

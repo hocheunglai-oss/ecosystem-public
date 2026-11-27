@@ -26,11 +26,13 @@ import "./knowledge-extractor.css";
 
 export default function KnowledgeExtractor({
   current,
+  locationKey,
   onClose,
   onSaved,
   embedded = false,
 }: {
   current?: LocationRecord;
+  locationKey?: string;
   onClose?: () => void;
   embedded?: boolean;
   onSaved: (key: string) => void;
@@ -51,7 +53,8 @@ export default function KnowledgeExtractor({
   const request = useRef<AbortController | null>(null);
   const errorPanel = useRef<HTMLDivElement | null>(null);
   const batchId = useRef(crypto.randomUUID());
-  const records = locationRecords(proposals ? snapshot : state);
+  const allowedLocations = (base: DemoState) => locationRecords(base).filter(record => !locationKey || record.key === locationKey);
+  const records = allowedLocations(proposals ? snapshot : state);
   const selected = proposals?.filter((p) => p.selected) || [];
   useEffect(() => () => request.current?.abort(), []);
 
@@ -74,7 +77,7 @@ export default function KnowledgeExtractor({
           source,
           sourceDate,
           contextKey,
-          locations: locationRecords(base),
+          locations: allowedLocations(base),
         },
         controller.signal,
       );
@@ -89,7 +92,7 @@ export default function KnowledgeExtractor({
       batchId.current = crypto.randomUUID();
       setWarnings(result.warnings);
       setProposals(
-        result.proposals.map((p) => ({
+        result.proposals.filter(p => !locationKey || !p.locationKey || p.locationKey === locationKey).map((p) => ({
           ...p,
           id: crypto.randomUUID(),
           selected: !!p.locationKey && !p.warning,
@@ -140,6 +143,7 @@ export default function KnowledgeExtractor({
     setSaveAttempted(true);
     setError("");
     try {
+      if (locationKey && selected.some(proposal => proposal.locationKey !== locationKey)) throw new Error('Select Singapore for each update.');
       const action = buildExtractionBatch(snapshot, proposals, {
         source,
         sourceDate,
@@ -191,7 +195,7 @@ export default function KnowledgeExtractor({
           }}
         >
           <div className="extract-input-fields">
-            <Field label="Location (optional)">
+            {!locationKey && <Field label="Location (optional)">
               <SearchableSelect
                 label="Location (optional)"
                 value={contextKey}
@@ -204,7 +208,7 @@ export default function KnowledgeExtractor({
                   keywords: r.kind,
                 }))}
               />
-            </Field>
+            </Field>}
             <Field label="Source (optional)">
               <input
                 aria-label="Source (optional)"

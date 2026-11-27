@@ -13,12 +13,12 @@ type SharedFeedbackResult = {
 };
 
 /** Refresh after submissions and while visible; never persist another account's server records. */
-export function useSharedFeedback(period: ContributionPeriod = "7d") {
+export function useSharedFeedback(period: ContributionPeriod = "7d", enabled = true) {
   const { realUser } = useAccess();
   const [result, setResult] = useState<SharedFeedbackResult | null>(null);
   useEffect(() => {
     setResult(null);
-    if (!realUser) return;
+    if (!realUser || !enabled) return;
     let active = true,
       request: AbortController | undefined;
     const refresh = () => {
@@ -69,9 +69,9 @@ export function useSharedFeedback(period: ContributionPeriod = "7d") {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [realUser?.id, period]);
+  }, [realUser?.id, period, enabled]);
   const current =
-    result?.userId === realUser?.id && result?.period === period
+    enabled && result?.userId === realUser?.id && result?.period === period
       ? result
       : null;
   const status: SharedFeedbackStatus = current?.value

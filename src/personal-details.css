@@ -1,3 +1,10 @@
+.settings-nav { flex-wrap: wrap; gap: 8px 16px; }
+.settings-nav-group { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.settings-nav-group + .settings-nav-group { padding-inline-start: 16px; border-inline-start: 1px solid var(--ui-line); }
+.personal-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 440px)); align-items: start; gap: 16px; max-width: 920px; }
+.personal-settings > section { padding: clamp(14px, 2vw, 22px); border: 1px solid var(--ui-line); border-radius: var(--ui-radius-control); background: var(--ui-surface); }
+.personal-password h2 { font-size: var(--ui-text-section); margin: 0 0 16px; }
+.personal-password .password-settings { padding: 0; max-width: none; }
 .personal-details {
   min-width: 0;
   color: var(--ink);
@@ -9,9 +16,10 @@
   font-size: var(--ui-text-section);
   font-weight: var(--ui-weight-heading);
 }
-.personal-details dl { display: grid; gap: 0; margin: 0; }
-.personal-details dl > div { min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.personal-details dl > div:first-child { padding-top: 0; }
+.personal-details dl { display: grid; gap: 12px 16px; margin: 0 0 16px; padding-block-end: 16px; border-bottom: 1px solid var(--ui-line); }
+.personal-details dl > div { min-width: 0; }
+.personal-identity { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.personal-identity > :last-child { grid-column: 1 / -1; }
 .personal-details dt { color: var(--muted); font-size: var(--ui-text-label); font-weight: var(--ui-weight-label); }
 .personal-details dd { margin: 5px 0 0; color: var(--ink); font-size: var(--ui-text-body); overflow-wrap: anywhere; }
 .personal-phone-value { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
@@ -24,6 +32,8 @@
 .personal-phone-error { margin-top: 10px; color: var(--ui-danger); font-size: var(--ui-text-body); }
 .personal-phone-error p { margin: 0 0 6px; }
 @media (max-width: 760px) {
+  .settings-nav-group + .settings-nav-group { padding-inline-start: 0; border-inline-start: 0; }
+  .personal-settings { grid-template-columns: minmax(0, 1fr); }
   .personal-phone-actions > button { flex: 1; }
   .personal-phone-form input { font-size: 16px; }
 }

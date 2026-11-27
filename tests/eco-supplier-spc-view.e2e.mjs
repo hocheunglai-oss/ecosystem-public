@@ -164,7 +164,7 @@ for (const [engine,browserType] of [['chromium',chromium],['webkit',webkit]]) {
         await emptyQuick.getByRole('button',{name:'Close dialog',exact:true}).click();
         let editor=await picEditor(page,first);
         await expect(editor.getByRole('button',{name:'SAVE',exact:true})).toBeDisabled();
-        await expect(editor.getByRole('button',{name:'SAVE',exact:true})).toHaveAttribute('aria-description','CONTRIBUTION +1');
+        await expect(editor.getByRole('button',{name:'SAVE',exact:true})).not.toHaveAttribute('aria-description', /.+/);
         await expect(editor.getByRole('button',{name:'EDIT',exact:true})).toHaveCount(0);
         await expect(editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true})).toBeEnabled();
         await expect(editor.getByLabel('SUPPLIER PIC FOR BP MARINE',{exact:true}).locator('option[value="FIXTURE ADMIN"]')).toHaveAttribute('disabled','');

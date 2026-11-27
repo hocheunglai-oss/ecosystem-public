@@ -1,3 +1,4 @@
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -8,7 +9,7 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 
 const base = process.env.ECO_EDITING_ORIGIN || 'http://127.0.0.1:4328';
 const output = process.env.ECO_EDITING_OUTPUT || '/private/tmp/eco-editing-usability';
-const user = { id: '10000000-0000-4000-8000-000000000001', email: 'editing@example.test', displayName: 'EDITING FIXTURE', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const user = { capabilities: { appearancePreview: false, testWorkspace: true },  id: '10000000-0000-4000-8000-000000000001', email: 'editing@example.test', displayName: 'EDITING FIXTURE', phone: '', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const record = { id: '90000000-0000-4000-8000-000000000001', legalName: 'EXAMPLE INTERNATIONAL MARINE ENERGY AND PETROLEUM MANAGEMENT SERVICES PTE. LTD.', shortName: 'EXAMPLE INTERNATIONAL MARINE ENERGY', countryCode: 'SG', countryName: 'Singapore', portName: 'Singapore', nameStatus: 'verified', info: { paymentTerms: '30', qualityClaimBar: '30', supplierTrader: '', availableGrade: 'VLSFO', foBdn: '', goBdn: '' }, contactCount: 0, bargeCount: 0 };
 const link = 'https://Example.test/PortData?Key=AbC';
 const btn = (scope, name) => scope.getByRole('button', { name, exact: true });
@@ -42,6 +43,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       await installStagingCookies(context, base);
       await mock(context);
       await context.addInitScript(theme => localStorage.setItem('ecosystem.theme.v1', theme), theme);
+      await installTestWorkspacePolicy(context);
       const page = await context.newPage(), errors = [];
       page.on('pageerror', error => errors.push(error.message));
       page.setDefaultTimeout(15000);
@@ -59,6 +61,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
           ] }] };
         }, { link });
         await page.goto(base);
+        await activateDeveloperMode(page);
         await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
         const workspace = await open(page, 'Countries & Ports');
         await expect(workspace.locator('.knowledge-extractor')).toHaveCount(0);

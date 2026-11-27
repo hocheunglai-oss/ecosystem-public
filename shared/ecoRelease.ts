@@ -1,6 +1,8 @@
 import type { AccessUser, RolePreview } from './access.ts';
 
-export const ECO_2_RELEASE_NOTICE = 'UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0';
+export const ECO_VERSION_LABEL = 'ECO 1.0';
+export const ECO_2_RELEASE_NOTICE = 'COMING IN ECO 2.0';
+export const ECO_STAGE_ONE_PORT_ID = 'port-singapore';
 
 /** Release availability is separate from permissions. It never grants any writes. */
 export function canUseBuyerCredit(user: AccessUser | null | undefined, preview: RolePreview | null = null, developerMode = false): boolean {
@@ -15,6 +17,6 @@ export function isBuyerKnowledgeTarget(kind: string): boolean {
   return ['buyer', 'company', 'buyer-group', 'buyer-team', 'buyer-competition'].includes(kind);
 }
 
-export function isBuyerCreditModal(spec: { type: string; targetType?: string }): boolean {
-  return ['credit', 'decision', 'company'].includes(spec.type) || spec.type === 'contribute' && isBuyerKnowledgeTarget(spec.targetType ?? '');
+export function isBuyerCreditModal(spec: { type: string }): boolean {
+  return ['credit', 'decision', 'company'].includes(spec.type);
 }

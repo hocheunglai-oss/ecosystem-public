@@ -15,16 +15,16 @@ test('public privacy notice bypasses the SPA only on its exact static path', asy
   assert.equal(route.test('/api/enquiries/inbox'), false);
 });
 
-test('minimal public notice retains data-handling contact without operational metadata or a login-screen entry point', async () => {
+test('public privacy notice provides individual rights and contact without internal operational details', async () => {
   const html = await readFile(new URL('../public/privacy.html', import.meta.url), 'utf8');
   assert.ok(!html.includes(ecoConnections.whatsappReceiver.displayPhoneNumber));
   assert.match(html, /href="mailto:otto@cosulich\.com\.hk"/);
   assert.match(html, /does not automatically send it to AI/);
   assert.doesNotMatch(html, /Vercel|Supabase|Singapore|fingerprint|eligible ECO account|parser report|routing/i);
-  assert.match(html, /request access, correction or deletion/);
+  assert.match(html, /personal data access or correction requests/i);
   assert.doesNotMatch(html, /<script\b|<iframe\b|<form\b|\bon\w+=|https?:\/\/|\/api\//i);
   assert.match(html, /prefers-color-scheme:dark/);
   assert.match(html, /text-transform:none/);
-  const login = await readFile(new URL('../src/AccessLogin.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(login, /privacy/i);
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(app, /!session && <a[^>]*href="\/privacy\.html">Privacy<\/a>/);
 });

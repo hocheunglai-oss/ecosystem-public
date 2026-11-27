@@ -167,7 +167,16 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       await page2.reload(); await settled(page2); await expect(page2.locator('.inbox-count')).toHaveText('52');
       await page.getByRole('button', { name: 'Close workspace', exact: true }).click(); await openInbox(page);
       session.failWrite = true; await inbox.getByRole('button', { name: 'Clear all', exact: true }).click(); await expect(inbox.getByRole('alert')).toContainText('Inbox update failed');
-      shared.items.unshift(record(54)); await inbox.getByRole('button', { name: 'Retry', exact: true }).click(); await expect(inbox.locator('.inbox-notification-row')).toHaveCount(1); await expect(inbox).toContainText('FIXTURE 54'); await expect(page.locator('.inbox-count')).toHaveText('1');
+      shared.items.unshift(record(54));
+      session.getError = true;
+      await inbox.getByRole('button', { name: 'Retry', exact: true }).click();
+      await expect(inbox.locator('.inbox-notification-row')).toHaveCount(0);
+      await expect(inbox.getByRole('alert')).toContainText('Inbox unavailable');
+      session.getError = false;
+      await inbox.getByRole('button', { name: 'Retry', exact: true }).click();
+      await expect(inbox.locator('.inbox-notification-row')).toHaveCount(1);
+      await expect(inbox).toContainText('FIXTURE 54');
+      await expect(page.locator('.inbox-count')).toHaveText('1');
       const clearWrites = session.writes.filter(item => item.action === 'dismiss-all'); assert.equal(clearWrites.length, 2); assert.equal(clearWrites[0].requestId, clearWrites[1].requestId); assert.equal(shared.items.find(item => item.id === record(1).id).dismissed, true);
       await focus(page2); await expect(page2.locator('.inbox-count')).toHaveText('1');
       await page.reload(); await settled(page); await expect(page.locator('.inbox-count')).toHaveText('1'); await activateDeveloperMode(page); await expect(control(page)).toBeEnabled();

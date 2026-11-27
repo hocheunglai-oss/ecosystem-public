@@ -3,11 +3,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, webkit, expect } from '@playwright/test';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installSharedLocations } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 const base = process.env.ECO_AUTH_UI_ORIGIN || 'http://127.0.0.1:4396';
 const out = resolve(process.env.ECO_AUTH_UI_OUTPUT || 'output/auth-session-ui');
-const member = { id: '10000000-0000-4000-8000-000000000001', email: 'trader@example.test', displayName: 'SAMPLE TRADER', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: false, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const member = { id: '10000000-0000-4000-8000-000000000001', email: 'trader@example.test', displayName: 'SAMPLE TRADER', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: false, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1, capabilities: { testWorkspace: true } };
 await mkdir(out, { recursive: true }); const results = [];
 for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
   if (process.env.ECO_TEST_ENGINE && process.env.ECO_TEST_ENGINE !== engine) continue;
@@ -40,13 +41,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       if (path === '/api/access/login' || path === '/api/access/activate') { mutations.push(path); mode = 'valid'; return route.fulfill({ json: session() }); }
       if (path === '/api/profile-tabs/list') { const query = new URL(request.url()).searchParams; return route.fulfill({ json: { target: { kind: query.get('kind'), id: query.get('id') }, shared: { revision: 0, tabs: [] }, private: { revision: 0, tabs: [] } } }); }
       if (path === '/api/intelligence/snapshot') return route.fulfill({ json: { available: false, snapshot: null } });
-      if (path === '/api/enquiries/test-policy') return route.fulfill({ json: { enabled: false, generation: '' } });
       if (path === '/api/enquiries/dispatcher') return route.fulfill({ json: { routes: [] } });
       if (path === '/api/enquiries/inbox') return route.fulfill({ json: { items: [], unreadCount: 0, nextCursor: null } });
       if (path === '/api/access/phone-requests') return route.fulfill({ json: { requests: [] } });
       if (path.startsWith('/api/admin/')) return route.fulfill({ json: { items: [], count: 0, nextCursor: null, periodStart: '2026-10-15T00:00:00Z', periodEnd: '2026-10-22T00:00:00Z', timeZone: 'Asia/Hong_Kong', source: 'shared-feedback' } });
       unexpected.push(path); return route.fulfill({ status: 503, json: { message: 'Unmatched fixture request.' } });
     });
+    await installTestWorkspacePolicy(context);
     const locationsFixture = await installSharedLocations(context, { user: () => mode === 'revoked' ? null : member });
     const attachmentsFixture = await installSharedAttachments(context, { user: () => mode === 'revoked' ? null : member });
     const page = await context.newPage(); page.setDefaultTimeout(15000);
@@ -141,6 +142,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await expect(draft).toHaveValue('Unsaved Fixture 8');
       // Shared location writes also reject changes during a session outage.
       await page.getByRole('button', { name: 'Close workspace', exact: true }).click();
+      await activateDeveloperMode(page);
       const navigation = page.getByRole('navigation', { name: 'Workspace navigation' });
       const group = navigation.getByRole('button', { name: 'Ports & Suppliers', exact: true });
       if (await group.getAttribute('aria-expanded') !== 'true') await group.click();

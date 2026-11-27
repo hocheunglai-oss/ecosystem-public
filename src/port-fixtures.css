@@ -105,6 +105,7 @@
 .port-report-table { border-bottom: 1px solid var(--line); }
 .port-report-card .port-report-table :is(th,td):not(:first-child) { text-align: right; }
 .port-buy-prices .port-report-table table { min-width: 640px; }
+.port-buy-prices .port-report-table .port-price-grade { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 @container knowledge-profile (max-width: 730px) {
   .port-stat-grid { grid-template-columns: minmax(0, 1fr); }

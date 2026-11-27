@@ -1,4 +1,3 @@
-import type { Contribution } from "./lib/model";
 export type Page =
   | "home"
   | "enquiry"
@@ -13,11 +12,7 @@ export type ModalSpec =
   | { type: "decision"; id: string }
   | { type: "outcome"; id: string; kind: "fixture" | "lost" }
   | { type: "company"; name?: string }
-  | {
-      type: "contribute";
-      targetType: Contribution["targetType"];
-      targetId: string;
-    }
+  | { type: "feedback" }
   | { type: "actual-volume"; id: string }
   | { type: "enquiry-detail"; id: string }
   | { type: "review-contribution"; id: string };

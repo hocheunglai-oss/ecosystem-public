@@ -600,12 +600,6 @@
     max-width: 100%;
     flex: 1 1 9rem;
   }
-  .workspace:not(.is-home)
-    .main-content
-    .knowledge-banner
-    .contribution-reward {
-    margin-left: 0;
-  }
   .workspace:not(.is-home) .main-content .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   }

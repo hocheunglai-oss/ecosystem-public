@@ -713,7 +713,8 @@ async function verifyNightContrast(page) {
         const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data;
         return { rgb: [r / 255, g / 255, b / 255], alpha: alpha / 255 };
       };
-      return { label: node.textContent.trim(), fill: rgba(style.backgroundColor), ink: rgba(style.color), image: style.backgroundImage };
+      const surface = node.matches('.launcher-release-remark') ? getComputedStyle(node.parentElement) : style;
+      return { label: node.textContent.trim(), fill: rgba(surface.backgroundColor), ink: rgba(style.color), image: surface.backgroundImage };
     });
     assert.equal(style.image, 'none', 'Entry contrast uses a measurable shared solid/translucent fill');
     const fill = style.fill.rgb.map((channel, index) => channel * style.fill.alpha + backdrop[index] * (1 - style.fill.alpha));
@@ -850,13 +851,13 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
     const shot = async name => { await noOverflow(page, name);
       const footer = await page.locator('.home-display-controls button:visible').evaluateAll(nodes => nodes.map(node => ({ label:node.textContent.trim(), size:parseFloat(getComputedStyle(node).fontSize), height:node.getBoundingClientRect().height })));
       assert.ok(footer.every(control => control.size >= 14 && control.height >= 44), `Readable footer actions: ${JSON.stringify(footer)}`);
-      const textInk = await page.locator('.access-login label:visible, .access-login p:not([role="alert"]):visible, .launcher-release-remark:visible').evaluateAll(nodes => nodes.map(node => {
+      const textInk = await page.locator('.access-login label:visible, .access-login p:not([role="alert"]):visible').evaluateAll(nodes => nodes.map(node => {
         const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
         const context = canvas.getContext('2d'); context.fillStyle = getComputedStyle(node).color; context.fillRect(0, 0, 1, 1);
         const [red, green, blue] = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(value => { const s = value / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
         return { text: node.textContent.trim(), luminance: .2126 * red + .7152 * green + .0722 * blue };
       }));
-      assert.ok(textInk.every(label => theme === 'light' ? label.luminance < .04 : label.luminance > .5), `Sign-in labels and release remarks use dark ink on the bright day image and light ink at night: ${JSON.stringify(textInk)}`);
+      assert.ok(textInk.every(label => theme === 'light' ? label.luminance < .04 : label.luminance > .5), `Sign-in labels use dark ink on the bright day image and light ink at night: ${JSON.stringify(textInk)}`);
       await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); };
     const background = page.locator('.flowing-water-background');
     const toggle = () => page.locator('.home-display-controls').getByRole('switch', { name: 'Dark mode', exact: true, includeHidden: true });
@@ -990,7 +991,7 @@ for (const [engine, kind] of [['chromium', chromium], ['webkit', webkit]]) {
       await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.locator('.hud-identity')).toContainText(member.displayName);
       const deferred = page.locator('.launcher-group--deferred');
       await expect(deferred.getByRole('heading', { name: 'Buyers and Credit', exact: true })).toBeVisible();
-      await expect(deferred).toContainText('UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0');
+      await expect(deferred).toContainText('COMING IN ECO 2.0');
       await expect(deferred.locator('button, [aria-expanded]')).toHaveCount(0);
       await shot('member-gate');
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();

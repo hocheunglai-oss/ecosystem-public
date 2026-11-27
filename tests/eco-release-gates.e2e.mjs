@@ -8,7 +8,7 @@ import { chromium, webkit, expect } from '@playwright/test';
 import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 const base = process.env.ECO_RELEASE_UI_ORIGIN || 'http://127.0.0.1:4327';
 const out = resolve(process.env.ECO_RELEASE_UI_OUTPUT || 'output/eco-release-gates-ui');
-const notice = 'UNDER CONSTRUCTION: TO BE RELEASED WITH ECO 2.0';
+const notice = 'COMING IN ECO 2.0';
 const admin = { capabilities: { appearancePreview: true, testWorkspace: true }, id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'SAMPLE TRADER', phone: '+6591815902', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const roles = [['trader', 'Normal trader'], ['spc-trader', 'SPC Trader'], ['manager', 'Manager'], ['credit', 'Credit']];
 const results = [];
@@ -62,8 +62,13 @@ async function expectDeferredHeading(page) {
   await expect(navigation.getByRole('button', { name: 'Credit Requests', exact: true, includeHidden: true })).toHaveCount(0);
   await heading.click(); await expect(page.locator('dialog[open]')).toHaveCount(0);
   assert.ok(await heading.evaluate(node => node.tabIndex < 0), 'Deferred heading is not an interactive keyboard target');
-  const layout = await group.evaluate(node => { const heading = node.querySelector('[role="heading"]').getBoundingClientRect(), remark = node.querySelector('.launcher-release-remark'); return { gap: remark.getBoundingClientRect().top - heading.bottom, fontSize: parseFloat(getComputedStyle(remark).fontSize) }; });
-  assert.ok(layout.gap >= 8 && layout.gap <= 12 && layout.fontSize === 11, 'Small release remark follows the disabled Flowing Water entry with a readable gap');
+  await expect(heading.getByText(notice, { exact: true })).toBeVisible();
+  const layout = await heading.evaluate(node => {
+    const bounds = node.getBoundingClientRect(), remark = node.querySelector('.launcher-release-remark');
+    const text = remark.getBoundingClientRect();
+    return { inside: text.top >= bounds.top && text.bottom <= bounds.bottom && text.right <= bounds.right, fontSize: parseFloat(getComputedStyle(remark).fontSize) };
+  });
+  assert.ok(layout.inside && layout.fontSize >= 10, 'The release notice fits inside its darker non-interactive entry');
 }
 async function close(page) { await page.getByRole('button', { name: 'Close workspace', exact: true }).click(); }
 async function changePreview(page, label) {

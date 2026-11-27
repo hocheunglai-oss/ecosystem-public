@@ -79,7 +79,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
         await page.getByLabel('New WhatsApp phone', { exact: true }).fill('+6587654321');
         await page.getByRole('button', { name: 'Submit request', exact: true }).click();
         await expect(page.locator('.personal-phone')).toContainText(/awaiting admin approval/i);
-        await page.getByRole('button', { name: 'Users & Access', exact: true }).click();
+        await page.getByRole('button', { name: 'User Management', exact: true }).click();
         await expect(page.locator('.users-access-list > button')).toHaveCount(1);
         const directoryQueue = page.getByRole('region', { name: 'Phone change requests', exact: true });
         await expect(directoryQueue).toContainText('+6587654321'); await shot('directory-queue');
@@ -92,7 +92,7 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
         await page.getByLabel('New WhatsApp phone', { exact: true }).fill('+6587654322');
         await page.getByRole('button', { name: 'Submit request', exact: true }).click();
         await expect(page.locator('.personal-phone')).toContainText(/awaiting admin approval/i);
-        await page.getByRole('button', { name: 'Users & Access', exact: true }).click();
+        await page.getByRole('button', { name: 'User Management', exact: true }).click();
         await page.locator('.users-access-list > button').click();
         await page.getByLabel('Name', { exact: true }).fill('UNSAVED EDIT');
         await page.getByRole('region', { name: 'Phone change requests', exact: true }).getByRole('button', { name: 'Approve', exact: true }).click();

@@ -1,5 +1,6 @@
 import { useDeferredValue, useState } from "react";
 import type { PortFixturePrices } from "../shared/portFixtureReports";
+import { fixtureGrades } from "../shared/fixtureWorkflow";
 import { useDemo } from "./store";
 import { useTestWorkspace } from "./TestWorkspace";
 import { portBuyPriceRows } from "./lib/knowledgeSearch";
@@ -38,12 +39,14 @@ export default function PortBuyPrices({ portId, scopeId, title, search, searchRe
       {loading && <p className="knowledge-empty" role="status">LOADING PRICES…</p>}
       {!loading && !report.error && <div className="port-report-table table-wrap" role="region" aria-label="Historical buy prices" tabIndex={0}>
         <table>
-          <thead><tr><th scope="col">DATE</th><th scope="col">SUPPLIER</th><th scope="col">VESSEL</th>
-            <th scope="col">GRADE</th><th scope="col">QUANTITY (MT)</th><th scope="col">BUY PRICE</th></tr></thead>
+          <thead><tr><th scope="col">DATE</th><th scope="col">SUPPLIER</th><th scope="col">QUANTITY (MT)</th>
+            {fixtureGrades.map(grade => <th key={grade} scope="col" className="port-price-grade">{grade}</th>)}</tr></thead>
           <tbody>{rows.length ? rows.map(row => (
             <tr key={row.id}><td>{reportDate.format(new Date(row.date))}</td><td>{row.supplier}</td>
-              <td>{row.vessel}</td><td>{row.grade}</td><td>{row.quantity}</td><td>{row.recordedPrice ?? (row.price == null ? '—' : money(row.price) + ' / MT')}</td></tr>
-          )) : <tr><td colSpan={6}>NO PRICES FOUND.</td></tr>}</tbody>
+              <td>{row.quantity}</td>{fixtureGrades.map(grade => <td key={grade} className="port-price-grade">
+                {row.grade === grade ? row.recordedPrice ?? (row.price == null ? '—' : money(row.price) + ' / MT') : '—'}
+              </td>)}</tr>
+          )) : <tr><td colSpan={3 + fixtureGrades.length}>NO PRICES FOUND.</td></tr>}</tbody>
         </table>
       </div>}
       {pageable && <div className="knowledge-pagination">

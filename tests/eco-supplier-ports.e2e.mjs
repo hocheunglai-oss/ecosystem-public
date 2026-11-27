@@ -1,4 +1,5 @@
-import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
+import { installSharedLocations, selectSingaporeProfile, sharedLocations } from './fixtures/shared-locations.mjs';
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { invalidateFixtureAuthority } from './fixtures/authority-transition.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
 import assert from 'node:assert/strict';
@@ -19,9 +20,11 @@ const seed = [record, {...record,id:'90000000-0000-4000-8000-000000000005',legal
 ];
 
 async function mock(context, mode = 'admin') {
-  const activeUser = {...user,isAdmin:mode==='admin'||mode==='preview',isSpcTrader:mode==='admin'||mode==='spc-trader'};
+  const activeUser = {...user,isAdmin:mode==='admin'||mode==='preview'||mode==='developer',isSpcTrader:mode==='admin'||mode==='spc-trader'};
   const preview = mode==='preview'?{role:'trader',officeId:'HONG KONG',officeName:'HONG KONG',readOnly:true}:null;
   const state = {items:structuredClone(seed),updates:0,requests:[],receipts:new Map(),dropResponse:false,actor:activeUser,createGate:null};
+  if (mode === 'developer') activeUser.capabilities = { testWorkspace: true };
+  await installTestWorkspacePolicy(context);
   await installProfileTabMocks(context,{ownerId:()=>user.id,preview:()=>Boolean(preview),canManageShared:()=>activeUser.isAdmin||activeUser.isSpcTrader});
   await installEmptyLiveInbox(context);
   await installSharedLocations(context, { user: () => mode === 'signed-out' ? null : state.actor, preview: () => preview });
@@ -71,9 +74,12 @@ async function mock(context, mode = 'admin') {
 
 async function openPort(page,name){
  const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});
- await workspace.getByRole('button',{name:'Port Index',exact:true}).click();
- await workspace.getByLabel('Country or port',{exact:true}).fill(name);
- await workspace.locator('.location-table').getByRole('button',{name,exact:true}).click();
+ if (name === 'Singapore') await selectSingaporeProfile(workspace);
+ else {
+  await workspace.getByRole('button',{name:'Port Index',exact:true}).click();
+  await workspace.getByLabel('Country or port',{exact:true}).fill(name);
+  await workspace.locator('.location-table').getByRole('button',{name,exact:true}).click();
+ }
  await workspace.getByRole('tab',{name:'Suppliers',exact:true}).click();
  return workspace;
 }
@@ -90,7 +96,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
  const state=await mock(context,'trader'),page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
  try{
  await page.goto(base);const nav=page.getByRole('navigation',{name:'Workspace navigation'});await nav.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();await nav.getByRole('button',{name:'Countries & Ports',exact:true}).click();
- const workspace=await openPort(page,'Singapore');let table=workspace.getByRole('table',{name:'Supplier results',exact:true});
+ let workspace=await openPort(page,'Singapore');let table=workspace.getByRole('table',{name:'Supplier results',exact:true});
  await expect(table.locator('tbody tr')).toHaveCount(3);await expect(workspace.getByRole('button',{name:'SPC VIEW',exact:true})).toHaveCount(0);await expect(workspace.locator('.shared-suppliers.has-spc-view')).toBeVisible();await expect(workspace.getByRole('button',{name:'Add supplier',exact:true})).toHaveCount(0);
  await expect(table).not.toContainText('HONG KONG');await expect(table).not.toContainText('TOKYO');
  assert.ok(state.requests.some(r=>r.path==='list'&&new URLSearchParams(r.query).get('portId')==='port-singapore'));
@@ -98,7 +104,12 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
  if(width<800)assert.equal(await table.locator('thead').evaluate(n=>getComputedStyle(n).position),'static');
  await table.locator('tbody tr').first().getByRole('button',{name:'BDN',exact:true}).click();await expect(page.getByRole('dialog',{name:'BP MARINE · BDN',exact:true})).toContainText('ISO 8217:2017');await page.getByRole('dialog',{name:'BP MARINE · BDN',exact:true}).getByRole('button',{name:'Close dialog',exact:true}).click();
  await page.screenshot({path:`${output}/${engine}-${width}-${theme}-singapore.png`,fullPage:true});
- await openPort(page,'Tokyo');table=workspace.getByRole('table',{name:'Supplier results',exact:true});await expect(table.locator('tbody tr')).toHaveCount(1);await expect(table).toContainText('TOKYO SUPPLIER LTD');await expect(table).not.toContainText('CHIBA');await expect(table.locator('thead th')).toHaveCount(1);await expect(workspace.getByRole('button',{name:'SPC VIEW',exact:true})).toHaveCount(0);
+ await workspace.getByRole('button',{name:'Close workspace',exact:true}).click();
+ state.actor.isAdmin=true;state.actor.capabilities={testWorkspace:true};
+ await invalidateFixtureAuthority(page,{user:state.actor,preview:null});await activateDeveloperMode(page);
+ if (!(await nav.getByRole('button',{name:'Countries & Ports',exact:true}).isVisible())) await nav.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();
+ await nav.getByRole('button',{name:'Countries & Ports',exact:true}).click();
+ workspace=await openPort(page,'Tokyo');table=workspace.getByRole('table',{name:'Supplier results',exact:true});await expect(table.locator('tbody tr')).toHaveCount(1);await expect(table).toContainText('TOKYO SUPPLIER LTD');await expect(table).not.toContainText('CHIBA');await expect(table.locator('thead th')).toHaveCount(1);await expect(workspace.getByRole('button',{name:'SPC VIEW',exact:true})).toHaveCount(0);
  await workspace.getByRole('button',{name:'Add supplier',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Add supplier',exact:true});await expect(dialog.getByLabel('Supplier port',{exact:true})).toHaveValue('port-tokyo');await expect(dialog.getByLabel('Supplier port',{exact:true})).toBeDisabled();await dialog.getByLabel('Official name',{exact:true}).fill('NEW TOKYO SUPPLIER LTD');await dialog.getByLabel('Short name',{exact:true}).fill('NEW TOKYO');
  await page.screenshot({path:`${output}/${engine}-${width}-${theme}-register.png`,fullPage:true});
  await dialog.getByRole('button',{name:'Add supplier',exact:true}).click();await expect(workspace.getByRole('heading',{name:'NEW TOKYO SUPPLIER LTD',exact:true})).toBeVisible();assert.equal(state.created.portId,'port-tokyo');assert.equal(state.created.countryCode,'JP');assert.equal(state.created.portName,'Tokyo');
@@ -116,7 +127,7 @@ if(!process.env.ECO_TEST_ENGINE||process.env.ECO_TEST_ENGINE==='chromium'){
  const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:900}});
  try{
   await installStagingCookies(context,base);
-  const state=await mock(context,'trader'),page=await context.newPage();await page.goto(base);
+  const state=await mock(context,'developer'),page=await context.newPage();await page.goto(base);await activateDeveloperMode(page);
   const nav=page.getByRole('navigation',{name:'Workspace navigation'});await nav.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();await nav.getByRole('button',{name:'Countries & Ports',exact:true}).click();
   const workspace=await openPort(page,'Tokyo');await workspace.getByRole('button',{name:'Add supplier',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Add supplier',exact:true});
   await dialog.getByLabel('Official name',{exact:true}).fill('PENDING TOKYO SUPPLIER');await dialog.getByLabel('Short name',{exact:true}).fill('PENDING TOKYO');

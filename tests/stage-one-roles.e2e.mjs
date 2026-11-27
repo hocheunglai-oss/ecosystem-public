@@ -86,14 +86,29 @@ for (const [engine, browserType] of [['chromium',chromium],['webkit',webkit]]) {
       try {
         await page.goto(base);
         await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
+        await expect(page.locator('footer')).toContainText('ECO 1.0');
         assert.equal(privateReads,0);
         actor={...owner};
         await invalidateFixtureAuthority(page,{user:actor,preview});
         await expect(page.locator('.hud-identity')).toContainText(owner.displayName);
+        await expect(page.locator('[data-resource="activity"], .ui-button--contribution:visible, .contribution-action-hint:visible')).toHaveCount(0);
+        await expect(page.getByRole('button',{name:'Developer mode',exact:true})).toHaveCount(0);
         const account = await details();
+        await expect(account.getByRole('button',{name:'Personal details',exact:true})).toHaveAttribute('aria-current','page');
+        await expect(account.getByRole('button',{name:'User Management',exact:true})).toBeVisible();
+        await expect(account.getByRole('button',{name:'Contribution',exact:true})).toHaveCount(0);
+        await expect(account.locator('.window-foot')).toContainText('ECO 1.0');
+        assert.equal(await account.locator('.live-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(57, 196, 51)');
         await expect(account.getByText(group,{exact:true})).toBeVisible();
         await expect(account.getByRole('button',{name:'Connect dispatcher',exact:true})).toBeVisible();
         await shot('assigned-group'); await close();
+        const navigation=page.getByRole('navigation',{name:'Workspace navigation'});
+        await navigation.getByRole('button',{name:'Ports & Suppliers',exact:true}).click();
+        await navigation.getByRole('button',{name:'Countries & Ports',exact:true}).click();
+        const location=page.getByRole('dialog',{name:'Countries & Ports',exact:true});
+        await expect(location.getByRole('heading',{name:'Singapore',exact:true})).toBeVisible();
+        await expect(location.getByRole('button',{name:/^(Port Index|Country Index|Add location)$/i})).toHaveCount(0);
+        await shot('singapore-only'); await close();
         for (const [role,label] of roles) {
           const footer=page.locator('.home-display-controls');
           await footer.getByRole('button',{name:'View as',exact:true}).click();

@@ -78,9 +78,9 @@ async function seed(page){
  const seeded=await page.evaluate(({key,owner,person})=>{
   const state=JSON.parse(localStorage.getItem(key));
   state.profiles[person.id]={email:person.email,phone:''};
-  const award=(id,recipientId)=>({id,targetKey:id,readerId:'luca',recipientId,awardedAt:'2026-10-20T01:00:00Z',target:{kind:'key-info',portId:'port-chiba',field:'sampleLocation'},update:{updatedBy:recipientId,updatedAt:'2026-10-19T01:00:00Z'}});
+  const award=(id,recipientId)=>({id,targetKey:id,readerId:'luca',recipientId,awardedAt:'2026-10-20T01:00:00Z',target:{kind:'key-info',portId:'port-singapore',field:'sampleLocation'},update:{updatedBy:recipientId,updatedAt:'2026-10-19T01:00:00Z'}});
   state.hats=[award('owner',owner.id),...[0,1,2].map(i=>award(`real-${i}`,person.id)),...[0,1].map(i=>award(`fiction-${i}`,'gianmichele'))];
-  state.knowledgeRecords['port:port-chiba']={version:1,layoutVersion:2,sections:[{id:'preview-notes',title:'PREVIEW NOTES',blocks:[
+  state.knowledgeRecords['port:port-singapore']={version:1,layoutVersion:2,sections:[{id:'preview-notes',title:'PREVIEW NOTES',blocks:[
    {id:'selected-note',type:'text',title:'SELECTED PERSON NOTE',text:'THIS IS A SHARED NOTE.',update:{updatedBy:person.id,updatedAt:'2026-10-20T01:00:00Z'}},
    {id:'owner-note',type:'text',title:'ADMIN NOTE',text:'ANOTHER SHARED NOTE.',update:{updatedBy:owner.id,updatedAt:'2026-10-20T01:00:00Z'}}]}]};
   return state;
@@ -115,11 +115,10 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
   const read=()=>page.evaluate(key=>localStorage.getItem(key),key);
   try{
    await page.goto(base,{waitUntil:'networkidle'});await seed(page);const before=await read();
-   await page.locator('[data-resource="activity"]').click();const activity=page.locator('#hud-contribution-activity');
-   await expect(activity).toContainText('UPDATE INFORMATION OR SEND FEEDBACK.');await expect(activity.locator('[data-activity-status]')).toHaveAttribute('data-activity-status','inactive');await expect(activity.getByRole('button',{name:/^(EDIT|FEEDBACK)$/i})).toHaveCount(0);await expect(activity).not.toContainText('HONG KONG TIME');await expect(activity).not.toContainText('HOW IT COUNTS');await shot('contribution');await btn(activity,'Close contribution activity').click();
+   await expect(page.locator('[data-resource="activity"]')).toHaveCount(0);
    await selectPerson(page,person.id,shot);assert.equal(f.session.user.id,owner.id);await expect(page.locator('.hud-identity')).toContainText('REAL ADMIN');await expect(page.locator('.hud-resource-hats strong')).toHaveText('3');
    await page.locator('.hud-resource-hats').click();const panel=page.locator('#hud-hats-off');await expect(panel).toContainText('VINCENT REAL');await expect(panel.locator('[data-current-user="true"] .hats-off-name')).toHaveText('VINCENT REAL');await expect(panel.locator('.hats-off-recent-list li')).toHaveCount(3);await shot('real-user');await btn(panel,'Close hats off').click();
-   const nav=page.getByRole('navigation',{name:'Workspace navigation'});await btn(nav,'Ports & Suppliers').click();await btn(nav,'Countries & Ports').click();const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});await btn(workspace,'Port Index').click();await workspace.getByLabel('Country or port',{exact:true}).fill('Chiba');await btn(workspace.locator('.location-table'),'Chiba').click();await workspace.getByRole('tab',{name:'PREVIEW NOTES',exact:true}).click();
+   const nav=page.getByRole('navigation',{name:'Workspace navigation'});await btn(nav,'Ports & Suppliers').click();await btn(nav,'Countries & Ports').click();const workspace=page.getByRole('dialog',{name:'Countries & Ports',exact:true});await expect(workspace.getByRole('heading',{name:'Singapore',exact:true})).toBeVisible();await workspace.getByRole('tab',{name:'PREVIEW NOTES',exact:true}).click();
    const ownNote=workspace.getByRole('article').filter({has:page.getByRole('heading',{name:'SELECTED PERSON NOTE',exact:true})});await expect(ownNote.locator('.knowledge-attribution-name')).toHaveText('VINCENT REAL');await expect(ownNote.getByRole('button',{name:/Hats Off/})).toHaveCount(0);
    const otherNote=workspace.getByRole('article').filter({has:page.getByRole('heading',{name:'ADMIN NOTE',exact:true})});const hat=otherNote.getByRole('button',{name:'Hats Off to REAL ADMIN for ADMIN NOTE',exact:true});await expect(hat).toHaveAttribute('aria-disabled','true');await hat.evaluate(node=>node.click());await expect(workspace.getByRole('button',{name:'EDIT',exact:true})).toHaveCount(0);await shot('read-only-attribution');await btn(workspace,'Close workspace').click();assert.equal(await read(),before);
    await btn(page,'Back to REAL ADMIN').click();await expect(page.locator('.hud-resource-hats strong')).toHaveText('1');

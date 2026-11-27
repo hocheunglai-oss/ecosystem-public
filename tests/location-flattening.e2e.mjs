@@ -1,3 +1,4 @@
+import { activateDeveloperMode, installTestWorkspacePolicy } from './fixtures/test-workspace.mjs';
 import { installSharedLocations, sharedLocations } from './fixtures/shared-locations.mjs';
 import { installSharedAttachments } from './fixtures/shared-attachments.mjs';
 import { installEmptyLiveInbox } from './fixtures/empty-live-inbox.mjs';
@@ -9,7 +10,7 @@ import { installStagingCookies } from './fixtures/protection-cookies.mjs';
 const base = process.env.ECO_LOCATION_UI_ORIGIN || 'http://127.0.0.1:4318';
 const out = resolve(process.env.ECO_LOCATION_UI_OUTPUT || 'output/location-flattening-ui');
 await mkdir(out, { recursive: true });
-const user = { id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'SAMPLE TRADER', phone: '+6591815902', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
+const user = { capabilities: { appearancePreview: false, testWorkspace: true },  id: '10000000-0000-4000-8000-000000000001', email: 'owner@example.test', displayName: 'SAMPLE TRADER', phone: '+6591815902', officeId: 'HONG KONG', officeName: 'HONG KONG', isAdmin: true, isSpcTrader: true, isManager: false, isActive: true, activated: true, passwordChangeSuggested: false, revision: 1 };
 const key = `ecosystem.live.v1:${user.id}:state`;
 const results = [];
 async function mock(context) {
@@ -29,7 +30,8 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
     const context = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width < 760, hasTouch: width < 760, reducedMotion: 'reduce' });
     await installStagingCookies(context, base); await mock(context);
     await context.addInitScript(theme => localStorage.setItem('ecosystem.theme.v1', theme), theme);
-    const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message)); page.setDefaultTimeout(15000);
+    await installTestWorkspacePolicy(context);
+      const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message)); page.setDefaultTimeout(15000);
     const shot = async name => { await page.screenshot({ path: `${out}/${engine}-${width}-${theme}-${name}.png`, fullPage: true }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ': viewport overflow'); const box = await page.getByRole('dialog').last().boundingBox(); assert.ok(box && box.x >= -1 && box.x + box.width <= width + 1, name + ': dialog clipping'); };
     try {
       await page.goto(base); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
@@ -48,6 +50,7 @@ for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]
       }, { key, withBlob: engine === 'chromium', initial: sharedLocations(page).state(), ownerId: user.id });
       sharedLocations(page).seedState(before.state);
       await page.reload(); await page.getByRole('main', { name: 'ECOSYSTEM workspace' }).waitFor();
+        await activateDeveloperMode(page);
       const migrated = sharedLocations(page).state();
       assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), key), before.state, 'The original legacy browser archive remains untouched');
       assert.equal(migrated.locationAreas, undefined); assert.equal(migrated.locationStructureVersion, 1); assert.deepEqual(migrated.ports, before.ports); assert.deepEqual(migrated.knowledgeRecords['area:old-tokyo-bay'], before.document); assert.deepEqual(migrated.knowledgeHistory, before.history); assert.deepEqual(migrated.outcomes, before.outcomes);
